@@ -1,0 +1,68 @@
+{
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(png|jpg|jpeg|gif|webp|ico)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/favicon.png",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "/manifest.json",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      }
+    ]
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "nomina-televisa-v2",
+          "appId": "1:360966949180:android:65c2099acd58271301f639",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "nomina-televisa-v2",
+          "configurations": {
+            "android": "1:360966949180:android:65c2099acd58271301f639",
+            "ios": "1:360966949180:ios:0f6a51c7f709866e01f639",
+            "macos": "1:360966949180:ios:0f6a51c7f709866e01f639",
+            "web": "1:360966949180:web:1686bad8d70a54e801f639",
+            "windows": "1:360966949180:web:0d1916df0e25e2ab01f639"
+          }
+        }
+      }
+    }
+  }
+}

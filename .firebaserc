@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "nomina-televisa-v2"
+  },
+  "targets": {
+    "nomina-televisa-v2": {
+      "hosting": {
+        "minominapro": [
+          "mi-nomina-pro"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
