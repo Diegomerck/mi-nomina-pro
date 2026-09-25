@@ -43,3 +43,12 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase Studio / IDX environment (not needed on GitHub)
+.idx/
+
+# Firebase deployment cache
+.firebase/
+
+# Android build reports (build artifacts)
+android/build/
