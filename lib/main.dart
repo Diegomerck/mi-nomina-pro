@@ -15,6 +15,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.8.1": [
+    "Se agregó la opción 'Festivo' para registrar y gestionar días feriados.",
+    "Mejora en la pestaña 'Hoy': diseño más compacto de botones y nuevo botón para 'Reiniciar hoy'.",
+  ],
   "23.7.11": [
     "Se agregó una campana de notificaciones para que te informes de las actualizaciones a la app.",
     "Por ahora no es posible acceder a la aplicacion en las redes de Televisa, ya estamos trabajando con Televisa directamente para solucionarlo.",
@@ -433,7 +437,9 @@ class WorkDay {
   String id;
   bool esFalta;
   bool esMantenimiento;
-  bool esVacacionesFestivo;
+  bool esVacaciones;
+  bool esFestivo;
+  bool festivoTrabajado;
   String notas;
 
   WorkDay(
@@ -444,7 +450,9 @@ class WorkDay {
       this.baseHours = 9.5,
       this.esFalta = false,
       this.esMantenimiento = false,
-      this.esVacacionesFestivo = false,
+      this.esVacaciones = false,
+      this.esFestivo = false,
+      this.festivoTrabajado = false,
       this.notas = "",
       String? id})
       : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
@@ -465,13 +473,13 @@ class WorkDay {
       salida.isAfter(effectiveStart) ? salida.difference(effectiveStart).inMinutes : 0;
 
   double get totalHours =>
-      (esFalta || esVacacionesFestivo) ? 0.0 : actualWorkedMinutes / 60.0;
+      (esFalta || esVacaciones || (esFestivo && !festivoTrabajado)) ? 0.0 : actualWorkedMinutes / 60.0;
   bool get isOvernight => salida.day != entrada.day;
 
   double get hourlyRate => baseHours > 0 ? sueldoBase / baseHours : 0.0;
 
   double get payDeduction {
-    if (esFalta || esMantenimiento || esVacacionesFestivo) return 0.0;
+    if (esFalta || esMantenimiento || esVacaciones || esFestivo) return 0.0;
     if (actualWorkedMinutes < requiredShiftMinutes) {
       int shortfallMinutes = requiredShiftMinutes - actualWorkedMinutes;
       int deficitBlocks = (shortfallMinutes / 30.0).ceil();
@@ -485,14 +493,15 @@ class WorkDay {
     bool isWeekend = entrada.weekday == DateTime.saturday ||
         entrada.weekday == DateTime.sunday;
     double baseDailyPay = isWeekend ? sueldoBase * 2 : sueldoBase;
-    if (esMantenimiento || esVacacionesFestivo) return baseDailyPay;
+    if (esMantenimiento || esVacaciones || (esFestivo && !festivoTrabajado)) return baseDailyPay;
+    if (esFestivo && festivoTrabajado) return baseDailyPay * 2;
 
     double pay = baseDailyPay - payDeduction;
     return pay < 0 ? 0.0 : pay;
   }
 
   double get creditedExtraHours {
-    if (esFalta || esMantenimiento || esVacacionesFestivo) return 0.0;
+    if (esFalta || esMantenimiento || esVacaciones || (esFestivo && !festivoTrabajado)) return 0.0;
     if (actualWorkedMinutes <= requiredShiftMinutes) return 0.0;
 
     int extraMinutes = actualWorkedMinutes - requiredShiftMinutes;
@@ -506,10 +515,21 @@ class WorkDay {
   double get extraHoursCount => creditedExtraHours;
 
   double get extrasMoney {
-    if (esFalta || esMantenimiento || esVacacionesFestivo) return 0.0;
+    if (esFalta || esMantenimiento || esVacaciones || (esFestivo && !festivoTrabajado)) return 0.0;
     if (creditedExtraHours <= 0) return 0.0;
+    if (esFestivo && festivoTrabajado) {
+      return creditedExtraHours * (hourlyRate * 3);
+    }
     return creditedExtraHours * (hourlyRate * 2);
   }
+
+  double get holidayExtraHours =>
+      (esFestivo && festivoTrabajado) ? creditedExtraHours : 0.0;
+
+  double get holidayExtrasPay =>
+      (esFestivo && festivoTrabajado && creditedExtraHours > 0)
+          ? creditedExtraHours * (hourlyRate * 3)
+          : 0.0;
 
   double get totalPay => dailyPay + extrasMoney;
 
@@ -522,7 +542,9 @@ class WorkDay {
         'id': id,
         'esFalta': esFalta,
         'esMantenimiento': esMantenimiento,
-        'esVacacionesFestivo': esVacacionesFestivo,
+        'esVacaciones': esVacaciones,
+        'esFestivo': esFestivo,
+        'festivoTrabajado': festivoTrabajado,
         'notas': notas,
       };
   factory WorkDay.fromJson(Map<String, dynamic> json) => WorkDay(
@@ -536,7 +558,9 @@ class WorkDay {
         id: json['id'],
         esFalta: json['esFalta'] ?? false,
         esMantenimiento: json['esMantenimiento'] ?? false,
-        esVacacionesFestivo: json['esVacacionesFestivo'] ?? false,
+        esVacaciones: json['esVacaciones'] ?? json['esVacacionesFestivo'] ?? false,
+        esFestivo: json['esFestivo'] ?? false,
+        festivoTrabajado: json['festivoTrabajado'] ?? false,
         notas: json['notas'] ?? "",
       );
 }
@@ -1568,7 +1592,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
     for (final day in sortedDays) {
       final breakdown = OvertimeBreakdown();
-      if (!day.esFalta && !day.esMantenimiento && day.creditedExtraHours > 0) {
+      if (!day.esFalta && !day.esMantenimiento && !day.esFestivo && day.creditedExtraHours > 0) {
         double remainingOT = day.creditedExtraHours;
         double hourlyRate = day.hourlyRate; // sueldoBase / baseHours
 
@@ -1769,6 +1793,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
       } else if (day.esMantenimiento) {
         summary +=
             " $date (MANTENIMIENTO):\n   Entrada: $entradaStr\n   Salida: $salidaStr\n   Hrs: ${day.totalHours.toStringAsFixed(2)}\n\n";
+      } else if (day.esFestivo && !day.festivoTrabajado) {
+        summary += " $date: DÍA FESTIVO (NO LABORADO)\n\n";
+      } else if (day.esFestivo && day.festivoTrabajado) {
+        summary +=
+            " $date (DÍA FESTIVO):\n   Entrada: $entradaStr\n   Salida: $salidaStr\n   Hrs: ${day.totalHours}\n   Pago Base: \$${day.sueldoBase.toStringAsFixed(2)} × 2\n   Extras Festivo 3×: \$${day.holidayExtrasPay.toStringAsFixed(2)}\n\n";
       } else {
         final breakdown = breakdownMap[day] ?? OvertimeBreakdown();
         summary +=
@@ -2003,7 +2032,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               const Text(
-                "v.23.7.11 24/09/26",
+                "v.23.8.1 26/09/26",
                 style: TextStyle(
                   color: Colors.orangeAccent,
                   fontSize: 18,
@@ -2110,10 +2139,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
         d.entrada.day == DateTime.now().day &&
         d.entrada.month == DateTime.now().month &&
         d.esMantenimiento);
-    bool hasTodayVacacionesFestivo = _weeklyHistory.any((d) =>
+    bool hasTodayVacaciones = _weeklyHistory.any((d) =>
         d.entrada.day == DateTime.now().day &&
         d.entrada.month == DateTime.now().month &&
-        d.esVacacionesFestivo);
+        d.esVacaciones);
+    bool hasTodayFestivo = _weeklyHistory.any((d) =>
+        d.entrada.day == DateTime.now().day &&
+        d.entrada.month == DateTime.now().month &&
+        d.esFestivo);
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -2229,7 +2262,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       _completedToday ||
                       hasTodayFalta ||
                       hasTodayMantenimiento ||
-                      hasTodayVacacionesFestivo)
+                      hasTodayVacaciones ||
+                      hasTodayFestivo)
                   ? null
                   : () => _processRecord("ENTRADA", DateTime.now())),
           const SizedBox(height: 15),
@@ -2240,13 +2274,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       _completedToday ||
                       hasTodayFalta ||
                       hasTodayMantenimiento ||
-                      hasTodayVacacionesFestivo)
+                      hasTodayVacaciones ||
+                      hasTodayFestivo)
                   ? null
                   : () => _processRecord("SALIDA", DateTime.now())),
-          const SizedBox(height: 30),
+          const SizedBox(height: 20),
           const Divider(color: Colors.white10),
-          const SizedBox(height: 30),
-          const Divider(color: Colors.white10),
+          const SizedBox(height: 15),
           const Text("ENTRADA MANUAL",
               style: TextStyle(
                   color: Colors.white54,
@@ -2275,7 +2309,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                         style: TextStyle(color: Colors.white70))))
           ]),
           const SizedBox(height: 20),
-          TextButton(
+          OutlinedButton.icon(
               onPressed: () async {
                 _countdownTimer?.cancel();
                 setState(() {
@@ -2294,95 +2328,167 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 await prefs.remove('pending_entrada');
                 await prefs.setBool('pending_clocked_in', false);
               },
-              child: const Text("REINICIAR HOY",
-                  style: TextStyle(color: Colors.blue))),
+              icon: const Icon(Icons.refresh, color: Colors.blueAccent, size: 18),
+              label: const Text("REINICIAR HOY",
+                  style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+              style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.blueAccent),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+          ),
           if (!_isClockedIn && !_completedToday) ...[
-            const SizedBox(height: 30),
-            // DÍA DE MANTENIMIENTO BUTTON
-            _buildButton(
-                hasTodayMantenimiento
-                    ? "MANTENIMIENTO REGISTRADO"
-                    : "DÍA DE MANTENIMIENTO",
-                hasTodayMantenimiento ? Colors.grey : Colors.blue.shade700,
-                (hasTodayFalta || hasTodayMantenimiento || hasTodayVacacionesFestivo)
-                    ? null
-                    : () async {
-                        // Ask user for their clock-in time
-                        final TimeOfDay? inTime = await _showScrollTimePicker(
-                          context,
-                          initialTime: const TimeOfDay(hour: 7, minute: 30),
-                          title: "¿A QUÉ HORA ENTRASTE?",
-                        );
-                        if (!mounted || inTime == null) return;
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildButton(
+                      hasTodayMantenimiento
+                          ? "MANTENIMIENTO REGISTRADO"
+                          : "MANTENIMIENTO",
+                      hasTodayMantenimiento ? Colors.grey : Colors.blue.shade700,
+                      (hasTodayFalta || hasTodayMantenimiento || hasTodayVacaciones || hasTodayFestivo)
+                          ? null
+                          : () async {
+                              // Ask user for their clock-in time
+                              final TimeOfDay? inTime = await _showScrollTimePicker(
+                                context,
+                                initialTime: const TimeOfDay(hour: 7, minute: 30),
+                                title: "¿A QUÉ HORA ENTRASTE?",
+                              );
+                              if (!mounted || inTime == null) return;
 
-                        // Calculate clock-out based on base hours setting
-                        double baseHrs =
-                            double.tryParse(_baseHoursController.text) ?? 9.5;
-                        int baseMinutes = (baseHrs * 60).round();
+                              // Calculate clock-out based on base hours setting
+                              double baseHrs =
+                                  double.tryParse(_baseHoursController.text) ?? 9.5;
+                              int baseMinutes = (baseHrs * 60).round();
 
-                        DateTime now = DateTime.now();
-                        DateTime entrada = DateTime(now.year, now.month,
-                            now.day, inTime.hour, inTime.minute);
-                        DateTime salida =
-                            entrada.add(Duration(minutes: baseMinutes));
+                              DateTime now = DateTime.now();
+                              DateTime entrada = DateTime(now.year, now.month,
+                                  now.day, inTime.hour, inTime.minute);
+                              DateTime salida =
+                                  entrada.add(Duration(minutes: baseMinutes));
 
-                        // Get the correct salary for the entry date (supports salary changes)
-                        final double salaryForDate = _getSalaryForDate(entrada);
+                              // Get the correct salary for the entry date (supports salary changes)
+                              final double salaryForDate = _getSalaryForDate(entrada);
 
-                        _addAndSortHistory(WorkDay(
-                            entrada: entrada,
-                            salida: salida,
-                            entradaReal: entrada,
-                            sueldoBase: salaryForDate,
-                            baseHours: baseHrs,
-                            esMantenimiento: true));
-                      }),
-            const SizedBox(height: 15),
-            // VACACIONES BUTTON
-            _buildButton(
-                hasTodayVacacionesFestivo
-                    ? "VACACIONES REGISTRADAS"
-                    : "VACACIONES",
-                hasTodayVacacionesFestivo ? Colors.grey : Colors.lightGreen.shade700,
-                (hasTodayFalta || hasTodayMantenimiento || hasTodayVacacionesFestivo)
-                    ? null
-                    : () {
-                        DateTime now = DateTime.now();
-                        DateTime noon =
-                            DateTime(now.year, now.month, now.day, 12, 0);
-                        final double salaryForDate = _getSalaryForDate(noon);
+                              _addAndSortHistory(WorkDay(
+                                  entrada: entrada,
+                                  salida: salida,
+                                  entradaReal: entrada,
+                                  sueldoBase: salaryForDate,
+                                  baseHours: baseHrs,
+                                  esMantenimiento: true));
+                            },
+                      isCompact: true),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildButton(
+                      hasTodayVacaciones
+                          ? "VACACIONES REGISTRADAS"
+                          : "VACACIONES",
+                      hasTodayVacaciones ? Colors.grey : Colors.lightGreen.shade700,
+                      (hasTodayFalta || hasTodayMantenimiento || hasTodayVacaciones || hasTodayFestivo)
+                          ? null
+                          : () {
+                              DateTime now = DateTime.now();
+                              DateTime noon =
+                                  DateTime(now.year, now.month, now.day, 12, 0);
+                              final double salaryForDate = _getSalaryForDate(noon);
 
-                        _addAndSortHistory(WorkDay(
-                            entrada: noon,
-                            salida: noon,
-                            sueldoBase: salaryForDate,
-                            baseHours:
-                                double.tryParse(_baseHoursController.text) ??
-                                    9.5,
-                            esVacacionesFestivo: true));
-                      }),
-            const SizedBox(height: 15),
-            _buildButton(
-                hasTodayFalta ? "FALTA REGISTRADA" : "NO LABORÉ HOY",
-                hasTodayFalta ? Colors.grey : Colors.red.shade900,
-                (hasTodayFalta || hasTodayMantenimiento || hasTodayVacacionesFestivo)
-                    ? null
-                    : () {
-                        DateTime now = DateTime.now();
-                        DateTime noon =
-                            DateTime(now.year, now.month, now.day, 12, 0);
-                        // Get the correct salary for the entry date (supports salary changes)
-                        final double salaryForDate = _getSalaryForDate(noon);
+                              _addAndSortHistory(WorkDay(
+                                  entrada: noon,
+                                  salida: noon,
+                                  sueldoBase: salaryForDate,
+                                  baseHours:
+                                      double.tryParse(_baseHoursController.text) ??
+                                          9.5,
+                                  esVacaciones: true));
+                            },
+                      isCompact: true),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildButton(
+                      hasTodayFestivo
+                          ? "FESTIVO REGISTRADO"
+                          : "FESTIVO",
+                      hasTodayFestivo ? Colors.grey : Colors.purple,
+                      (hasTodayFalta || hasTodayMantenimiento || hasTodayVacaciones || hasTodayFestivo)
+                          ? null
+                          : () async {
+                              final bool? trabajoFestivo = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  backgroundColor: Colors.grey[900],
+                                  title: const Text("DÍA FESTIVO",
+                                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                  content: const Text(
+                                      "¿Laboraste en este día festivo?",
+                                      style: TextStyle(color: Colors.white70, fontSize: 16)),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, false),
+                                      child: const Text("NO", style: TextStyle(color: Colors.orange)),
+                                    ),
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(ctx, true),
+                                      child: const Text("SÍ, TRABAJÉ", style: TextStyle(color: Colors.orange)),
+                                    ),
+                                  ],
+                                ),
+                              );
 
-                        _addAndSortHistory(WorkDay(
-                            entrada: noon,
-                            salida: noon,
-                            sueldoBase: salaryForDate,
-                            baseHours:
-                                double.tryParse(_baseHoursController.text) ??
-                                    9.5,
-                            esFalta: true));
-                      }),
+                              if (!mounted || trabajoFestivo == null) return;
+
+                              if (trabajoFestivo) {
+                                _pickTimeForWorkDay(DateTime.now(), isFestivo: true);
+                              } else {
+                                DateTime now = DateTime.now();
+                                DateTime noon = DateTime(now.year, now.month, now.day, 12, 0);
+                                final double salaryForDate = _getSalaryForDate(noon);
+
+                                _addAndSortHistory(WorkDay(
+                                    entrada: noon,
+                                    salida: noon,
+                                    sueldoBase: salaryForDate,
+                                    baseHours: double.tryParse(_baseHoursController.text) ?? 9.5,
+                                    esFestivo: true,
+                                    festivoTrabajado: false));
+                              }
+                            },
+                      isCompact: true),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildButton(
+                      hasTodayFalta ? "FALTA REGISTRADA" : "NO LABORÉ HOY",
+                      hasTodayFalta ? Colors.grey : Colors.red.shade900,
+                      (hasTodayFalta || hasTodayMantenimiento || hasTodayVacaciones || hasTodayFestivo)
+                          ? null
+                          : () {
+                              DateTime now = DateTime.now();
+                              DateTime noon =
+                                  DateTime(now.year, now.month, now.day, 12, 0);
+                              // Get the correct salary for the entry date (supports salary changes)
+                              final double salaryForDate = _getSalaryForDate(noon);
+
+                              _addAndSortHistory(WorkDay(
+                                  entrada: noon,
+                                  salida: noon,
+                                  sueldoBase: salaryForDate,
+                                  baseHours:
+                                      double.tryParse(_baseHoursController.text) ??
+                                          9.5,
+                                  esFalta: true));
+                            },
+                      isCompact: true),
+                ),
+              ],
+            ),
           ],
         ],
       ),
@@ -2620,7 +2726,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     );
                   }
 
-                  if (day.esVacacionesFestivo) {
+                  if (day.esVacaciones) {
                     return Card(
                       color: Colors.lightGreen.withAlpha(30),
                       margin: const EdgeInsets.symmetric(
@@ -2712,6 +2818,98 @@ class _TelevisaAppState extends State<TelevisaApp> {
                         ),
                       ),
                     );
+                  } else if (day.esFestivo && !day.festivoTrabajado) {
+                    return Card(
+                      color: Colors.purple.withAlpha(30),
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 15, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                            color: Colors.purpleAccent.withAlpha(100), width: 2),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(dateStringES,
+                                        style: const TextStyle(
+                                            color: Colors.purpleAccent,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18)),
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                          color: Colors.purple.withAlpha(60),
+                                          borderRadius:
+                                              BorderRadius.circular(4)),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.star,
+                                              color: Colors.purpleAccent,
+                                              size: 14),
+                                          SizedBox(width: 4),
+                                          Text("DÍA FESTIVO",
+                                              style: TextStyle(
+                                                  color: Colors.purpleAccent,
+                                                  fontSize: 11,
+                                                  fontWeight:
+                                                      FontWeight.bold)),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                IconButton(
+                                    icon: const Icon(Icons.delete_outline,
+                                        color: Colors.white54, size: 24),
+                                    onPressed: () => _showDeleteDialog(
+                                        _weeklyHistory.indexOf(day)))
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.purple.withAlpha(20),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                    color: Colors.purpleAccent.withAlpha(100)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                      "DÍA FESTIVO - PAGO BASE COMPLETO",
+                                      style: TextStyle(
+                                          color: Colors.purpleAccent,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                      "Pago base: \$${day.dailyPay.toStringAsFixed(2)} | Sin descuento ni horas extra",
+                                      style: const TextStyle(
+                                          color: Colors.white70, fontSize: 13)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Divider(color: Colors.white24),
+                            _buildNotesSection(day),
+                          ],
+                        ),
+                      ),
+                    );
                   }
 
                   bool startedOnWeekend =
@@ -2731,6 +2929,12 @@ class _TelevisaAppState extends State<TelevisaApp> {
                         : Colors.blue.withAlpha(20);
                     headerColor = Colors.blueAccent;
                     borderColor = Colors.blueAccent;
+                  } else if (day.esFestivo && day.festivoTrabajado) {
+                    cardColor = isSelected
+                        ? Colors.purple.withAlpha(50)
+                        : Colors.purple.withAlpha(20);
+                    headerColor = Colors.purpleAccent;
+                    borderColor = Colors.purpleAccent;
                   } else if (startedOnWeekend) {
                     cardColor = isSelected
                         ? Colors.orange.withAlpha(50)
@@ -2753,7 +2957,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                         borderRadius: BorderRadius.circular(12),
                         side: BorderSide(
                             color: borderColor.withAlpha(100),
-                            width: day.esMantenimiento ? 2 : 0),
+                            width: (day.esMantenimiento || (day.esFestivo && day.festivoTrabajado)) ? 2 : 0),
                       ),
                       child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -2788,6 +2992,26 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                                   "DÍA DE MANTENIMIENTO",
                                                   style: TextStyle(
                                                       color: Colors.blueAccent,
+                                                      fontSize: 11,
+                                                      fontWeight:
+                                                          FontWeight.bold))),
+                                        if (day.esFestivo && day.festivoTrabajado)
+                                          Container(
+                                              margin:
+                                                  const EdgeInsets.only(top: 6),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4),
+                                              decoration: BoxDecoration(
+                                                  color: Colors.purpleAccent
+                                                      .withAlpha(60),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4)),
+                                              child: const Text(
+                                                  "DÍA FESTIVO",
+                                                  style: TextStyle(
+                                                      color: Colors.purpleAccent,
                                                       fontSize: 11,
                                                       fontWeight:
                                                           FontWeight.bold))),
@@ -2862,7 +3086,23 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                 ],
                               ),
                             ),
-                            if (!day.esMantenimiento)
+                            if (day.esFestivo && day.festivoTrabajado)
+                              Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    _statDetail(
+                                        "DESGLOSE DE HORAS",
+                                        "${normalHrs.toStringAsFixed(1)}h (Base) + ${day.holidayExtraHours.toStringAsFixed(2)}h (Extra)",
+                                        "${day.totalHours.toStringAsFixed(2)} hrs totales"),
+                                    _statDetail(
+                                        "DESGLOSE DE PAGO",
+                                        "Pago Base: \$${day.sueldoBase.toStringAsFixed(2)} × 2 = \$${(day.sueldoBase * 2).toStringAsFixed(2)}\n"
+                                        "EXTRAS FESTIVO 3×: ${day.holidayExtraHours.toStringAsFixed(1)} hrs = \$${day.holidayExtrasPay.toStringAsFixed(2)}",
+                                        "\$${day.totalPay.toStringAsFixed(2)}",
+                                        isMoney: true)
+                                  ])
+                            else if (!day.esMantenimiento)
                               Row(
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
@@ -3249,11 +3489,16 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   d.entrada.month == dayDate.month &&
                   d.entrada.year == dayDate.year &&
                   d.esMantenimiento);
-              bool isVacacionesFestivo = _weeklyHistory.any((d) =>
+              bool isVacaciones = _weeklyHistory.any((d) =>
                   d.entrada.day == dayDate.day &&
                   d.entrada.month == dayDate.month &&
                   d.entrada.year == dayDate.year &&
-                  d.esVacacionesFestivo);
+                  d.esVacaciones);
+              bool isFestivo = _weeklyHistory.any((d) =>
+                  d.entrada.day == dayDate.day &&
+                  d.entrada.month == dayDate.month &&
+                  d.entrada.year == dayDate.year &&
+                  d.esFestivo);
               bool isFalta = _weeklyHistory.any((d) =>
                   d.entrada.day == dayDate.day &&
                   d.entrada.month == dayDate.month &&
@@ -3284,19 +3529,23 @@ class _TelevisaAppState extends State<TelevisaApp> {
                         : isSelected
                             ? (isMantenimiento
                                 ? Colors.blue.withAlpha(50)
-                                : isVacacionesFestivo
-                                    ? Colors.lightGreen.withAlpha(50)
-                                    : isFalta
-                                        ? Colors.red.shade700
-                                        : Colors.green.withAlpha(50)) // Asistencia GREEN
+                                : isFestivo
+                                    ? Colors.purple.withAlpha(50)
+                                    : isVacaciones
+                                        ? Colors.lightGreen.withAlpha(50)
+                                        : isFalta
+                                            ? Colors.red.shade700
+                                            : Colors.green.withAlpha(50)) // Asistencia GREEN
                             : (hasData
                                 ? (isMantenimiento
                                     ? Colors.blue.withAlpha(40)
-                                    : isVacacionesFestivo
-                                        ? Colors.lightGreen.withAlpha(40)
-                                        : isFalta
-                                            ? Colors.red.shade700
-                                            : Colors.green.withAlpha(40)) // Asistencia GREEN
+                                    : isFestivo
+                                        ? Colors.purple.withAlpha(40)
+                                        : isVacaciones
+                                            ? Colors.lightGreen.withAlpha(40)
+                                            : isFalta
+                                                ? Colors.red.shade700
+                                                : Colors.green.withAlpha(40)) // Asistencia GREEN
                                 : (isCurrent
                                     ? Colors.transparent
                                     : Colors.white.withAlpha(5))),
@@ -3308,19 +3557,23 @@ class _TelevisaAppState extends State<TelevisaApp> {
                             : isSelected
                                 ? (isMantenimiento
                                     ? Colors.blueAccent
-                                    : isVacacionesFestivo
-                                        ? Colors.lightGreenAccent
-                                        : isFalta
-                                            ? Colors.redAccent
-                                            : Colors.greenAccent)
-                                : (hasData
-                                    ? (isMantenimiento
-                                        ? Colors.blueAccent
-                                        : isVacacionesFestivo
+                                    : isFestivo
+                                        ? Colors.purpleAccent
+                                        : isVacaciones
                                             ? Colors.lightGreenAccent
                                             : isFalta
                                                 ? Colors.redAccent
                                                 : Colors.greenAccent)
+                                : (hasData
+                                    ? (isMantenimiento
+                                        ? Colors.blueAccent
+                                        : isFestivo
+                                            ? Colors.purpleAccent
+                                            : isVacaciones
+                                                ? Colors.lightGreenAccent
+                                                : isFalta
+                                                    ? Colors.redAccent
+                                                    : Colors.greenAccent)
                                     : Colors.white10),
                         width: isToday
                             ? 3
@@ -3365,7 +3618,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                   ),
                                 ),
                               ],
-                              if (isVacacionesFestivo) ...[
+                              if (isVacaciones || isFestivo) ...[
                                 const SizedBox(width: 2),
                                 const Icon(
                                   Icons.star,
@@ -3386,11 +3639,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                           : (hasData
                                               ? (isMantenimiento
                                                   ? Colors.blueAccent
-                                                  : isVacacionesFestivo
-                                                      ? Colors.lightGreenAccent
-                                                      : isFalta
-                                                          ? Colors.white
-                                                          : Colors.greenAccent)
+                                                  : isFestivo
+                                                      ? Colors.purpleAccent
+                                                      : isVacaciones
+                                                          ? Colors.lightGreenAccent
+                                                          : isFalta
+                                                              ? Colors.white
+                                                              : Colors.greenAccent)
                                               : Colors.white70)),
                                   fontSize: isToday ? 16 : 14,
                                   height: 1.0,
@@ -5206,7 +5461,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.7.11 24/09/26",
+            Text("Versión v.23.8.1 26/09/26",
                 style: TextStyle(color: Colors.orangeAccent, fontSize: 14)),
             Divider(color: Colors.white38, height: 25),
             Text(
@@ -5898,7 +6153,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                         textAlign: TextAlign.center,
                       ),
                     ),
-                  ] else if (day.esVacacionesFestivo) ...[
+                  ] else if (day.esVacaciones) ...[
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
@@ -5913,7 +6168,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                           Icon(Icons.star, color: Colors.amberAccent, size: 20),
                           SizedBox(width: 8),
                           Text(
-                            "VACACIONES / FESTIVO",
+                            "VACACIONES",
                             style: TextStyle(
                               color: Colors.amberAccent,
                               fontWeight: FontWeight.bold,
@@ -5935,9 +6190,59 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("VACACIONES / FESTIVO - PAGO BASE COMPLETO",
+                          const Text("VACACIONES - PAGO BASE COMPLETO",
                               style: TextStyle(
                                   color: Colors.amberAccent,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text(
+                              "Pago base: \$${day.dailyPay.toStringAsFixed(2)} | Sin descuento ni horas extra",
+                              style: const TextStyle(
+                                  color: Colors.white70, fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                  ] else if (day.esFestivo && !day.festivoTrabajado) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withAlpha(40),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.purpleAccent),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.star, color: Colors.purpleAccent, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            "DÍA FESTIVO (NO LABORADO)",
+                            style: TextStyle(
+                              color: Colors.purpleAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withAlpha(20),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.purpleAccent.withAlpha(100)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text("DÍA FESTIVO - PAGO BASE COMPLETO",
+                              style: TextStyle(
+                                  color: Colors.purpleAccent,
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
@@ -6117,17 +6422,32 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     // Hours breakdown
                     Row(
                       children: [
-                        _statDetail(
-                          "HORAS",
-                          "${normalHrs.toStringAsFixed(1)}h Base\n${day.extraHoursCount.toStringAsFixed(2)}h Extra",
-                          "${day.totalHours.toStringAsFixed(2)} hrs totales",
-                        ),
-                        _statDetail(
-                          "PAGO",
-                          "\$${day.dailyPay.toStringAsFixed(2)} Base\n2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}",
-                          "\$${(day.dailyPay + realExtrasPay).toStringAsFixed(2)}",
-                          isMoney: true,
-                        ),
+                        if (day.esFestivo && day.festivoTrabajado)
+                          _statDetail(
+                            "HORAS",
+                            "${normalHrs.toStringAsFixed(1)}h Base\n${day.holidayExtraHours.toStringAsFixed(2)}h Extra",
+                            "${day.totalHours.toStringAsFixed(2)} hrs totales",
+                          )
+                        else
+                          _statDetail(
+                            "HORAS",
+                            "${normalHrs.toStringAsFixed(1)}h Base\n${day.extraHoursCount.toStringAsFixed(2)}h Extra",
+                            "${day.totalHours.toStringAsFixed(2)} hrs totales",
+                          ),
+                        if (day.esFestivo && day.festivoTrabajado)
+                          _statDetail(
+                            "PAGO",
+                            "\$${day.sueldoBase.toStringAsFixed(2)} × 2 (Base)\n\$${day.holidayExtrasPay.toStringAsFixed(2)} (Extras 3×)",
+                            "\$${day.totalPay.toStringAsFixed(2)}",
+                            isMoney: true,
+                          )
+                        else
+                          _statDetail(
+                            "PAGO",
+                            "\$${day.dailyPay.toStringAsFixed(2)} Base\n2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}",
+                            "\$${(day.dailyPay + realExtrasPay).toStringAsFixed(2)}",
+                            isMoney: true,
+                          ),
                       ],
                     ),
                   ],
@@ -6213,7 +6533,62 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     baseHours:
                         double.tryParse(_baseHoursController.text) ?? 9.5,
                     notas: notes ?? "",
-                    esVacacionesFestivo: true));
+                    esVacaciones: true));
+              }),
+              const SizedBox(height: 10),
+              _buildButton("FESTIVO NO LABORADO", Colors.purple.shade400, () async {
+                Navigator.pop(dialogContext);
+                DateTime noon =
+                    DateTime(date.year, date.month, date.day, 12, 0);
+                final String? notes = await _promptForNotes(context);
+                final double salaryForDate = _getSalaryForDate(noon);
+
+                _addAndSortHistory(WorkDay(
+                    entrada: noon,
+                    salida: noon,
+                    sueldoBase: salaryForDate,
+                    baseHours:
+                        double.tryParse(_baseHoursController.text) ?? 9.5,
+                    notas: notes ?? "",
+                    esFestivo: true,
+                    festivoTrabajado: false));
+              }),
+              const SizedBox(height: 10),
+              _buildButton("FESTIVO LABORADO", Colors.purple.shade700, () async {
+                Navigator.pop(dialogContext);
+                final TimeOfDay? inTime = await _showScrollTimePicker(
+                    context,
+                    initialTime: const TimeOfDay(hour: 8, minute: 0),
+                    title: "HORA ENTRADA");
+                if (!mounted || inTime == null) return;
+                final TimeOfDay? outTime = await _showScrollTimePicker(
+                    context,
+                    initialTime: const TimeOfDay(hour: 18, minute: 0),
+                    title: "HORA SALIDA");
+                if (!mounted || outTime == null) return;
+
+                final String? notes = await _promptForNotes(context);
+
+                DateTime fEntrada = DateTime(date.year, date.month, date.day,
+                    inTime.hour, inTime.minute);
+                DateTime fSalida = DateTime(date.year, date.month, date.day,
+                    outTime.hour, outTime.minute);
+                if (fSalida.isBefore(fEntrada)) {
+                  fSalida = fSalida.add(const Duration(days: 1));
+                }
+
+                final double salaryForDate = _getSalaryForDate(fEntrada);
+
+                _addAndSortHistory(WorkDay(
+                    entrada: fEntrada,
+                    salida: fSalida,
+                    entradaReal: fEntrada,
+                    sueldoBase: salaryForDate,
+                    baseHours:
+                        double.tryParse(_baseHoursController.text) ?? 9.5,
+                    notas: notes ?? "",
+                    esFestivo: true,
+                    festivoTrabajado: true));
               }),
               const SizedBox(height: 10),
               _buildButton("NO LABORÉ HOY", Colors.red, () {
@@ -6290,7 +6665,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     }
   }
 
-  Future<void> _pickTimeForWorkDay(DateTime date) async {
+  Future<void> _pickTimeForWorkDay(DateTime date, {bool isFestivo = false}) async {
     final TimeOfDay? inTime = await _showScrollTimePicker(
         context,
         initialTime: const TimeOfDay(hour: 8, minute: 0),
@@ -6323,6 +6698,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
         sueldoBase: salaryForDate,
         baseHours: double.tryParse(_baseHoursController.text) ?? 9.5,
         notas: notes ?? "",
+        esFestivo: isFestivo,
+        festivoTrabajado: isFestivo,
         esFalta: false));
   }
 
@@ -6383,14 +6760,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 fontSize: 22,
                 fontWeight: FontWeight.bold))
       ]);
-  Widget _buildButton(String text, Color color, VoidCallback? onPressed) {
+  Widget _buildButton(String text, Color color, VoidCallback? onPressed, {bool isCompact = false}) {
     // If the app is uploading, we force the button to be disabled (null)
     final bool isDisabled = onPressed == null || _isProcessing;
 
     return ElevatedButton(
         style: ElevatedButton.styleFrom(
             backgroundColor: isDisabled ? Colors.grey.shade800 : color,
-            minimumSize: const Size(double.infinity, 70),
+            minimumSize: Size(double.infinity, isCompact ? 50 : 70),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12))),
         onPressed: isDisabled ? null : onPressed,
@@ -6401,8 +6778,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 child: CircularProgressIndicator(
                     color: Colors.white, strokeWidth: 3))
             : Text(text,
-                style: const TextStyle(
-                    fontSize: 24,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: isCompact ? 14 : 24,
                     fontWeight: FontWeight.w900,
                     color: Colors.white)));
   }
