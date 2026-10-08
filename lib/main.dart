@@ -22,12 +22,12 @@ final Map<String, List<String>> _changelogByVersion = {
     "Pestaña Quincena: diseño más compacto con cabecera fija y resumen de semanas en una sola línea.",
     "Iconos para compartir los resúmenes semanales siempre accesibles en la pestaña Quincena.",
     "Pestaña Nómina: desplazamiento automático enfocado en los periodos de pago activos.",
+    "Por ahora no es posible acceder a la aplicacion en las redes de Televisa, ya estamos trabajando con Televisa directamente para solucionarlo.",
   ],
   "23.8.1": [
     "Se agregó la opción 'Festivo' para registrar y gestionar días feriados.",
     "Mejora en la pestaña 'Hoy': diseño más compacto de botones y nuevo botón para 'Reiniciar hoy'.",
     "Se agregó un botón de recarga (flecha circular) junto a la campana para actualizar la app a la última versión en cualquier momento.",
-    "Por ahora no es posible acceder a la aplicacion en las redes de Televisa, ya estamos trabajando con Televisa directamente para solucionarlo.",
   ],
   "23.7.11": [
     "Se agregó una campana de notificaciones para que te informes de las actualizaciones a la app.",
