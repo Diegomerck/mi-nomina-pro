@@ -13,15 +13,24 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'web_reload_stub.dart' if (dart.library.html) 'web_reload.dart';
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.9.1": [
+    "Mejora de adaptabilidad: se corrigieron los formularios y pantallas emergentes para que el teclado no bloquee la vista en teléfonos pequeños.",
+    "Pestaña Quincena: diseño más compacto con cabecera fija y resumen de semanas en una sola línea.",
+    "Iconos para compartir los resúmenes semanales siempre accesibles en la pestaña Quincena.",
+    "Pestaña Nómina: desplazamiento automático enfocado en los periodos de pago activos.",
+  ],
   "23.8.1": [
     "Se agregó la opción 'Festivo' para registrar y gestionar días feriados.",
     "Mejora en la pestaña 'Hoy': diseño más compacto de botones y nuevo botón para 'Reiniciar hoy'.",
+    "Se agregó un botón de recarga (flecha circular) junto a la campana para actualizar la app a la última versión en cualquier momento.",
+    "Por ahora no es posible acceder a la aplicacion en las redes de Televisa, ya estamos trabajando con Televisa directamente para solucionarlo.",
   ],
   "23.7.11": [
     "Se agregó una campana de notificaciones para que te informes de las actualizaciones a la app.",
-    "Por ahora no es posible acceder a la aplicacion en las redes de Televisa, ya estamos trabajando con Televisa directamente para solucionarlo.",
     "Se agregó confirmación para cerrar sesión (para evitar salidas accidentales).",
   ],
   "23.7.10": [
@@ -336,6 +345,7 @@ class _LoginScreenState extends State<LoginScreen> {
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
+      scrollable: true,
           backgroundColor: Colors.grey[900],
           title: const Column(
             children: [
@@ -633,6 +643,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
   final TextEditingController _recoveryEmailController =
       TextEditingController(text: ""); // For password recovery
 
+  final ScrollController _nominaScrollController = ScrollController();
+
   late Timer _timer;
   Timer? _countdownTimer;
   String _timeString = "";
@@ -815,6 +827,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
           // Prevent back button from closing - user MUST complete setup
           canPop: false,
           child: AlertDialog(
+      scrollable: true,
             backgroundColor: Colors.grey[900],
             title: const Column(
               children: [
@@ -1034,6 +1047,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+      scrollable: true,
               backgroundColor: Colors.grey[900],
               title: const Column(
                 children: [
@@ -1856,6 +1870,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         barrierDismissible: false,
         builder: (BuildContext context) {
           return AlertDialog(
+      scrollable: true,
             backgroundColor: Colors.grey[900],
             title: const Text("Confirmar Entrada",
                 style: TextStyle(
@@ -2032,7 +2047,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               const Text(
-                "v.23.8.1 26/09/26",
+                "v.23.9.1 07/10/26",
                 style: TextStyle(
                   color: Colors.orangeAccent,
                   fontSize: 18,
@@ -2082,18 +2097,35 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
             ),
             IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.white54),
+              tooltip: 'Actualizar / Recargar app',
+              onPressed: () async {
+                if (kIsWeb) {
+                  await reloadApp();
+                } else {
+                  // Fallback for non-web
+                  setState(() {});
+                }
+              },
+            ),
+            IconButton(
               icon: const Icon(Icons.logout, color: Colors.white54),
               onPressed: () => _confirmSignOut(context),
             ),
           ],
-          bottom: const TabBar(
+          bottom: TabBar(
+            onTap: (index) {
+              if (index == 3) {
+                _scrollToActiveNomina();
+              }
+            },
             indicatorColor: Colors.orange,
             labelColor: Colors.orange,
             unselectedLabelColor: Colors.white70,
-            labelStyle: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            unselectedLabelStyle: TextStyle(fontSize: 12),
+            labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            unselectedLabelStyle: const TextStyle(fontSize: 12),
             isScrollable: true,
-            tabs: [
+            tabs: const [
               Tab(text: "HOY", icon: Icon(Icons.access_time, size: 28)),
               Tab(text: "QUINCENA", icon: Icon(Icons.calendar_month, size: 28)),
               Tab(text: "AÑO", icon: Icon(Icons.calendar_today, size: 28)),
@@ -2423,6 +2455,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                               final bool? trabajoFestivo = await showDialog<bool>(
                                 context: context,
                                 builder: (ctx) => AlertDialog(
+      scrollable: true,
                                   backgroundColor: Colors.grey[900],
                                   title: const Text("DÍA FESTIVO",
                                       style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
@@ -2567,85 +2600,84 @@ class _TelevisaAppState extends State<TelevisaApp> {
     ];
     return Column(children: [
       Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(12),
           width: double.infinity,
           decoration: BoxDecoration(color: Colors.orange.withAlpha(25)),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // --- LAST WEEK ---
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text("EXTRAS SEMANA PASADA",
-                      style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          letterSpacing: 1.0,
-                          fontWeight: FontWeight.bold)),
-                  if (weeks.containsKey(weekNumLast))
-                    IconButton(
-                        icon: const Icon(Icons.share,
-                            color: Colors.white70, size: 22),
-                        onPressed: () => _shareSingleWeekSummary(
-                            weeks[weekNumLast]!, weekNumLast, "SEMANA PASADA")),
-                ],
-              ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text("\$${totalLastWeek.toStringAsFixed(2)}",
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("SEM. PASADA",
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                letterSpacing: 1.0,
+                                fontWeight: FontWeight.bold)),
+                        IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.share,
+                                color: Colors.white70, size: 16),
+                            onPressed: () => _shareSingleWeekSummary(
+                                weeks[weekNumLast] ?? [], weekNumLast, "SEMANA PASADA")),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "\$${totalLastWeek.toStringAsFixed(2)} - (${hoursLastWeek.toStringAsFixed(1)} hrs)",
                       style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 8),
-                  Text("(${hoursLastWeek.toStringAsFixed(1)} hrs)",
-                      style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold)),
-                ],
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(width: 12),
               // --- THIS WEEK ---
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text("EXTRAS SEMANA ACTUAL",
-                      style: TextStyle(
-                          color: Colors.orange,
-                          fontSize: 16,
-                          letterSpacing: 1.0,
-                          fontWeight: FontWeight.bold)),
-                  if (weeks.containsKey(weekNumCurrent))
-                    IconButton(
-                        icon: const Icon(Icons.share,
-                            color: Colors.orange, size: 24),
-                        onPressed: () => _shareSingleWeekSummary(
-                            weeks[weekNumCurrent]!,
-                            weekNumCurrent,
-                            "SEMANA ACTUAL")),
-                ],
-              ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text("\$${totalThisWeek.toStringAsFixed(2)}",
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("SEM. ACTUAL",
+                            style: TextStyle(
+                                color: Colors.orange,
+                                fontSize: 12,
+                                letterSpacing: 1.0,
+                                fontWeight: FontWeight.bold)),
+                        IconButton(
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.share,
+                                color: Colors.orange, size: 18),
+                            onPressed: () => _shareSingleWeekSummary(
+                                weeks[weekNumCurrent] ?? [],
+                                weekNumCurrent,
+                                "SEMANA ACTUAL")),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "\$${totalThisWeek.toStringAsFixed(2)} - (${hoursThisWeek.toStringAsFixed(1)} hrs)",
                       style: const TextStyle(
-                          color: Colors.orange,
-                          fontSize: 36, // Larger for current focus
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(width: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 4.0),
-                    child: Text("(${hoursThisWeek.toStringAsFixed(1)} hrs)",
-                        style: const TextStyle(
-                            color: Colors.orangeAccent,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold)),
-                  ),
-                ],
+                        color: Colors.orange,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           )),
@@ -2660,9 +2692,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
       ),
       Expanded(
         child: filteredHistory.isEmpty
-            ? const Center(
-                child: Text("No hay registros en estas dos semanas",
-                    style: TextStyle(color: Colors.white24)))
+            ? const Padding(
+                padding: EdgeInsets.all(40),
+                child: Center(
+                    child: Text("No hay registros en estas dos semanas",
+                        style: TextStyle(color: Colors.white24))))
             : ListView.builder(
                 itemCount: filteredHistory.length,
                 itemBuilder: (context, index) {
@@ -3152,8 +3186,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
                             _buildNotesSection(day),
                           ])));
                 }),
-      )
-    ]);
+        ),
+      ],
+    );
   }
 
   final List<GlobalKey> _weekKeys = List.generate(53, (_) => GlobalKey());
@@ -3214,8 +3249,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
       });
     }
 
-    return Column(
-      children: [
+    return SingleChildScrollView(
+      child: Column(
+        children: [
         Container(
           padding: const EdgeInsets.all(20),
           width: double.infinity,
@@ -3280,8 +3316,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
           ),
         ),
         const Divider(color: Colors.white24, height: 1),
-        Expanded(
-          child: ListView.builder(
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
             padding: const EdgeInsets.symmetric(vertical: 10),
             itemCount: 53, // Covers all potential weeks in a year
             itemBuilder: (context, index) {
@@ -3381,9 +3418,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
               );
             },
           ),
-        ),
       ],
-    );
+    ));
   }
 
   Widget _buildWeekOvertimeSummary(DateTime weekStart) {
@@ -3663,6 +3699,56 @@ class _TelevisaAppState extends State<TelevisaApp> {
     );
   }
 
+  void _scrollToActiveNomina() {
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (!mounted || !_nominaScrollController.hasClients) return;
+
+      DateTime now = DateTime.now();
+      int enProgresoIndex = -1;
+
+      for (int i = 0; i < _payCalendar2026.length; i++) {
+        var cfg = _payCalendar2026.values.elementAt(i);
+        List<int> quincenaWeeks = List<int>.from(cfg['weeks']);
+        if (quincenaWeeks.isNotEmpty) {
+          quincenaWeeks.sort();
+          int firstWeek = quincenaWeeks.first;
+          int lastWeek = quincenaWeeks.last;
+          int yearForFirstWeek = firstWeek >= 48 ? now.year - 1 : now.year;
+          int yearForLastWeek = lastWeek >= 48 ? now.year - 1 : now.year;
+          DateTime jan4First = DateTime(yearForFirstWeek, 1, 4);
+          DateTime firstMonday = jan4First.subtract(Duration(days: jan4First.weekday - 1));
+          DateTime quincenaStartDate = firstMonday.add(Duration(days: (firstWeek - 1) * 7));
+          DateTime jan4Last = DateTime(yearForLastWeek, 1, 4);
+          DateTime lastMonday = jan4Last.subtract(Duration(days: jan4Last.weekday - 1));
+          DateTime lastWeekStart = lastMonday.add(Duration(days: (lastWeek - 1) * 7));
+          DateTime quincenaEndDate = lastWeekStart.add(const Duration(days: 6, hours: 23, minutes: 59));
+          bool isCurrentlyAffected = now.isAfter(quincenaStartDate.subtract(const Duration(seconds: 1))) &&
+                                     now.isBefore(quincenaEndDate.add(const Duration(seconds: 1)));
+          if (isCurrentlyAffected) {
+            enProgresoIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (enProgresoIndex != -1) {
+        double estimatedItemHeight = 135.0;
+        double viewport = _nominaScrollController.position.viewportDimension;
+        
+        // Formula from Screenshot 1 shifted up by 2 cards (-250px) to match Screenshot 2
+        double targetOffset = (((enProgresoIndex + 1) * estimatedItemHeight) - viewport + 24.0) - 250.0;
+        double maxScroll = _nominaScrollController.position.maxScrollExtent;
+        targetOffset = targetOffset.clamp(0.0, maxScroll);
+
+        _nominaScrollController.animateTo(
+          targetOffset,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
+  }
+
   Widget _buildNominaTab() {
     double retentionPct = double.tryParse(_retentionController.text) ?? 15.22;
     double fomentoRate =
@@ -3674,6 +3760,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     DateTime now = DateTime.now();
 
     return ListView.builder(
+      controller: _nominaScrollController,
       padding: const EdgeInsets.all(16),
       itemCount: _payCalendar2026.length,
       itemBuilder: (context, index) {
@@ -4552,6 +4639,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
+      scrollable: true,
           backgroundColor: Colors.grey[900],
           title: const Text(
             "¿Cerrar sesión?",
@@ -4719,6 +4807,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+      scrollable: true,
         backgroundColor: Colors.grey[900],
         title: const Text("Eliminar Cambio de Sueldo",
             style: TextStyle(
@@ -4762,6 +4851,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+      scrollable: true,
         backgroundColor: Colors.grey[900],
         title: const Text("Borrar Todo el Historial",
             style: TextStyle(
@@ -4816,6 +4906,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+      scrollable: true,
               backgroundColor: Colors.grey[900],
               title: const Column(
                 children: [
@@ -5120,6 +5211,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+      scrollable: true,
               backgroundColor: Colors.grey[900],
               title: const Column(
                 children: [
@@ -5345,6 +5437,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                               barrierDismissible: false,
                               builder: (BuildContext successContext) {
                                 return AlertDialog(
+      scrollable: true,
                                   backgroundColor: Colors.grey[900],
                                   title: const Row(
                                     children: [
@@ -5446,6 +5539,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+      scrollable: true,
         backgroundColor: Colors.grey[900],
         title: const Text("INFORMACIÓN",
             style: TextStyle(
@@ -5461,7 +5555,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.8.1 26/09/26",
+            Text("Versión v.23.9.1 07/10/26",
                 style: TextStyle(color: Colors.orangeAccent, fontSize: 14)),
             Divider(color: Colors.white38, height: 25),
             Text(
@@ -5513,6 +5607,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
+      scrollable: true,
         backgroundColor: Colors.grey[900],
         title: const Text("Importar Datos",
             style: TextStyle(
@@ -5971,6 +6066,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       context: context,
       builder: (context) {
         return AlertDialog(
+      scrollable: true,
           backgroundColor: const Color(0xFF1E1E1E),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -6094,6 +6190,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               day.totalHours > day.baseHours ? day.baseHours : day.totalHours;
 
           return AlertDialog(
+      scrollable: true,
             backgroundColor: Colors.grey[900],
             title: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -6470,6 +6567,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
         // No record exists - show creation options
         return AlertDialog(
+      scrollable: true,
           backgroundColor: Colors.grey[900],
           title: Text("Registrar: ${DateFormat('d MMM').format(date)}",
               style: const TextStyle(
@@ -6716,6 +6814,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         context: context,
         builder: (context) {
           return AlertDialog(
+      scrollable: true,
               backgroundColor: Colors.grey[900],
               title: const Text("¿Borrar registro?",
                   style: TextStyle(
