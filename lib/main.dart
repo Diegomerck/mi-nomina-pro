@@ -2614,12 +2614,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("SEM. PASADA",
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                letterSpacing: 1.0,
-                                fontWeight: FontWeight.bold)),
+                        const Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text("SEM. PASADA",
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    letterSpacing: 1.0,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        ),
                         IconButton(
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
@@ -2630,12 +2636,16 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      "\$${totalLastWeek.toStringAsFixed(2)} - (${hoursLastWeek.toStringAsFixed(1)} hrs)",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "\$${totalLastWeek.toStringAsFixed(2)} - (${hoursLastWeek.toStringAsFixed(1)} hrs)",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -2650,12 +2660,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("SEM. ACTUAL",
-                            style: TextStyle(
-                                color: Colors.orange,
-                                fontSize: 12,
-                                letterSpacing: 1.0,
-                                fontWeight: FontWeight.bold)),
+                        const Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text("SEM. ACTUAL",
+                                style: TextStyle(
+                                    color: Colors.orange,
+                                    fontSize: 16,
+                                    letterSpacing: 1.0,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        ),
                         IconButton(
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
@@ -2668,12 +2684,16 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      "\$${totalThisWeek.toStringAsFixed(2)} - (${hoursThisWeek.toStringAsFixed(1)} hrs)",
-                      style: const TextStyle(
-                        color: Colors.orange,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        "\$${totalThisWeek.toStringAsFixed(2)} - (${hoursThisWeek.toStringAsFixed(1)} hrs)",
+                        style: const TextStyle(
+                          color: Colors.orange,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
