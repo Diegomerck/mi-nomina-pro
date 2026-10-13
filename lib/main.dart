@@ -16,14 +16,17 @@ import 'firebase_options.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'web_reload_stub.dart' if (dart.library.html) 'web_reload.dart';
 
+final Map<String, String> _changelogTitles = {
+  "23.10.1": "✨ Versión 23.10.1 (13/10/26) — Modo Luz & Alta Visibilidad",
+};
+
 final Map<String, List<String>> _changelogByVersion = {
   "23.10.1": [
-    "Nuevo Modo Luz de Día / Tema Claro: Botón de cambio de tema en la barra superior con persistencia de preferencia.",
-    "Accesibilidad visual mejorada: Textos, números y datos en negro puro de alto contraste para máxima legibilidad bajo el sol.",
-    "Pestaña Hoy: Botones de Entrada y Salida más grandes, reloj ampliado y áreas táctiles optimizadas para personas con debilidad visual.",
-    "Pestaña Hoy: Registro directo en un solo paso con botones de 'Entrada Manual' y 'Salida Manual'.",
-    "Pestaña Hoy: Nueva sección para agregar o editar notas directamente en el turno en progreso.",
-    "Compatibilidad de alto contraste en todas las pestañas: Hoy, Quincena, Año, Nómina, Extras y Ajustes.",
+    "☀️ Modo Día / Modo Luz: Nuevo botón de alternancia rápida en la barra superior (AppBar) con persistencia automática de tu preferencia.",
+    "👁️ Accesibilidad Visual en \"HOY\": Reloj digital más grande y legible, botones de acción aumentados de tamaño con superficie táctil sólida y mayor contraste bajo luz solar directa.",
+    "⚡ Registro Manual Directo: Marcaje de entrada y salida manual en 1 solo paso con hora prellenada.",
+    "📝 Notas en Turno Activo: Ahora puedes agregar o editar notas de turno directamente sin necesidad de finalizar la jornada primero.",
+    "🎨 Contraste Mejorado: Tipografía en negro absoluto y bordes reforzados en todas las pestañas para máxima visibilidad en exteriores.",
   ],
   "23.9.2": [
     "Pestaña Año: Desplazamiento automático enfocado en la semana actual al entrar o seleccionar la pestaña.",
@@ -7503,7 +7506,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: _isDarkMode ? Colors.grey[900] : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -7521,14 +7524,16 @@ class _TelevisaAppState extends State<TelevisaApp> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.new_releases, color: Colors.orange, size: 24),
-                      SizedBox(width: 8),
+                      Icon(Icons.new_releases,
+                          color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                          size: 24),
+                      const SizedBox(width: 8),
                       Text(
                         "Novedades",
                         style: TextStyle(
-                          color: Colors.orange,
+                          color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
@@ -7536,12 +7541,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     ],
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white54),
+                    icon: Icon(Icons.close,
+                        color: _isDarkMode ? Colors.white54 : Colors.black54),
                     onPressed: () => Navigator.pop(sheetContext),
                   ),
                 ],
               ),
-              const Divider(color: Colors.white24),
+              Divider(color: _isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1)),
               Flexible(
                 child: ListView.builder(
                   shrinkWrap: true,
@@ -7549,48 +7555,87 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   itemBuilder: (context, index) {
                     final ver = versionsToShow[index];
                     final notes = _changelogByVersion[ver] ?? [];
+                    final verTitle = _changelogTitles[ver] ?? "Versión $ver";
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            "Versión $ver",
-                            style: const TextStyle(
-                              color: Colors.orangeAccent,
+                            verTitle,
+                            style: TextStyle(
+                              color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: 6),
+                          const SizedBox(height: 8),
                           ...notes.map(
-                            (note) => Padding(
-                              padding: const EdgeInsets.only(
-                                  bottom: 4.0, left: 6.0),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    "• ",
-                                    style: TextStyle(
-                                      color: Colors.orange,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Text(
-                                      note,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                        height: 1.3,
+                            (note) {
+                              final colonIndex = note.indexOf(':');
+                              final hasColon = colonIndex != -1;
+                              final titlePart = hasColon ? note.substring(0, colonIndex + 1) : '';
+                              final bodyPart = hasColon ? note.substring(colonIndex + 1) : note;
+
+                              final trimmed = note.trim();
+                              final startsWithAlphanumeric = RegExp(r'^[a-zA-Z0-9]').hasMatch(trimmed);
+
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0, left: 2.0),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (startsWithAlphanumeric) ...[
+                                      Text(
+                                        "• ",
+                                        style: TextStyle(
+                                          color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                    Expanded(
+                                      child: Text.rich(
+                                        TextSpan(
+                                          children: [
+                                            if (hasColon) ...[
+                                              TextSpan(
+                                                text: titlePart,
+                                                style: TextStyle(
+                                                  color: _isDarkMode ? Colors.white : Colors.black,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14,
+                                                  height: 1.35,
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: bodyPart,
+                                                style: TextStyle(
+                                                  color: _isDarkMode ? Colors.white70 : const Color(0xFF1E293B),
+                                                  fontWeight: FontWeight.normal,
+                                                  fontSize: 14,
+                                                  height: 1.35,
+                                                ),
+                                              ),
+                                            ] else ...[
+                                              TextSpan(
+                                                text: note,
+                                                style: TextStyle(
+                                                  color: _isDarkMode ? Colors.white : Colors.black,
+                                                  fontSize: 14,
+                                                  height: 1.35,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                            ),
+                                  ],
+                                ),
+                              );
+                            },
                           ),
                         ],
                       ),
