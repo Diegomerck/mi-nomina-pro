@@ -17,6 +17,14 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'web_reload_stub.dart' if (dart.library.html) 'web_reload.dart';
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.10.1": [
+    "Nuevo Modo Luz de Día / Tema Claro: Botón de cambio de tema en la barra superior con persistencia de preferencia.",
+    "Accesibilidad visual mejorada: Textos, números y datos en negro puro de alto contraste para máxima legibilidad bajo el sol.",
+    "Pestaña Hoy: Botones de Entrada y Salida más grandes, reloj ampliado y áreas táctiles optimizadas para personas con debilidad visual.",
+    "Pestaña Hoy: Registro directo en un solo paso con botones de 'Entrada Manual' y 'Salida Manual'.",
+    "Pestaña Hoy: Nueva sección para agregar o editar notas directamente en el turno en progreso.",
+    "Compatibilidad de alto contraste en todas las pestañas: Hoy, Quincena, Año, Nómina, Extras y Ajustes.",
+  ],
   "23.9.2": [
     "Pestaña Año: Desplazamiento automático enfocado en la semana actual al entrar o seleccionar la pestaña.",
     "Pestaña Ajustes: Edición y guardado individual de campos con confirmación previa y bloqueo de seguridad por defecto.",
@@ -450,6 +458,7 @@ class WorkDay {
   double sueldoBase;
   double baseHours;
   String id;
+  bool isInProgress;
   bool esFalta;
   bool esMantenimiento;
   bool esVacaciones;
@@ -463,6 +472,7 @@ class WorkDay {
       this.entradaReal,
       required this.sueldoBase,
       this.baseHours = 9.5,
+      this.isInProgress = false,
       this.esFalta = false,
       this.esMantenimiento = false,
       this.esVacaciones = false,
@@ -484,17 +494,32 @@ class WorkDay {
   DateTime get requiredCompletionTime =>
       effectiveStart.add(Duration(minutes: requiredShiftMinutes));
 
-  int get actualWorkedMinutes =>
-      salida.isAfter(effectiveStart) ? salida.difference(effectiveStart).inMinutes : 0;
+  int get actualWorkedMinutes {
+    if (isInProgress) return 0;
+    return salida.isAfter(effectiveStart)
+        ? salida.difference(effectiveStart).inMinutes
+        : 0;
+  }
 
-  double get totalHours =>
-      (esFalta || esVacaciones || (esFestivo && !festivoTrabajado)) ? 0.0 : actualWorkedMinutes / 60.0;
+  double get totalHours {
+    if (isInProgress) return 0.0;
+    return (esFalta || esVacaciones || (esFestivo && !festivoTrabajado))
+        ? 0.0
+        : actualWorkedMinutes / 60.0;
+  }
+
   bool get isOvernight => salida.day != entrada.day;
 
   double get hourlyRate => baseHours > 0 ? sueldoBase / baseHours : 0.0;
 
   double get payDeduction {
-    if (esFalta || esMantenimiento || esVacaciones || esFestivo) return 0.0;
+    if (isInProgress ||
+        esFalta ||
+        esMantenimiento ||
+        esVacaciones ||
+        esFestivo) {
+      return 0.0;
+    }
     if (actualWorkedMinutes < requiredShiftMinutes) {
       int shortfallMinutes = requiredShiftMinutes - actualWorkedMinutes;
       int deficitBlocks = (shortfallMinutes / 30.0).ceil();
@@ -504,11 +529,13 @@ class WorkDay {
   }
 
   double get dailyPay {
-    if (esFalta) return 0.0;
+    if (isInProgress || esFalta) return 0.0;
     bool isWeekend = entrada.weekday == DateTime.saturday ||
         entrada.weekday == DateTime.sunday;
     double baseDailyPay = isWeekend ? sueldoBase * 2 : sueldoBase;
-    if (esMantenimiento || esVacaciones || (esFestivo && !festivoTrabajado)) return baseDailyPay;
+    if (esMantenimiento || esVacaciones || (esFestivo && !festivoTrabajado)) {
+      return baseDailyPay;
+    }
     if (esFestivo && festivoTrabajado) return baseDailyPay * 2;
 
     double pay = baseDailyPay - payDeduction;
@@ -516,7 +543,13 @@ class WorkDay {
   }
 
   double get creditedExtraHours {
-    if (esFalta || esMantenimiento || esVacaciones || (esFestivo && !festivoTrabajado)) return 0.0;
+    if (isInProgress ||
+        esFalta ||
+        esMantenimiento ||
+        esVacaciones ||
+        (esFestivo && !festivoTrabajado)) {
+      return 0.0;
+    }
     if (actualWorkedMinutes <= requiredShiftMinutes) return 0.0;
 
     int extraMinutes = actualWorkedMinutes - requiredShiftMinutes;
@@ -530,7 +563,13 @@ class WorkDay {
   double get extraHoursCount => creditedExtraHours;
 
   double get extrasMoney {
-    if (esFalta || esMantenimiento || esVacaciones || (esFestivo && !festivoTrabajado)) return 0.0;
+    if (isInProgress ||
+        esFalta ||
+        esMantenimiento ||
+        esVacaciones ||
+        (esFestivo && !festivoTrabajado)) {
+      return 0.0;
+    }
     if (creditedExtraHours <= 0) return 0.0;
     if (esFestivo && festivoTrabajado) {
       return creditedExtraHours * (hourlyRate * 3);
@@ -539,14 +578,17 @@ class WorkDay {
   }
 
   double get holidayExtraHours =>
-      (esFestivo && festivoTrabajado) ? creditedExtraHours : 0.0;
+      (isInProgress || !(esFestivo && festivoTrabajado))
+          ? 0.0
+          : creditedExtraHours;
 
   double get holidayExtrasPay =>
-      (esFestivo && festivoTrabajado && creditedExtraHours > 0)
-          ? creditedExtraHours * (hourlyRate * 3)
-          : 0.0;
+      (isInProgress ||
+              !(esFestivo && festivoTrabajado && creditedExtraHours > 0))
+          ? 0.0
+          : creditedExtraHours * (hourlyRate * 3);
 
-  double get totalPay => dailyPay + extrasMoney;
+  double get totalPay => (isInProgress) ? 0.0 : (dailyPay + extrasMoney);
 
   Map<String, dynamic> toJson() => {
         'entrada': entrada.toIso8601String(),
@@ -555,6 +597,7 @@ class WorkDay {
         'sueldoBase': sueldoBase,
         'baseHours': baseHours,
         'id': id,
+        'isInProgress': isInProgress,
         'esFalta': esFalta,
         'esMantenimiento': esMantenimiento,
         'esVacaciones': esVacaciones,
@@ -571,9 +614,11 @@ class WorkDay {
         sueldoBase: (json['sueldoBase'] ?? 0).toDouble(),
         baseHours: (json['baseHours'] ?? 9.5).toDouble(),
         id: json['id'],
+        isInProgress: json['isInProgress'] ?? false,
         esFalta: json['esFalta'] ?? false,
         esMantenimiento: json['esMantenimiento'] ?? false,
-        esVacaciones: json['esVacaciones'] ?? json['esVacacionesFestivo'] ?? false,
+        esVacaciones:
+            json['esVacaciones'] ?? json['esVacacionesFestivo'] ?? false,
         esFestivo: json['esFestivo'] ?? false,
         festivoTrabajado: json['festivoTrabajado'] ?? false,
         notas: json['notas'] ?? "",
@@ -605,6 +650,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
   bool _isClockedIn = false;
   bool _completedToday = false;
   DateTime? _entradaDateTime;
+  DateTime? _salidaDateTime;
+  String? _currentShiftId;
   DateTime _selectedCalendarDay = DateTime.now();
   bool _isProcessing = false;
   bool _isLoading = true; // Loading screen state
@@ -624,11 +671,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
   // Salary history to track changes with effective dates
   List<Map<String, dynamic>> _salaryHistory = [];
 
+  // Theme preference (Dark OLED vs Soft Light)
+  bool _isDarkMode = true;
+
   String _entradaDisplay = "--/-- --:--";
   String _salidaDisplay = "--/-- --:--";
-  String _hoursSummary = "";
-  String _moneySummary = "";
-  String _totalDayMoney = "";
   final TextEditingController _salaryController =
       TextEditingController(text: "");
   final TextEditingController _baseHoursController =
@@ -1435,6 +1482,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
     }
   }
 
+  Future<void> _toggleTheme() async {
+    setState(() {
+      _isDarkMode = !_isDarkMode;
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('app_is_dark_mode', _isDarkMode);
+  }
+
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
@@ -1448,6 +1503,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     }
 
     setState(() {
+      _isDarkMode = prefs.getBool('app_is_dark_mode') ?? true;
       _salaryController.text = prefs.getString('salary') ?? "";
 
       // Load salary history
@@ -1552,8 +1608,72 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   (doc) => WorkDay.fromJson(doc.data() as Map<String, dynamic>))
               .toList();
           _weeklyHistory.sort((a, b) => b.entrada.compareTo(a.entrada));
+          _syncTodayStateFromHistory();
         });
       }
+    }
+  }
+
+  void _syncTodayStateFromHistory() {
+    // 1. Look for an active in-progress shift
+    WorkDay? inProgressShift = _weeklyHistory.cast<WorkDay?>().firstWhere(
+          (d) => d?.isInProgress == true,
+          orElse: () => null,
+        );
+
+    if (inProgressShift != null) {
+      _currentShiftId = inProgressShift.id;
+      _isClockedIn = true;
+      _completedToday = false;
+      _entradaDateTime = inProgressShift.entrada;
+      _entradaRealDateTime = inProgressShift.entradaReal;
+      _salidaDateTime = null;
+      _entradaDisplay =
+          DateFormat('dd/MM - hh:mm a').format(inProgressShift.entrada);
+      _salidaDisplay = "--/-- --:--";
+      _startCountdownTimer();
+      _updateTimeRemainingMessage();
+      return;
+    }
+
+    // 2. Look for today's completed shift (same calendar day)
+    final now = DateTime.now();
+    WorkDay? todayCompleted = _weeklyHistory.cast<WorkDay?>().firstWhere(
+          (d) =>
+              d != null &&
+              !d.isInProgress &&
+              !d.esFalta &&
+              !d.esVacaciones &&
+              !(d.esFestivo && !d.festivoTrabajado) &&
+              d.entrada.year == now.year &&
+              d.entrada.month == now.month &&
+              d.entrada.day == now.day,
+          orElse: () => null,
+        );
+
+    if (todayCompleted != null) {
+      _currentShiftId = todayCompleted.id;
+      _isClockedIn = false;
+      _completedToday = true;
+      _entradaDateTime = todayCompleted.entrada;
+      _entradaRealDateTime = todayCompleted.entradaReal;
+      _salidaDateTime = todayCompleted.salida;
+      _entradaDisplay =
+          DateFormat('dd/MM - hh:mm a').format(todayCompleted.entrada);
+      _salidaDisplay =
+          DateFormat('dd/MM - hh:mm a').format(todayCompleted.salida);
+      _calculateEarnings(todayCompleted.salida, dayOverride: todayCompleted);
+    } else {
+      _currentShiftId = null;
+      _isClockedIn = false;
+      _completedToday = false;
+      _entradaDateTime = null;
+      _entradaRealDateTime = null;
+      _salidaDateTime = null;
+      _entradaDisplay = "--/-- --:--";
+      _salidaDisplay = "--/-- --:--";
+      _countdownTimer?.cancel();
+      _timeRemainingMessage = "";
     }
   }
 
@@ -1582,14 +1702,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
   Map<WorkDay, OvertimeBreakdown> calculateWeeklyOvertimeBreakdown(
       List<WorkDay> weekDays) {
     final sortedDays = [...weekDays]
-      ..sort((a, b) => a.entrada.compareTo(b.entrada));
+      ..sort((a, b) => a.entrada.compareTo(a.entrada));
 
     double accumulatedCreditedOT = 0.0;
     final Map<WorkDay, OvertimeBreakdown> result = {};
 
     for (final day in sortedDays) {
       final breakdown = OvertimeBreakdown();
-      if (!day.esFalta && !day.esMantenimiento && !day.esFestivo && day.creditedExtraHours > 0) {
+      if (!day.isInProgress &&
+          !day.esFalta &&
+          !day.esMantenimiento &&
+          !day.esFestivo &&
+          day.creditedExtraHours > 0) {
         double remainingOT = day.creditedExtraHours;
         double hourlyRate = day.hourlyRate; // sueldoBase / baseHours
 
@@ -1649,6 +1773,20 @@ class _TelevisaAppState extends State<TelevisaApp> {
         String dayName = days[now.weekday - 1];
         String monthName = months[now.month - 1];
         _dateString = "$dayName, ${now.day} de $monthName ${now.year}";
+
+        // Midnight rollover check: automatically clear yesterday's completed summary
+        if (_completedToday && _salidaDateTime != null) {
+          if (_salidaDateTime!.year != now.year ||
+              _salidaDateTime!.month != now.month ||
+              _salidaDateTime!.day != now.day) {
+            _completedToday = false;
+            _currentShiftId = null;
+            _entradaDateTime = null;
+            _salidaDateTime = null;
+            _entradaDisplay = "--/-- --:--";
+            _salidaDisplay = "--/-- --:--";
+          }
+        }
       });
     }
   }
@@ -1855,17 +1993,17 @@ class _TelevisaAppState extends State<TelevisaApp> {
           return AlertDialog(
       scrollable: true,
             backgroundColor: Colors.grey[900],
-            title: const Text("Confirmar Entrada",
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold)),
+            title: const Text(
+              "¿A que hora inicia tu llamado hoy, o a que hora te asignaron que es tu entrada para hoy?",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold),
+            ),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text("Tu hora de entrada asignada es:",
-                    style: TextStyle(color: Colors.white, fontSize: 18)),
-                const SizedBox(height: 25),
                 _buildButton(formatTime(t1), Colors.orange, () {
                   _executeEntrada(t1, actualTime: time);
                   Navigator.pop(context);
@@ -1875,8 +2013,25 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   _executeEntrada(t2, actualTime: time);
                   Navigator.pop(context);
                 }),
-                const SizedBox(height: 12),
-                TextButton.icon(
+                const SizedBox(height: 20),
+                const Text(
+                  "Si no fue ninguna de estas 2 opciones, entonces:",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 14),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: Colors.white.withAlpha(12),
+                    side: const BorderSide(color: Colors.orange, width: 1.5),
+                    minimumSize: const Size(double.infinity, 50),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                   onPressed: () async {
                     final TimeOfDay? picked = await _showScrollTimePicker(
                       context,
@@ -1890,63 +2045,75 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       if (context.mounted) Navigator.pop(context);
                     }
                   },
-                  icon: const Icon(Icons.edit, color: Colors.white70, size: 20),
-                  label: const Text("INGRESAR MANUALMENTE",
-                      style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold)),
-                )
+                  icon: const Icon(Icons.edit, color: Colors.orange, size: 20),
+                  label: const Text(
+                    "INGRESAR MANUALMENTE",
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  "(Utilizamos esta hora para calcular desde a que hora se cuentan tus horas extras, independientemente de a que hora realmente llegaste a Televisa)",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 17,
+                      height: 1.35),
+                ),
               ],
             ),
           );
         },
       );
     } else {
-      // SALIDA Case remains the same
-      _calculateEarnings(time);
-      _countdownTimer?.cancel(); // Stop the countdown timer
-      setState(() {
-        _isClockedIn = false;
-        _completedToday = true;
-        _salidaDisplay = DateFormat('dd/MM - hh:mm a').format(time);
-        _timeRemainingMessage = ""; // Clear the time remaining message
-      });
-      // Get the correct salary for the entry date (supports salary changes)
-      final double salaryForDate = _getSalaryForDate(_entradaDateTime!);
-
-      // Trigger history save (which now has its own loading message)
-      await _addAndSortHistory(WorkDay(
-          entrada: _entradaDateTime!,
-          salida: time,
-          entradaReal: _entradaRealDateTime,
-          sueldoBase: salaryForDate,
-          baseHours: double.tryParse(_baseHoursController.text) ?? 9.5));
-      // Clear pending session
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('pending_entrada');
+      _executeSalida(time);
     }
   }
 
   DateTime? _entradaRealDateTime; // Store actual clock-in time
 
-  // Helper method to keep the code clean
   Future<void> _executeEntrada(DateTime assignedTime,
       {DateTime? actualTime}) async {
     setState(() => _isProcessing = true);
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(" Iniciando sesión en la nube..."),
+        content: Text(" Guardando entrada en la nube..."),
         duration: Duration(seconds: 1),
         backgroundColor: Colors.blueAccent));
 
+    final double salaryForDate = _getSalaryForDate(assignedTime);
+    final double bHrs = double.tryParse(_baseHoursController.text) ?? 9.5;
+
+    final inProgressDay = WorkDay(
+      entrada: assignedTime,
+      salida: assignedTime,
+      entradaReal: actualTime ?? assignedTime,
+      sueldoBase: salaryForDate,
+      baseHours: bHrs,
+      isInProgress: true,
+      esMantenimiento: false,
+      esFestivo: false,
+      festivoTrabajado: false,
+    );
+
     setState(() {
+      _currentShiftId = inProgressDay.id;
       _entradaDateTime = assignedTime;
-      _entradaRealDateTime =
-          actualTime ?? assignedTime; // Store actual time if provided
+      _entradaRealDateTime = actualTime ?? assignedTime;
+      _salidaDateTime = null;
       _isClockedIn = true;
       _completedToday = false;
       _entradaDisplay = DateFormat('dd/MM - hh:mm a').format(assignedTime);
       _salidaDisplay = "--/-- --:--";
+
+      // Remove any prior in-progress shift before adding this active one
+      _weeklyHistory.removeWhere((d) => d.isInProgress);
+      _weeklyHistory.insert(0, inProgressDay);
+      _weeklyHistory.sort((a, b) => b.entrada.compareTo(a.entrada));
     });
 
     await _saveData();
@@ -1964,49 +2131,513 @@ class _TelevisaAppState extends State<TelevisaApp> {
     }
   }
 
-  void _calculateEarnings(DateTime salida) {
-    if (_entradaDateTime == null) return;
-    double bHrs = double.tryParse(_baseHoursController.text) ?? 9.5;
-    final day = WorkDay(
-        entrada: _entradaDateTime!,
-        salida: salida,
-        entradaReal: _entradaRealDateTime,
-        sueldoBase: double.tryParse(_salaryController.text) ?? 0.0,
-        baseHours: bHrs);
-    setState(() {
-      _hoursSummary =
-          "Jornada: ${bHrs.toStringAsFixed(1)} hrs | Extras: ${day.extraHoursCount.toStringAsFixed(2)} hrs";
-      _moneySummary =
-          "Sueldo: \$${day.dailyPay.toStringAsFixed(2)} | Extras: \$${day.extrasMoney.toStringAsFixed(2)}";
-      _totalDayMoney = "PAGO TOTAL: \$${day.totalPay.toStringAsFixed(2)}";
-    });
-  }
-
-  Future<void> _pickManualTime(String type) async {
-    DateTime initial = DateTime.now();
-    DateTime pickedDate = initial;
-
-    // Only show DatePicker for SALIDA (so user can pick next day for overnight shifts).
-    // ENTRADA defaults to today's date and goes directly to time selection.
-    if (type == "SALIDA") {
-      final DateTime? date = await showDatePicker(
-          context: context,
-          initialDate: initial,
-          firstDate: DateTime(2025),
-          lastDate: DateTime(2027));
-      if (!mounted || date == null) return;
-      pickedDate = date;
+  Future<void> _executeSalida(DateTime time) async {
+    setState(() => _isProcessing = true);
+    DateTime salidaTime = time;
+    if (_entradaDateTime != null && salidaTime.isBefore(_entradaDateTime!)) {
+      salidaTime = salidaTime.add(const Duration(days: 1));
     }
 
-    final TimeOfDay? pickedTime = await _showScrollTimePicker(
-        context,
-        initialTime: TimeOfDay.fromDateTime(initial),
-        title: type == "ENTRADA" ? "HORA ENTRADA" : "HORA SALIDA");
-    if (!mounted || pickedTime == null) return;
+    _countdownTimer?.cancel();
 
-    DateTime finalDT = DateTime(pickedDate.year, pickedDate.month,
-        pickedDate.day, pickedTime.hour, pickedTime.minute);
-    _processRecord(type, finalDT);
+    WorkDay? shift = _weeklyHistory.cast<WorkDay?>().firstWhere(
+          (d) => d?.id == _currentShiftId || (d != null && d.isInProgress),
+          orElse: () => null,
+        );
+
+    if (shift != null) {
+      shift.salida = salidaTime;
+      shift.isInProgress = false;
+    } else {
+      final double salaryForDate =
+          _getSalaryForDate(_entradaDateTime ?? salidaTime);
+      final double bHrs = double.tryParse(_baseHoursController.text) ?? 9.5;
+      shift = WorkDay(
+        entrada: _entradaDateTime ?? salidaTime,
+        salida: salidaTime,
+        entradaReal: _entradaRealDateTime,
+        sueldoBase: salaryForDate,
+        baseHours: bHrs,
+        isInProgress: false,
+      );
+      _weeklyHistory.insert(0, shift);
+      _weeklyHistory.sort((a, b) => b.entrada.compareTo(a.entrada));
+    }
+
+    setState(() {
+      _currentShiftId = shift?.id;
+      _isClockedIn = false;
+      _completedToday = true;
+      _salidaDateTime = salidaTime;
+      _salidaDisplay = DateFormat('dd/MM - hh:mm a').format(salidaTime);
+      _timeRemainingMessage = "";
+    });
+
+    _calculateEarnings(salidaTime, dayOverride: shift);
+
+    // Clear pending session from SharedPreferences
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('pending_entrada');
+    await prefs.remove('pending_entrada_real');
+    await prefs.setBool('pending_clocked_in', false);
+
+    await _saveData();
+
+    if (mounted) {
+      setState(() => _isProcessing = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(" Salida registrada exitosamente"),
+        backgroundColor: Colors.green,
+      ));
+    }
+  }
+
+  Future<void> _editEntradaTime() async {
+    if (_entradaDateTime == null) return;
+    final TimeOfDay? picked = await _showScrollTimePicker(
+      context,
+      initialTime: TimeOfDay.fromDateTime(_entradaDateTime!),
+      title: "EDITAR HORA ENTRADA",
+    );
+    if (!mounted || picked == null) return;
+
+    final DateTime oldEntrada = _entradaDateTime!;
+    final DateTime newEntrada = DateTime(
+      oldEntrada.year,
+      oldEntrada.month,
+      oldEntrada.day,
+      picked.hour,
+      picked.minute,
+    );
+
+    setState(() {
+      WorkDay? shift = _weeklyHistory.cast<WorkDay?>().firstWhere(
+            (d) =>
+                d?.id == _currentShiftId ||
+                (d != null && d.isInProgress) ||
+                (d != null && d.entrada == oldEntrada) ||
+                (_salidaDateTime != null &&
+                    d != null &&
+                    d.salida == _salidaDateTime),
+            orElse: () => null,
+          );
+      _entradaDateTime = newEntrada;
+      _entradaRealDateTime = newEntrada;
+      _entradaDisplay = DateFormat('dd/MM - hh:mm a').format(newEntrada);
+      if (shift != null) {
+        shift.entrada = newEntrada;
+        shift.entradaReal = newEntrada;
+      }
+      if (_completedToday && _salidaDateTime != null) {
+        _calculateEarnings(_salidaDateTime!, dayOverride: shift);
+      }
+    });
+
+    _updateTimeRemainingMessage();
+    await _saveData();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Hora de entrada actualizada"),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ));
+    }
+  }
+
+  Future<void> _editSalidaTime() async {
+    if (_salidaDateTime == null && _entradaDateTime == null) return;
+    DateTime baseSalida = _salidaDateTime ?? DateTime.now();
+    final TimeOfDay? picked = await _showScrollTimePicker(
+      context,
+      initialTime: TimeOfDay.fromDateTime(baseSalida),
+      title: "EDITAR HORA SALIDA",
+    );
+    if (!mounted || picked == null) return;
+
+    DateTime newSalida = DateTime(
+      baseSalida.year,
+      baseSalida.month,
+      baseSalida.day,
+      picked.hour,
+      picked.minute,
+    );
+
+    if (_entradaDateTime != null && newSalida.isBefore(_entradaDateTime!)) {
+      newSalida = newSalida.add(const Duration(days: 1));
+    }
+
+    setState(() {
+      _salidaDateTime = newSalida;
+      _salidaDisplay = DateFormat('dd/MM - hh:mm a').format(newSalida);
+      WorkDay? shift = _weeklyHistory.cast<WorkDay?>().firstWhere(
+            (d) =>
+                d?.id == _currentShiftId ||
+                (d != null && d.entrada == _entradaDateTime),
+            orElse: () => null,
+          );
+      if (shift != null) {
+        shift.salida = newSalida;
+        shift.isInProgress = false;
+        _calculateEarnings(newSalida, dayOverride: shift);
+      }
+    });
+
+    await _saveData();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Hora de salida actualizada"),
+        backgroundColor: Colors.green,
+        duration: Duration(seconds: 2),
+      ));
+    }
+  }
+
+  bool _isShiftFromPreviousDay() {
+    if (!_isClockedIn || _entradaDateTime == null) return false;
+    final now = DateTime.now();
+    return _entradaDateTime!.year != now.year ||
+        _entradaDateTime!.month != now.month ||
+        _entradaDateTime!.day != now.day;
+  }
+
+  Future<void> _showForgottenClockOutDialog() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Text(
+          "¿Registrar día nuevo?",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          "Se eliminará el turno sin salida iniciado el ${DateFormat('dd/MM hh:mm a').format(_entradaDateTime!)} de la nube y podrás registrar tu entrada de hoy.",
+          style: const TextStyle(color: Colors.white70, fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child:
+                const Text("CANCELAR", style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("ELIMINAR Y EMPEZAR HOY",
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    _countdownTimer?.cancel();
+
+    WorkDay? inProgressShift = _weeklyHistory.cast<WorkDay?>().firstWhere(
+          (d) => d?.isInProgress == true || d?.id == _currentShiftId,
+          orElse: () => null,
+        );
+
+    if (inProgressShift != null) {
+      await _userHistory.doc(inProgressShift.id).delete();
+      _weeklyHistory.removeWhere((d) => d.id == inProgressShift.id);
+    }
+
+    setState(() {
+      _currentShiftId = null;
+      _isClockedIn = false;
+      _completedToday = false;
+      _entradaDateTime = null;
+      _entradaRealDateTime = null;
+      _salidaDateTime = null;
+      _entradaDisplay = "--/-- --:--";
+      _salidaDisplay = "--/-- --:--";
+      _timeRemainingMessage = "";
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('pending_entrada');
+    await prefs.remove('pending_entrada_real');
+    await prefs.setBool('pending_clocked_in', false);
+
+    await _saveData();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content:
+            Text("Turno anterior eliminado. Listo para registrar hoy."),
+        backgroundColor: Colors.green,
+      ));
+    }
+  }
+
+  Future<void> _deleteTodayShift() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text(
+              "Eliminar Registro",
+              style: TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: const Text(
+          "¿Eliminar el registro de hoy? Se borrará de la nube y podrás registrar el día nuevamente.",
+          style: TextStyle(color: Colors.white70, fontSize: 16),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("CANCELAR",
+                style: TextStyle(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("ELIMINAR",
+                style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    _countdownTimer?.cancel();
+
+    WorkDay? shift = _weeklyHistory.cast<WorkDay?>().firstWhere(
+          (d) =>
+              d?.id == _currentShiftId ||
+              (_entradaDateTime != null &&
+                  d != null &&
+                  d.entrada == _entradaDateTime) ||
+              (_salidaDateTime != null &&
+                  d != null &&
+                  d.salida == _salidaDateTime) ||
+              (d != null &&
+                  d.entrada.year == DateTime.now().year &&
+                  d.entrada.month == DateTime.now().month &&
+                  d.entrada.day == DateTime.now().day),
+          orElse: () => null,
+        );
+
+    if (shift != null) {
+      await _userHistory.doc(shift.id).delete();
+      _weeklyHistory.removeWhere((d) => d.id == shift.id);
+    }
+
+    setState(() {
+      _currentShiftId = null;
+      _isClockedIn = false;
+      _completedToday = false;
+      _entradaDateTime = null;
+      _entradaRealDateTime = null;
+      _salidaDateTime = null;
+      _entradaDisplay = "--/-- --:--";
+      _salidaDisplay = "--/-- --:--";
+      _timeRemainingMessage = "";
+    });
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('pending_entrada');
+    await prefs.remove('pending_entrada_real');
+    await prefs.setBool('pending_clocked_in', false);
+
+    await _saveData();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text("Registro de hoy eliminado"),
+        backgroundColor: Colors.green,
+      ));
+    }
+  }
+
+  void _calculateEarnings(DateTime salida, {WorkDay? dayOverride}) {
+    setState(() {});
+  }
+
+  Widget _buildShiftRatingSelector(WorkDay? shift) {
+    if (shift == null) return const SizedBox.shrink();
+
+    int selectedIndex = 0;
+    if (shift.esMantenimiento) {
+      selectedIndex = 1;
+    } else if (shift.esFestivo && shift.festivoTrabajado) {
+      selectedIndex = 2;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      decoration: BoxDecoration(
+        color: _isDarkMode ? Colors.white.withAlpha(16) : Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1),
+          width: _isDarkMode ? 1.0 : 1.5,
+        ),
+        boxShadow: _isDarkMode
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withAlpha(12),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(
+              "TIPO DE JORNADA:",
+              style: TextStyle(
+                color: _isDarkMode ? Colors.white60 : const Color(0xFF334155),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              _buildRatingOption(
+                label: "JORNADA REGULAR",
+                isSelected: selectedIndex == 0,
+                activeColor: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                onTap: () async {
+                  if (selectedIndex == 0) return;
+                  setState(() {
+                    shift.esMantenimiento = false;
+                    shift.esFestivo = false;
+                    shift.festivoTrabajado = false;
+                    if (_completedToday && _salidaDateTime != null) {
+                      _calculateEarnings(_salidaDateTime!, dayOverride: shift);
+                    }
+                  });
+                  await _saveData();
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildRatingOption(
+                label: "MANTENIMIENTO",
+                isSelected: selectedIndex == 1,
+                activeColor: _isDarkMode ? Colors.blueAccent : const Color(0xFF1D4ED8),
+                onTap: () async {
+                  if (selectedIndex == 1) return;
+                  setState(() {
+                    shift.esMantenimiento = true;
+                    shift.esFestivo = false;
+                    shift.festivoTrabajado = false;
+                    if (_completedToday && _salidaDateTime != null) {
+                      _calculateEarnings(_salidaDateTime!, dayOverride: shift);
+                    }
+                  });
+                  await _saveData();
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildRatingOption(
+                label: "FESTIVO LABORADO",
+                isSelected: selectedIndex == 2,
+                activeColor: _isDarkMode ? Colors.purpleAccent : const Color(0xFF7E22CE),
+                onTap: () async {
+                  if (selectedIndex == 2) return;
+                  setState(() {
+                    shift.esMantenimiento = false;
+                    shift.esFestivo = true;
+                    shift.festivoTrabajado = true;
+                    if (_completedToday && _salidaDateTime != null) {
+                      _calculateEarnings(_salidaDateTime!, dayOverride: shift);
+                    }
+                  });
+                  await _saveData();
+                },
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRatingOption({
+    required String label,
+    required bool isSelected,
+    required Color activeColor,
+    required VoidCallback onTap,
+  }) {
+    Color bg = isSelected
+        ? (_isDarkMode ? activeColor.withAlpha(50) : activeColor.withAlpha(30))
+        : (_isDarkMode ? Colors.black26 : const Color(0xFFF3F4F6));
+    Color borderC = isSelected
+        ? activeColor
+        : (_isDarkMode ? Colors.white10 : const Color(0xFF94A3B8));
+    double borderWidth = isSelected ? (_isDarkMode ? 1.5 : 1.8) : (_isDarkMode ? 1.0 : 1.2);
+    Color textC = isSelected
+        ? (_isDarkMode ? Colors.white : activeColor)
+        : (_isDarkMode ? Colors.white54 : const Color(0xFF334155));
+    Color iconC = isSelected
+        ? activeColor
+        : (_isDarkMode ? Colors.white38 : const Color(0xFF64748B));
+
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: borderC,
+              width: borderWidth,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                isSelected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+                size: 15,
+                color: iconC,
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: textC,
+                      fontSize: 11,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -2014,39 +2645,40 @@ class _TelevisaAppState extends State<TelevisaApp> {
     // Show loading screen while initializing
     if (_isLoading) {
       return Scaffold(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor:
+            _isDarkMode ? const Color(0xFF121212) : const Color(0xFFDDE3EA),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Text(
+              Text(
                 "Mi Nómina Pro",
                 style: TextStyle(
-                  color: Colors.orange,
+                  color: _isDarkMode ? Colors.orange : const Color(0xFFD9531E),
                   fontSize: 36,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 2,
                 ),
               ),
               const SizedBox(height: 20),
-              const Text(
-                "v.23.9.2 12/10/26",
+              Text(
+                "v.23.10.1 13/10/26",
                 style: TextStyle(
-                  color: Colors.orangeAccent,
+                  color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,
                   fontWeight: FontWeight.w500,
                 ),
               ),
               const SizedBox(height: 40),
-              const CircularProgressIndicator(
-                color: Colors.orange,
+              CircularProgressIndicator(
+                color: _isDarkMode ? Colors.orange : const Color(0xFFD9531E),
                 strokeWidth: 4,
               ),
               const SizedBox(height: 20),
               Text(
                 "Cargando...",
                 style: TextStyle(
-                  color: Colors.white.withAlpha(128),
+                  color: _isDarkMode ? Colors.white.withAlpha(128) : const Color(0xFF475569),
                   fontSize: 14,
                 ),
               ),
@@ -2059,28 +2691,40 @@ class _TelevisaAppState extends State<TelevisaApp> {
     return DefaultTabController(
       length: 6,
       child: Scaffold(
-        backgroundColor: const Color(0xFF121212),
+        backgroundColor:
+            _isDarkMode ? const Color(0xFF121212) : const Color(0xFFDDE3EA),
         appBar: AppBar(
-          backgroundColor: Colors.black,
-          title: const Text("Mi Nómina Pro",
+          backgroundColor: _isDarkMode ? Colors.black : Colors.white,
+          elevation: _isDarkMode ? 0 : 1,
+          title: Text("Mi Nómina Pro",
               style: TextStyle(
-                  color: Colors.orange,
+                  color: _isDarkMode ? Colors.orange : const Color(0xFFD9531E),
                   fontWeight: FontWeight.bold,
                   fontSize: 24)),
           actions: [
+            IconButton(
+              icon: Icon(
+                _isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                color: _isDarkMode ? Colors.white70 : const Color(0xFF475569),
+              ),
+              tooltip:
+                  _isDarkMode ? "Cambiar a modo día" : "Cambiar a modo noche",
+              onPressed: _toggleTheme,
+            ),
             Badge(
               label: Text('$_unreadChangelogCount',
                   style: const TextStyle(fontSize: 10, color: Colors.white)),
               backgroundColor:
                   _unreadChangelogCount > 0 ? Colors.red : Colors.grey[700],
               child: IconButton(
-                icon: const Icon(Icons.notifications_outlined,
-                    color: Colors.white54),
+                icon: Icon(Icons.notifications_outlined,
+                    color: _isDarkMode ? Colors.white54 : const Color(0xFF475569)),
                 onPressed: _showChangelogDialog,
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white54),
+              icon: Icon(Icons.refresh,
+                  color: _isDarkMode ? Colors.white54 : const Color(0xFF475569)),
               tooltip: 'Actualizar / Recargar app',
               onPressed: () async {
                 if (kIsWeb) {
@@ -2092,7 +2736,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
               },
             ),
             IconButton(
-              icon: const Icon(Icons.logout, color: Colors.white54),
+              icon: Icon(Icons.logout,
+                  color: _isDarkMode ? Colors.white54 : const Color(0xFF475569)),
               onPressed: () => _confirmSignOut(context),
             ),
           ],
@@ -2105,9 +2750,12 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 _scrollToActiveNomina();
               }
             },
-            indicatorColor: Colors.orange,
-            labelColor: Colors.orange,
-            unselectedLabelColor: Colors.white70,
+            indicatorColor:
+                _isDarkMode ? Colors.orange : const Color(0xFFD9531E),
+            labelColor:
+                _isDarkMode ? Colors.orange : const Color(0xFFD9531E),
+            unselectedLabelColor:
+                _isDarkMode ? Colors.white70 : const Color(0xFF475569),
             labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             unselectedLabelStyle: const TextStyle(fontSize: 12),
             isScrollable: true,
@@ -2148,367 +2796,1803 @@ class _TelevisaAppState extends State<TelevisaApp> {
     );
   }
 
+  Widget _buildTodaySummaryCard(WorkDay day) {
+    final List<String> fullMonthsES = [
+      "Enero",
+      "Febrero",
+      "Marzo",
+      "Abril",
+      "Mayo",
+      "Junio",
+      "Julio",
+      "Agosto",
+      "Septiembre",
+      "Octubre",
+      "Noviembre",
+      "Diciembre"
+    ];
+    final List<String> daysES = [
+      "Lunes",
+      "Martes",
+      "Miércoles",
+      "Jueves",
+      "Viernes",
+      "Sábado",
+      "Domingo"
+    ];
+    final String dateHeader =
+        "${daysES[day.entrada.weekday - 1]}, ${day.entrada.day} ${fullMonthsES[day.entrada.month - 1]}";
+
+    final int existingIndex = _weeklyHistory.indexOf(day);
+
+    if (day.esFalta) {
+      return Card(
+        color: _isDarkMode ? Colors.red.withAlpha(40) : Colors.white,
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+              color: _isDarkMode
+                  ? Colors.redAccent.withAlpha(120)
+                  : const Color(0xFFEF9A9A),
+              width: 1.5),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(dateHeader,
+                          style: TextStyle(
+                              color: _isDarkMode
+                                  ? Colors.redAccent
+                                  : const Color(0xFFC62828),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18)),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                            color: _isDarkMode
+                                ? Colors.red.withAlpha(60)
+                                : const Color(0xFFFFEBEE),
+                            borderRadius: BorderRadius.circular(4)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.cancel,
+                                color: _isDarkMode
+                                    ? Colors.redAccent
+                                    : const Color(0xFFC62828),
+                                size: 14),
+                            const SizedBox(width: 4),
+                            Text("FALTA / NO LABORADO",
+                                style: TextStyle(
+                                    color: _isDarkMode
+                                        ? Colors.redAccent
+                                        : const Color(0xFFC62828),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.edit,
+                            color: _isDarkMode
+                                ? Colors.orange
+                                : const Color(0xFFD9531E),
+                            size: 22),
+                        tooltip: "Editar notas",
+                        onPressed: existingIndex >= 0
+                            ? () => _editExistingWorkDay(existingIndex)
+                            : null,
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.delete_outline,
+                            color: _isDarkMode
+                                ? Colors.white54
+                                : const Color(0xFF6B7280),
+                            size: 24),
+                        tooltip: "Eliminar registro",
+                        onPressed: _deleteTodayShift,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _isDarkMode
+                      ? Colors.red.withAlpha(20)
+                      : const Color(0xFFFFEBEE),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: _isDarkMode
+                          ? Colors.redAccent.withAlpha(100)
+                          : const Color(0xFFEF9A9A)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("FALTA - DÍA NO LABORADO",
+                        style: TextStyle(
+                            color: _isDarkMode
+                                ? Colors.redAccent
+                                : const Color(0xFFC62828),
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text("Pago: \$0.00 | Día descontado / sin salario",
+                        style: TextStyle(
+                            color: _isDarkMode
+                                ? Colors.white70
+                                : const Color(0xFF4B5563),
+                            fontSize: 13)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Divider(
+                  color: _isDarkMode
+                      ? Colors.white24
+                      : const Color(0xFFE5E7EB)),
+              _buildNotesSection(day),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _isDarkMode
+                      ? Colors.redAccent
+                      : const Color(0xFFC62828),
+                  side: BorderSide(
+                      color: _isDarkMode
+                          ? Colors.redAccent
+                          : const Color(0xFFC62828),
+                      width: 1.5),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: _deleteTodayShift,
+                icon: Icon(Icons.delete_outline,
+                    size: 18,
+                    color: _isDarkMode
+                        ? Colors.redAccent
+                        : const Color(0xFFC62828)),
+                label: Text(
+                  "ELIMINAR REGISTRO DE HOY",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    letterSpacing: 0.5,
+                    color: _isDarkMode
+                        ? Colors.redAccent
+                        : const Color(0xFFC62828),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (day.esVacaciones) {
+      return Card(
+        color: _isDarkMode ? Colors.lightGreen.withAlpha(30) : Colors.white,
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+              color: _isDarkMode
+                  ? Colors.lightGreenAccent.withAlpha(120)
+                  : const Color(0xFFA5D6A7),
+              width: 2),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(dateHeader,
+                          style: TextStyle(
+                              color: _isDarkMode
+                                  ? Colors.lightGreenAccent
+                                  : const Color(0xFF2E7D32),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18)),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                            color: _isDarkMode
+                                ? Colors.lightGreen.withAlpha(60)
+                                : const Color(0xFFE8F5E9),
+                            borderRadius: BorderRadius.circular(4)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.star,
+                                color: _isDarkMode
+                                    ? Colors.lightGreenAccent
+                                    : const Color(0xFF2E7D32),
+                                size: 14),
+                            const SizedBox(width: 4),
+                            Text("VACACIONES",
+                                style: TextStyle(
+                                    color: _isDarkMode
+                                        ? Colors.lightGreenAccent
+                                        : const Color(0xFF2E7D32),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.edit,
+                            color: _isDarkMode
+                                ? Colors.orange
+                                : const Color(0xFFD9531E),
+                            size: 22),
+                        tooltip: "Editar notas",
+                        onPressed: existingIndex >= 0
+                            ? () => _editExistingWorkDay(existingIndex)
+                            : null,
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.delete_outline,
+                            color: _isDarkMode
+                                ? Colors.white54
+                                : const Color(0xFF6B7280),
+                            size: 24),
+                        tooltip: "Eliminar registro",
+                        onPressed: _deleteTodayShift,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _isDarkMode
+                      ? Colors.lightGreen.withAlpha(20)
+                      : const Color(0xFFE8F5E9),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: _isDarkMode
+                          ? Colors.lightGreenAccent.withAlpha(100)
+                          : const Color(0xFFA5D6A7)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("VACACIONES - PAGO BASE COMPLETO",
+                        style: TextStyle(
+                            color: _isDarkMode
+                                ? Colors.lightGreenAccent
+                                : const Color(0xFF2E7D32),
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(
+                        "Pago base: \$${day.dailyPay.toStringAsFixed(2)} | Sin descuento ni horas extra",
+                        style: TextStyle(
+                            color: _isDarkMode
+                                ? Colors.white70
+                                : const Color(0xFF4B5563),
+                            fontSize: 13)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Divider(
+                  color: _isDarkMode
+                      ? Colors.white24
+                      : const Color(0xFFE5E7EB)),
+              _buildNotesSection(day),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _isDarkMode
+                      ? Colors.redAccent
+                      : const Color(0xFFC62828),
+                  side: BorderSide(
+                      color: _isDarkMode
+                          ? Colors.redAccent
+                          : const Color(0xFFC62828),
+                      width: 1.5),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: _deleteTodayShift,
+                icon: Icon(Icons.delete_outline,
+                    size: 18,
+                    color: _isDarkMode
+                        ? Colors.redAccent
+                        : const Color(0xFFC62828)),
+                label: Text(
+                  "ELIMINAR REGISTRO DE HOY",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    letterSpacing: 0.5,
+                    color: _isDarkMode
+                        ? Colors.redAccent
+                        : const Color(0xFFC62828),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (day.esFestivo && !day.festivoTrabajado) {
+      return Card(
+        color: _isDarkMode ? Colors.purple.withAlpha(30) : Colors.white,
+        margin: const EdgeInsets.symmetric(vertical: 10),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+              color: _isDarkMode
+                  ? Colors.purpleAccent.withAlpha(120)
+                  : const Color(0xFFCE93D8),
+              width: 2),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(dateHeader,
+                          style: TextStyle(
+                              color: _isDarkMode
+                                  ? Colors.purpleAccent
+                                  : const Color(0xFF7E22CE),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18)),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                            color: _isDarkMode
+                                ? Colors.purple.withAlpha(60)
+                                : const Color(0xFFF3E8FF),
+                            borderRadius: BorderRadius.circular(4)),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.star,
+                                color: _isDarkMode
+                                    ? Colors.purpleAccent
+                                    : const Color(0xFF7E22CE),
+                                size: 14),
+                            const SizedBox(width: 4),
+                            Text("DÍA FESTIVO (NO LABORADO)",
+                                style: TextStyle(
+                                    color: _isDarkMode
+                                        ? Colors.purpleAccent
+                                        : const Color(0xFF7E22CE),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.edit,
+                            color: _isDarkMode
+                                ? Colors.orange
+                                : const Color(0xFFD9531E),
+                            size: 22),
+                        tooltip: "Editar notas",
+                        onPressed: existingIndex >= 0
+                            ? () => _editExistingWorkDay(existingIndex)
+                            : null,
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.delete_outline,
+                            color: _isDarkMode
+                                ? Colors.white54
+                                : const Color(0xFF6B7280),
+                            size: 24),
+                        tooltip: "Eliminar registro",
+                        onPressed: _deleteTodayShift,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _isDarkMode
+                      ? Colors.purple.withAlpha(20)
+                      : const Color(0xFFF3E8FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                      color: _isDarkMode
+                          ? Colors.purpleAccent.withAlpha(100)
+                          : const Color(0xFFCE93D8)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("DÍA FESTIVO - PAGO BASE COMPLETO",
+                        style: TextStyle(
+                            color: _isDarkMode
+                                ? Colors.purpleAccent
+                                : const Color(0xFF7E22CE),
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text(
+                        "Pago base: \$${day.dailyPay.toStringAsFixed(2)} | Sin descuento ni horas extra",
+                        style: TextStyle(
+                            color: _isDarkMode
+                                ? Colors.white70
+                                : const Color(0xFF4B5563),
+                            fontSize: 13)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Divider(
+                  color: _isDarkMode
+                      ? Colors.white24
+                      : const Color(0xFFE5E7EB)),
+              _buildNotesSection(day),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _isDarkMode
+                      ? Colors.redAccent
+                      : const Color(0xFFC62828),
+                  side: BorderSide(
+                      color: _isDarkMode
+                          ? Colors.redAccent
+                          : const Color(0xFFC62828),
+                      width: 1.5),
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: _deleteTodayShift,
+                icon: Icon(Icons.delete_outline,
+                    size: 18,
+                    color: _isDarkMode
+                        ? Colors.redAccent
+                        : const Color(0xFFC62828)),
+                label: Text(
+                  "ELIMINAR REGISTRO DE HOY",
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    letterSpacing: 0.5,
+                    color: _isDarkMode
+                        ? Colors.redAccent
+                        : const Color(0xFFC62828),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final int week = _getWeekNumber(day.entrada);
+    final List<WorkDay> weekDays = _weeklyHistory
+        .where((d) => _getWeekNumber(d.entrada) == week)
+        .toList();
+    final weeklyOTMap = calculateWeeklyOvertimeBreakdown(weekDays);
+    final breakdown = weeklyOTMap[day] ?? OvertimeBreakdown();
+    final double realExtrasPay = breakdown.totalPay;
+    final double normalHrs =
+        day.totalHours > day.baseHours ? day.baseHours : day.totalHours;
+
+    bool startedOnWeekend =
+        day.entrada.weekday == DateTime.saturday ||
+        day.entrada.weekday == DateTime.sunday;
+
+    Color cardColor;
+    Color headerColor;
+    Color borderColor;
+    if (day.esMantenimiento) {
+      cardColor = _isDarkMode ? Colors.blue.withAlpha(25) : Colors.white;
+      headerColor = _isDarkMode ? Colors.blueAccent : const Color(0xFF1D4ED8);
+      borderColor = _isDarkMode ? Colors.blueAccent : const Color(0xFF93C5FD);
+    } else if (day.esFestivo && day.festivoTrabajado) {
+      cardColor = _isDarkMode ? Colors.purple.withAlpha(25) : Colors.white;
+      headerColor = _isDarkMode ? Colors.purpleAccent : const Color(0xFF7E22CE);
+      borderColor = _isDarkMode ? Colors.purpleAccent : const Color(0xFFCE93D8);
+    } else if (startedOnWeekend) {
+      cardColor = _isDarkMode ? Colors.white.withAlpha(20) : Colors.white;
+      headerColor = _isDarkMode ? Colors.yellowAccent : const Color(0xFFC2410C);
+      borderColor = _isDarkMode ? Colors.orange : const Color(0xFFCBD5E1);
+    } else {
+      cardColor = _isDarkMode ? Colors.white.withAlpha(20) : Colors.white;
+      headerColor = _isDarkMode ? Colors.orange : const Color(0xFFC2410C);
+      borderColor = _isDarkMode ? Colors.orange : const Color(0xFFCBD5E1);
+    }
+
+    return Column(
+      children: [
+        Card(
+          color: cardColor,
+          elevation: _isDarkMode ? 0 : 2,
+          shadowColor: _isDarkMode ? Colors.transparent : Colors.black.withAlpha(20),
+          margin: const EdgeInsets.symmetric(vertical: 10),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(
+                color: _isDarkMode
+                    ? borderColor.withAlpha(120)
+                    : borderColor,
+                width: (day.esMantenimiento || (day.esFestivo && day.festivoTrabajado)) ? 2 : (_isDarkMode ? 1 : 1.5)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(dateHeader,
+                            style: TextStyle(
+                                color: headerColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18)),
+                        if (day.esMantenimiento)
+                          Container(
+                            margin: const EdgeInsets.only(top: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                                color: _isDarkMode
+                                    ? Colors.blueAccent.withAlpha(60)
+                                    : const Color(0xFFDBEAFE),
+                                borderRadius: BorderRadius.circular(4)),
+                            child: Text("DÍA DE MANTENIMIENTO",
+                                style: TextStyle(
+                                    color: _isDarkMode
+                                        ? Colors.blueAccent
+                                        : const Color(0xFF1D4ED8),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        if (day.esFestivo && day.festivoTrabajado)
+                          Container(
+                            margin: const EdgeInsets.only(top: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                                color: _isDarkMode
+                                    ? Colors.purpleAccent.withAlpha(60)
+                                    : const Color(0xFFF3E8FF),
+                                borderRadius: BorderRadius.circular(4)),
+                            child: Text("DÍA FESTIVO TRABAJADO",
+                                style: TextStyle(
+                                    color: _isDarkMode
+                                        ? Colors.purpleAccent
+                                        : const Color(0xFF7E22CE),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                        if (day.isOvernight && !day.esMantenimiento)
+                          Container(
+                            margin: const EdgeInsets.only(top: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                                color: _isDarkMode
+                                    ? Colors.redAccent.withAlpha(60)
+                                    : const Color(0xFFFFE4E6),
+                                borderRadius: BorderRadius.circular(4)),
+                            child: Text("SALIDA DÍA SIGUIENTE",
+                                style: TextStyle(
+                                    color: _isDarkMode
+                                        ? Colors.redAccent
+                                        : const Color(0xFFBE123C),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                      ],
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.edit,
+                              color: _isDarkMode
+                                  ? Colors.orange
+                                  : const Color(0xFFD9531E),
+                              size: 22),
+                          tooltip: "Editar turno",
+                          onPressed: existingIndex >= 0
+                              ? () => _editExistingWorkDay(existingIndex)
+                              : null,
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.delete_outline,
+                              color: _isDarkMode
+                                  ? Colors.white54
+                                  : const Color(0xFF6B7280),
+                              size: 24),
+                          tooltip: "Eliminar registro",
+                          onPressed: _deleteTodayShift,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                Divider(
+                    color: _isDarkMode
+                        ? Colors.white24
+                        : const Color(0xFFE5E7EB)),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Entrada Asignada: ${DateFormat('hh:mm a').format(day.entrada)}",
+                            style: TextStyle(
+                                color: day.esMantenimiento
+                                    ? (_isDarkMode
+                                        ? Colors.blueAccent
+                                        : const Color(0xFF1D4ED8))
+                                    : (_isDarkMode
+                                        ? Colors.orangeAccent
+                                        : const Color(0xFFD9531E)),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500),
+                          ),
+                          Text(
+                            "Salida: ${DateFormat('hh:mm a').format(day.salida)}",
+                            style: TextStyle(
+                                color: _isDarkMode
+                                    ? Colors.redAccent
+                                    : const Color(0xFFC62828),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                      if (day.entradaReal != null &&
+                          day.entradaReal != day.entrada)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            "Registro Real: ${DateFormat('hh:mm a').format(day.entradaReal!)} ${day.entradaReal!.isBefore(day.entrada) ? '(Temprano)' : '(Tarde)'}",
+                            style: TextStyle(
+                                color: day.entradaReal!.isBefore(day.entrada)
+                                    ? (_isDarkMode
+                                        ? Colors.greenAccent
+                                        : const Color(0xFF2E7D32))
+                                    : (_isDarkMode
+                                        ? Colors.yellowAccent
+                                        : const Color(0xFFB45309)),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (day.esFestivo && day.festivoTrabajado)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _statDetail(
+                          "DESGLOSE DE HORAS",
+                          "${normalHrs.toStringAsFixed(1)}h (Base) + ${day.holidayExtraHours.toStringAsFixed(2)}h (Extra)",
+                          "${day.totalHours.toStringAsFixed(2)} hrs totales"),
+                      _statDetail(
+                          "DESGLOSE DE PAGO",
+                          "Pago Base: \$${day.sueldoBase.toStringAsFixed(2)} × 2 = \$${(day.sueldoBase * 2).toStringAsFixed(2)}\n"
+                          "EXTRAS FESTIVO 3×: ${day.holidayExtraHours.toStringAsFixed(1)} hrs = \$${day.holidayExtrasPay.toStringAsFixed(2)}",
+                          "\$${day.totalPay.toStringAsFixed(2)}",
+                          isMoney: true),
+                    ],
+                  )
+                else if (!day.esMantenimiento)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _statDetail(
+                          "DESGLOSE DE HORAS",
+                          "${normalHrs.toStringAsFixed(1)}h (Base) + ${day.extraHoursCount.toStringAsFixed(2)}h (Extra)",
+                          "${day.totalHours.toStringAsFixed(2)} hrs totales"),
+                      _statDetail(
+                          "DESGLOSE DE PAGO",
+                          "\$${day.dailyPay.toStringAsFixed(2)} Base\n"
+                          "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
+                          "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}",
+                          "\$${(day.dailyPay + realExtrasPay).toStringAsFixed(2)}",
+                          isMoney: true),
+                    ],
+                  )
+                else
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: _isDarkMode
+                          ? Colors.blue.withAlpha(30)
+                          : const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: _isDarkMode
+                              ? Colors.blueAccent.withAlpha(100)
+                              : const Color(0xFFBFDBFE)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                            "MANTENIMIENTO - SIN HORAS EXTRA",
+                            style: TextStyle(
+                                color: _isDarkMode
+                                    ? Colors.blueAccent
+                                    : const Color(0xFF1D4ED8),
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text(
+                            "Jornada: ${day.totalHours.toStringAsFixed(2)} hrs | Pago base: \$${day.dailyPay.toStringAsFixed(2)}",
+                            style: TextStyle(
+                                color: _isDarkMode
+                                    ? Colors.white70
+                                    : const Color(0xFF4B5563),
+                                fontSize: 13)),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                Divider(
+                    color: _isDarkMode
+                        ? Colors.white24
+                        : const Color(0xFFE5E7EB)),
+                _buildNotesSection(day),
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _isDarkMode
+                        ? Colors.redAccent
+                        : const Color(0xFFC62828),
+                    side: BorderSide(
+                        color: _isDarkMode
+                            ? Colors.redAccent
+                            : const Color(0xFFC62828),
+                        width: 1.5),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 10, horizontal: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _deleteTodayShift,
+                  icon: Icon(Icons.delete_outline,
+                      size: 18,
+                      color: _isDarkMode
+                          ? Colors.redAccent
+                          : const Color(0xFFC62828)),
+                  label: Text(
+                    "ELIMINAR REGISTRO DE HOY",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      letterSpacing: 0.5,
+                      color: _isDarkMode
+                          ? Colors.redAccent
+                          : const Color(0xFFC62828),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildShiftRatingSelector(day),
+      ],
+    );
+  }
+
   Widget _buildHoyTab() {
+    final now = DateTime.now();
+    final WorkDay? todayRecord = _weeklyHistory.cast<WorkDay?>().firstWhere(
+          (d) =>
+              d != null &&
+              d.entrada.year == now.year &&
+              d.entrada.month == now.month &&
+              d.entrada.day == now.day &&
+              !d.isInProgress,
+          orElse: () => null,
+        );
+
+    if (todayRecord != null) {
+      return SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: Column(
+          children: [
+            const SizedBox(height: 30),
+            Text(_dateString,
+                style: TextStyle(
+                    color:
+                        _isDarkMode ? Colors.white70 : Colors.black,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600)),
+            Text(_timeString,
+                style: TextStyle(
+                    color:
+                        _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold)),
+            const SizedBox(height: 20),
+            _buildTodaySummaryCard(todayRecord),
+            const SizedBox(height: 30),
+          ],
+        ),
+      );
+    }
     bool hasTodayFalta = _weeklyHistory.any((d) =>
-        d.entrada.day == DateTime.now().day &&
-        d.entrada.month == DateTime.now().month &&
+        d.entrada.year == now.year &&
+        d.entrada.month == now.month &&
+        d.entrada.day == now.day &&
         d.esFalta);
-    bool hasTodayMantenimiento = _weeklyHistory.any((d) =>
-        d.entrada.day == DateTime.now().day &&
-        d.entrada.month == DateTime.now().month &&
-        d.esMantenimiento);
     bool hasTodayVacaciones = _weeklyHistory.any((d) =>
-        d.entrada.day == DateTime.now().day &&
-        d.entrada.month == DateTime.now().month &&
+        d.entrada.year == now.year &&
+        d.entrada.month == now.month &&
+        d.entrada.day == now.day &&
         d.esVacaciones);
     bool hasTodayFestivo = _weeklyHistory.any((d) =>
-        d.entrada.day == DateTime.now().day &&
-        d.entrada.month == DateTime.now().month &&
-        d.esFestivo);
+        d.entrada.year == now.year &&
+        d.entrada.month == now.month &&
+        d.entrada.day == now.day &&
+        d.esFestivo &&
+        !d.festivoTrabajado);
+
+    WorkDay? currentShift = _weeklyHistory.cast<WorkDay?>().firstWhere(
+          (d) =>
+              d?.id == _currentShiftId ||
+              (d != null && d.isInProgress) ||
+              (_entradaDateTime != null &&
+                  d != null &&
+                  d.entrada == _entradaDateTime),
+          orElse: () => null,
+        );
+
+    DateTime? effectiveEntrada = _entradaDateTime ?? currentShift?.entrada;
+    DateTime? effectiveEntradaReal =
+        _entradaRealDateTime ?? currentShift?.entradaReal;
+
+    bool hasRegisteredEntrada =
+        _isClockedIn || _completedToday || _entradaDateTime != null;
+    bool hasRegisteredSalida = _completedToday && _salidaDateTime != null;
+
+    String entradaTimeString = _entradaDateTime != null
+        ? DateFormat('hh:mm a').format(_entradaDateTime!)
+        : (_entradaDisplay.contains(" - ")
+            ? _entradaDisplay.split(" - ").last
+            : (_entradaDisplay != "--/-- --:--" ? _entradaDisplay : "--:--"));
+    String salidaTimeString = _salidaDateTime != null
+        ? DateFormat('hh:mm a').format(_salidaDateTime!)
+        : (_salidaDisplay.contains(" - ")
+            ? _salidaDisplay.split(" - ").last
+            : (_salidaDisplay != "--/-- --:--" ? _salidaDisplay : "--:--"));
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         children: [
           const SizedBox(height: 30),
           Text(_dateString,
-              style: const TextStyle(
-                  color: Colors.white70,
+              style: TextStyle(
+                  color:
+                      _isDarkMode ? Colors.white70 : Colors.black,
                   fontSize: 20,
-                  fontWeight: FontWeight.w500)),
+                  fontWeight: FontWeight.w600)),
           Text(_timeString,
-              style: const TextStyle(
-                  color: Colors.orange,
+              style: TextStyle(
+                  color:
+                      _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
                   fontSize: 32,
                   fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
+          // Consolidated side-by-side ENTRADA and SALIDA container
           Container(
-              padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: _isDarkMode ? Colors.white.withAlpha(20) : Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: _isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1),
+                width: _isDarkMode ? 1.0 : 1.5,
+              ),
+              boxShadow: _isDarkMode
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(12),
+                        blurRadius: 10,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // --- ENTRADA BOX ---
+                  Expanded(
+                    child: hasRegisteredEntrada
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 16),
+                            decoration: BoxDecoration(
+                              color: _isDarkMode
+                                  ? Colors.green.withAlpha(25)
+                                  : const Color(0xFFE8F5E9),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                  color: _isDarkMode
+                                      ? Colors.greenAccent.withAlpha(80)
+                                      : const Color(0xFFA5D6A7)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.login,
+                                            color: _isDarkMode
+                                                ? Colors.greenAccent
+                                                : const Color(0xFF2E7D32),
+                                            size: 19),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          "ENTRADA",
+                                          style: TextStyle(
+                                            color: _isDarkMode
+                                                ? Colors.greenAccent
+                                                : const Color(0xFF2E7D32),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.8,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    IconButton(
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      icon: Icon(Icons.edit,
+                                          color: _isDarkMode
+                                              ? Colors.greenAccent
+                                              : const Color(0xFF2E7D32),
+                                          size: 19),
+                                      tooltip: "Editar hora entrada",
+                                      onPressed: _isProcessing
+                                          ? null
+                                          : _editEntradaTime,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    entradaTimeString,
+                                    style: TextStyle(
+                                      color: _isDarkMode
+                                          ? Colors.white
+                                          : Colors.black,
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                if (effectiveEntradaReal != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    (effectiveEntrada != null &&
+                                            effectiveEntradaReal
+                                                .isAfter(effectiveEntrada))
+                                        ? "Llegada: ${DateFormat('hh:mm a').format(effectiveEntradaReal)} (Tarde)"
+                                        : "Llegada: ${DateFormat('hh:mm a').format(effectiveEntradaReal)}",
+                                    style: TextStyle(
+                                      color: (effectiveEntrada != null &&
+                                              effectiveEntradaReal
+                                                  .isAfter(effectiveEntrada))
+                                          ? (_isDarkMode
+                                              ? Colors.orangeAccent
+                                              : const Color(0xFFB43403))
+                                          : (_isDarkMode
+                                              ? Colors.white54
+                                              : Colors.black87),
+                                      fontSize: 13,
+                                      fontWeight: (effectiveEntrada != null &&
+                                              effectiveEntradaReal
+                                                  .isAfter(effectiveEntrada))
+                                          ? FontWeight.w600
+                                          : FontWeight.w500,
+                                    ),
+                                  ),
+                                ] else if (_entradaDateTime != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    DateFormat('dd/MM')
+                                        .format(_entradaDateTime!),
+                                    style: TextStyle(
+                                      color: _isDarkMode
+                                          ? Colors.white38
+                                          : Colors.black87,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _isDarkMode
+                                      ? Colors.green.shade700
+                                      : const Color(0xFF2E7D32),
+                                  foregroundColor: Colors.white,
+                                  minimumSize: const Size(double.infinity, 58),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 14, horizontal: 8),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                  elevation: 2,
+                                ),
+                                onPressed: (_isProcessing ||
+                                        hasTodayFalta ||
+                                        hasTodayVacaciones ||
+                                        hasTodayFestivo)
+                                    ? null
+                                    : () => _processRecord(
+                                        "ENTRADA", DateTime.now()),
+                                icon: const Icon(Icons.login, size: 22),
+                                label: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    "ENTRADA AHORA",
+                                    style: TextStyle(
+                                      fontSize: 16.5,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: _isDarkMode
+                                      ? Colors.greenAccent
+                                      : const Color(0xFF2E7D32),
+                                  minimumSize: const Size(double.infinity, 58),
+                                  side: BorderSide(
+                                    color: (_isProcessing ||
+                                            hasTodayFalta ||
+                                            hasTodayVacaciones ||
+                                            hasTodayFestivo)
+                                        ? (_isDarkMode
+                                            ? Colors.white12
+                                            : const Color(0xFFE5E7EB))
+                                        : (_isDarkMode
+                                            ? Colors.greenAccent.withAlpha(140)
+                                            : const Color(0xFF2E7D32)),
+                                    width: 1.2,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 14, horizontal: 8),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                ),
+                                onPressed: (_isProcessing ||
+                                        hasTodayFalta ||
+                                        hasTodayVacaciones ||
+                                        hasTodayFestivo)
+                                    ? null
+                                    : () async {
+                                        DateTime now = DateTime.now();
+                                        final TimeOfDay? picked =
+                                            await _showScrollTimePicker(
+                                          context,
+                                          initialTime: TimeOfDay.now(),
+                                          title: "¿A QUÉ HORA ENTRASTE HOY?",
+                                        );
+                                        if (picked != null && mounted) {
+                                          DateTime manualTime = DateTime(
+                                            now.year,
+                                            now.month,
+                                            now.day,
+                                            picked.hour,
+                                            picked.minute,
+                                          );
+                                          await _executeEntrada(manualTime,
+                                              actualTime: manualTime);
+                                        }
+                                      },
+                                icon: Icon(Icons.edit,
+                                    size: 22,
+                                    color: _isDarkMode
+                                        ? Colors.greenAccent
+                                        : const Color(0xFF2E7D32)),
+                                label: const FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    "ENTRADA MANUAL",
+                                    style: TextStyle(
+                                      fontSize: 16.5,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+
+                  const SizedBox(width: 14),
+
+                  // --- SALIDA BOX ---
+                  Expanded(
+                    child: hasRegisteredSalida
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 16),
+                            decoration: BoxDecoration(
+                              color: _isDarkMode
+                                  ? Colors.red.withAlpha(25)
+                                  : const Color(0xFFFFEBEE),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                  color: _isDarkMode
+                                      ? Colors.redAccent.withAlpha(80)
+                                      : const Color(0xFFEF9A9A)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.logout,
+                                            color: _isDarkMode
+                                                ? Colors.redAccent
+                                                : const Color(0xFFC62828),
+                                            size: 19),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          "SALIDA",
+                                          style: TextStyle(
+                                            color: _isDarkMode
+                                                ? Colors.redAccent
+                                                : const Color(0xFFC62828),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.8,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    IconButton(
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      icon: Icon(Icons.edit,
+                                          color: _isDarkMode
+                                              ? Colors.redAccent
+                                              : const Color(0xFFC62828),
+                                          size: 19),
+                                      tooltip: "Editar hora salida",
+                                      onPressed: _isProcessing
+                                          ? null
+                                          : _editSalidaTime,
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    salidaTimeString,
+                                    style: TextStyle(
+                                      color: _isDarkMode
+                                          ? Colors.white
+                                          : Colors.black,
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                                if (_salidaDateTime != null) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    DateFormat('dd/MM')
+                                        .format(_salidaDateTime!),
+                                    style: TextStyle(
+                                      color: _isDarkMode
+                                          ? Colors.white38
+                                          : Colors.black87,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
+                        : (_isClockedIn && !_completedToday)
+                            ? Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.stretch,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: _isDarkMode
+                                          ? Colors.redAccent.shade700
+                                          : const Color(0xFFC62828),
+                                      foregroundColor: Colors.white,
+                                      minimumSize:
+                                          const Size(double.infinity, 58),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 14, horizontal: 8),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12)),
+                                      elevation: 2,
+                                    ),
+                                    onPressed: _isProcessing
+                                        ? null
+                                        : () =>
+                                            _executeSalida(DateTime.now()),
+                                    icon: const Icon(Icons.logout, size: 22),
+                                    label: const FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        "SALIDA AHORA",
+                                        style: TextStyle(
+                                          fontSize: 16.5,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: _isDarkMode
+                                          ? Colors.redAccent
+                                          : const Color(0xFFB91C1C),
+                                      minimumSize:
+                                          const Size(double.infinity, 58),
+                                      side: BorderSide(
+                                        color: _isProcessing
+                                            ? (_isDarkMode
+                                                ? Colors.white12
+                                                : const Color(0xFFE5E7EB))
+                                            : (_isDarkMode
+                                                ? Colors.redAccent
+                                                    .withAlpha(140)
+                                                : const Color(0xFFB91C1C)),
+                                        width: _isDarkMode ? 1.2 : 1.8,
+                                      ),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 14, horizontal: 8),
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12)),
+                                    ),
+                                    onPressed: _isProcessing
+                                        ? null
+                                        : () async {
+                                            DateTime now = DateTime.now();
+                                            final TimeOfDay? picked =
+                                                await _showScrollTimePicker(
+                                              context,
+                                              initialTime: TimeOfDay.now(),
+                                              title:
+                                                  "¿A QUÉ HORA SALISTE HOY?",
+                                            );
+                                            if (picked != null && mounted) {
+                                              DateTime manualTime = DateTime(
+                                                now.year,
+                                                now.month,
+                                                now.day,
+                                                picked.hour,
+                                                picked.minute,
+                                              );
+                                              await _executeSalida(manualTime);
+                                            }
+                                          },
+                                    icon: Icon(Icons.edit,
+                                        size: 22,
+                                        color: _isDarkMode
+                                            ? Colors.redAccent
+                                            : const Color(0xFFB91C1C)),
+                                    label: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        "SALIDA MANUAL",
+                                        style: TextStyle(
+                                          fontSize: 16.5,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.5,
+                                          color: _isDarkMode
+                                              ? Colors.redAccent
+                                              : const Color(0xFFB91C1C),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 14, vertical: 16),
+                                decoration: BoxDecoration(
+                                  color: _isDarkMode
+                                      ? Colors.white.withAlpha(8)
+                                      : const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                      color: _isDarkMode
+                                          ? Colors.white10
+                                          : const Color(0xFFCBD5E1),
+                                      width: _isDarkMode ? 1.0 : 1.2),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Icon(Icons.logout,
+                                            color: _isDarkMode
+                                                ? Colors.white24
+                                                : const Color(0xFF64748B),
+                                            size: 19),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          "SALIDA",
+                                          style: TextStyle(
+                                            color: _isDarkMode
+                                                ? Colors.white38
+                                                : const Color(0xFF475569),
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.8,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 10),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        "--:--",
+                                        style: TextStyle(
+                                          color: _isDarkMode
+                                              ? Colors.white24
+                                              : const Color(0xFF64748B),
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      "Pendiente",
+                                      style: TextStyle(
+                                        color: _isDarkMode
+                                            ? Colors.white24
+                                            : const Color(0xFF64748B),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Midnight & Recovery prompt if shift's entrada was from previous day
+          if (_isShiftFromPreviousDay()) ...[
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(25),
-                  borderRadius: BorderRadius.circular(15)),
-              child: Column(children: [
-                _buildRow("ENTRADA:", _entradaDisplay, Colors.greenAccent),
-                const SizedBox(height: 20),
-                _buildRow("SALIDA:", _salidaDisplay, Colors.redAccent)
-              ])),
-          const SizedBox(height: 20),
-          if (_completedToday)
-            Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                    color: Colors.green.withAlpha(40),
-                    borderRadius: BorderRadius.circular(15),
-                    border:
-                        Border.all(color: Colors.greenAccent.withAlpha(100))),
-                child: Column(children: [
-                  Text(_hoursSummary,
-                      style: const TextStyle(
-                          color: Colors.yellowAccent,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  Text(_moneySummary,
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 18)),
-                  const Divider(color: Colors.white38, height: 30),
-                  Text(_totalDayMoney,
-                      style: const TextStyle(
-                          color: Colors.greenAccent,
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900))
-                ])),
+                color: _isDarkMode
+                    ? Colors.amber.withAlpha(25)
+                    : const Color(0xFFFFFBEB),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: _isDarkMode
+                        ? Colors.amberAccent.withAlpha(120)
+                        : const Color(0xFFFDE68A),
+                    width: 1.5),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.nightlight_round,
+                          color: _isDarkMode
+                              ? Colors.amberAccent
+                              : const Color(0xFFD97706),
+                          size: 22),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "Turno iniciado el ${DateFormat('dd/MM').format(_entradaDateTime!)}. Si olvidaste checar salida ayer:",
+                          style: TextStyle(
+                            color: _isDarkMode
+                                ? Colors.white70
+                                : Colors.black87,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: _isDarkMode
+                          ? Colors.amber.shade800
+                          : const Color(0xFFD97706),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 44),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: _showForgottenClockOutDialog,
+                    icon: const Icon(Icons.restart_alt, size: 20),
+                    label: const Text(
+                      "REGISTRAR DÍA NUEVO",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+
+          // 3-way shift rating selector (active when clocked in or completed today)
+          if ((_isClockedIn || _completedToday) && currentShift != null) ...[
+            const SizedBox(height: 16),
+            _buildShiftRatingSelector(currentShift),
+          ],
+
           // Time remaining or overtime message
-          if (_timeRemainingMessage.isNotEmpty)
-            Container(
+          if (_timeRemainingMessage.isNotEmpty) ...[
+            Builder(builder: (context) {
+              Color boxBg;
+              Color boxBorder;
+              Color boxAccent;
+              Color textC;
+
+              if (_timeRemainingMessage.contains("acompleta otra media hora")) {
+                boxBg = _isDarkMode
+                    ? Colors.yellow.withAlpha(40)
+                    : const Color(0xFFFEF9C3);
+                boxBorder = _isDarkMode
+                    ? Colors.yellowAccent.withAlpha(100)
+                    : const Color(0xFFFDE047);
+                boxAccent = _isDarkMode
+                    ? Colors.yellowAccent
+                    : const Color(0xFFCA8A04);
+                textC = _isDarkMode
+                    ? Colors.yellowAccent
+                    : const Color(0xFF854D0E);
+              } else if (_timeRemainingMessage.contains("tiempo extra")) {
+                boxBg = _isDarkMode
+                    ? Colors.orange.withAlpha(40)
+                    : const Color(0xFFFFEDD5);
+                boxBorder = _isDarkMode
+                    ? Colors.orangeAccent.withAlpha(100)
+                    : const Color(0xFFFDBA74);
+                boxAccent = _isDarkMode
+                    ? Colors.orangeAccent
+                    : const Color(0xFFEA580C);
+                textC = _isDarkMode
+                    ? Colors.orangeAccent
+                    : const Color(0xFF9A3412);
+              } else {
+                boxBg = _isDarkMode
+                    ? Colors.blue.withAlpha(40)
+                    : const Color(0xFFEFF6FF);
+                boxBorder = _isDarkMode
+                    ? Colors.blueAccent.withAlpha(100)
+                    : const Color(0xFF93C5FD);
+                boxAccent = _isDarkMode
+                    ? Colors.blueAccent
+                    : const Color(0xFF1E3A8A);
+                textC = _isDarkMode
+                    ? Colors.blueAccent
+                    : const Color(0xFF1E3A8A);
+              }
+
+              return Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(top: 20),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                    color: _timeRemainingMessage
-                            .contains("acompleta otra media hora")
-                        ? Colors.yellow.withAlpha(40)
-                        : (_timeRemainingMessage.contains("tiempo extra")
-                            ? Colors.orange.withAlpha(40)
-                            : Colors.blue.withAlpha(40)),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: _timeRemainingMessage
-                                .contains("acompleta otra media hora")
-                            ? Colors.yellowAccent.withAlpha(100)
-                            : (_timeRemainingMessage.contains("tiempo extra")
-                                ? Colors.orangeAccent.withAlpha(100)
-                                : Colors.blueAccent.withAlpha(100)))),
+                  color: boxBg,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: boxBorder,
+                    width: _isDarkMode ? 1.0 : 1.4,
+                  ),
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Icon(
-                        _timeRemainingMessage
-                                .contains("acompleta otra media hora")
-                            ? Icons.access_time_filled
-                            : (_timeRemainingMessage.contains("tiempo extra")
-                                ? Icons.timer_outlined
-                                : Icons.access_time),
-                        color: _timeRemainingMessage
-                                .contains("acompleta otra media hora")
-                            ? Colors.yellowAccent
-                            : (_timeRemainingMessage.contains("tiempo extra")
-                                ? Colors.orangeAccent
-                                : Colors.blueAccent),
-                        size: 28),
+                      _timeRemainingMessage
+                              .contains("acompleta otra media hora")
+                          ? Icons.access_time_filled
+                          : (_timeRemainingMessage.contains("tiempo extra")
+                              ? Icons.timer_outlined
+                              : Icons.access_time),
+                      color: boxAccent,
+                      size: 28,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
-                      child: Text(_timeRemainingMessage,
-                          style: TextStyle(
-                              color: _timeRemainingMessage
-                                      .contains("acompleta otra media hora")
-                                  ? Colors.yellowAccent
-                                  : (_timeRemainingMessage
-                                          .contains("tiempo extra")
-                                      ? Colors.orangeAccent
-                                      : Colors.blueAccent),
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold)),
+                      child: Text(
+                        _timeRemainingMessage,
+                        style: TextStyle(
+                          color: textC,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ],
-                )),
-          const SizedBox(height: 25),
-          _buildButton(
-              "ENTRADA AHORA",
-              Colors.green,
-              (_isClockedIn ||
-                      _completedToday ||
-                      hasTodayFalta ||
-                      hasTodayMantenimiento ||
-                      hasTodayVacaciones ||
-                      hasTodayFestivo)
-                  ? null
-                  : () => _processRecord("ENTRADA", DateTime.now())),
-          const SizedBox(height: 15),
-          _buildButton(
-              "SALIDA AHORA",
-              Colors.red,
-              (!_isClockedIn ||
-                      _completedToday ||
-                      hasTodayFalta ||
-                      hasTodayMantenimiento ||
-                      hasTodayVacaciones ||
-                      hasTodayFestivo)
-                  ? null
-                  : () => _processRecord("SALIDA", DateTime.now())),
-          const SizedBox(height: 20),
-          const Divider(color: Colors.white10),
-          const SizedBox(height: 15),
-          const Text("ENTRADA MANUAL",
-              style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          Row(children: [
-            Expanded(
-                child: OutlinedButton(
-                    onPressed:
-                        _isProcessing ? null : () => _pickManualTime("ENTRADA"),
-                    style: OutlinedButton.styleFrom(
-                        side: BorderSide(
-                            color: _isProcessing ? Colors.grey : Colors.green)),
-                    child: const Text("Entrada",
-                        style: TextStyle(color: Colors.white70)))),
-            const SizedBox(width: 10),
-            Expanded(
-                child: OutlinedButton(
-                    onPressed:
-                        _isProcessing ? null : () => _pickManualTime("SALIDA"),
-                    style: OutlinedButton.styleFrom(
-                        side: BorderSide(
-                            color: _isProcessing ? Colors.grey : Colors.red)),
-                    child: const Text("Salida",
-                        style: TextStyle(color: Colors.white70))))
-          ]),
-          const SizedBox(height: 20),
-          OutlinedButton.icon(
-              onPressed: () async {
-                _countdownTimer?.cancel();
-                setState(() {
-                  _isClockedIn = false;
-                  _completedToday = false;
-                  _entradaDisplay = "--/-- --:--";
-                  _salidaDisplay = "--/-- --:--";
-                  _hoursSummary = "";
-                  _moneySummary = "";
-                  _totalDayMoney = "";
-                  _timeRemainingMessage = "";
-                  _entradaDateTime = null;
-                  _entradaRealDateTime = null;
-                });
-                final prefs = await SharedPreferences.getInstance();
-                await prefs.remove('pending_entrada');
-                await prefs.setBool('pending_clocked_in', false);
-              },
-              icon: const Icon(Icons.refresh, color: Colors.blueAccent, size: 18),
-              label: const Text("REINICIAR HOY",
-                  style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-              style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.blueAccent),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
-          ),
+                ),
+              );
+            }),
+          ],
+
+          // Notes section for the active shift
+          if ((_isClockedIn || _completedToday) && currentShift != null) ...[
+            const SizedBox(height: 16),
+            _buildNotesSection(currentShift),
+          ],
+
+          // Discard in-progress shift button (positioned at bottom of active shift)
+          if (_isClockedIn) ...[
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isDarkMode
+                    ? Colors.red.withAlpha(25)
+                    : const Color(0xFFFEE2E2),
+                foregroundColor: _isDarkMode
+                    ? Colors.redAccent
+                    : const Color(0xFF991B1B),
+                elevation: _isDarkMode ? 0 : 1,
+                side: BorderSide(
+                  color: _isDarkMode
+                      ? Colors.redAccent.withAlpha(140)
+                      : const Color(0xFFDC2626),
+                  width: _isDarkMode ? 1.4 : 1.6,
+                ),
+                minimumSize: const Size(double.infinity, 48),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 13, horizontal: 20),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: _isProcessing ? null : _deleteTodayShift,
+              icon: Icon(
+                Icons.delete_outline,
+                size: 21,
+                color: _isDarkMode
+                    ? Colors.redAccent
+                    : const Color(0xFF991B1B),
+              ),
+              label: Text(
+                "DESCARTAR TURNO EN PROGRESO",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14.5,
+                  letterSpacing: 0.8,
+                  color: _isDarkMode
+                      ? Colors.redAccent
+                      : const Color(0xFF991B1B),
+                ),
+              ),
+            ),
+          ],
+          // Bottom quick actions (only when not clocked in and not completed today)
           if (!_isClockedIn && !_completedToday) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 24),
+            Divider(
+                color: _isDarkMode
+                    ? Colors.white12
+                    : const Color(0xFFD1D5DB)),
+            const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(
-                  child: _buildButton(
-                      hasTodayMantenimiento
-                          ? "MANTENIMIENTO REGISTRADO"
-                          : "MANTENIMIENTO",
-                      hasTodayMantenimiento ? Colors.grey : Colors.blue.shade700,
-                      (hasTodayFalta || hasTodayMantenimiento || hasTodayVacaciones || hasTodayFestivo)
-                          ? null
-                          : () async {
-                              // Ask user for their clock-in time
-                              final TimeOfDay? inTime = await _showScrollTimePicker(
-                                context,
-                                initialTime: const TimeOfDay(hour: 7, minute: 30),
-                                title: "¿A QUÉ HORA ENTRASTE?",
-                              );
-                              if (!mounted || inTime == null) return;
-
-                              // Calculate clock-out based on base hours setting
-                              double baseHrs =
-                                  double.tryParse(_baseHoursController.text) ?? 9.5;
-                              int baseMinutes = (baseHrs * 60).round();
-
-                              DateTime now = DateTime.now();
-                              DateTime entrada = DateTime(now.year, now.month,
-                                  now.day, inTime.hour, inTime.minute);
-                              DateTime salida =
-                                  entrada.add(Duration(minutes: baseMinutes));
-
-                              // Get the correct salary for the entry date (supports salary changes)
-                              final double salaryForDate = _getSalaryForDate(entrada);
-
-                              _addAndSortHistory(WorkDay(
-                                  entrada: entrada,
-                                  salida: salida,
-                                  entradaReal: entrada,
-                                  sueldoBase: salaryForDate,
-                                  baseHours: baseHrs,
-                                  esMantenimiento: true));
-                            },
-                      isCompact: true),
-                ),
-                const SizedBox(width: 8),
                 Expanded(
                   child: _buildButton(
                       hasTodayVacaciones
                           ? "VACACIONES REGISTRADAS"
                           : "VACACIONES",
-                      hasTodayVacaciones ? Colors.grey : Colors.lightGreen.shade700,
-                      (hasTodayFalta || hasTodayMantenimiento || hasTodayVacaciones || hasTodayFestivo)
+                      hasTodayVacaciones
+                          ? Colors.grey
+                          : Colors.lightGreen.shade700,
+                      (hasTodayFalta ||
+                              hasTodayVacaciones ||
+                              hasTodayFestivo)
                           ? null
                           : () {
                               DateTime now = DateTime.now();
                               DateTime noon =
                                   DateTime(now.year, now.month, now.day, 12, 0);
-                              final double salaryForDate = _getSalaryForDate(noon);
+                              final double salaryForDate =
+                                  _getSalaryForDate(noon);
 
                               _addAndSortHistory(WorkDay(
                                   entrada: noon,
                                   salida: noon,
                                   sueldoBase: salaryForDate,
-                                  baseHours:
-                                      double.tryParse(_baseHoursController.text) ??
-                                          9.5,
+                                  baseHours: double.tryParse(
+                                          _baseHoursController.text) ??
+                                      9.5,
                                   esVacaciones: true));
-                            },
-                      isCompact: true),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildButton(
-                      hasTodayFestivo
-                          ? "FESTIVO REGISTRADO"
-                          : "FESTIVO",
-                      hasTodayFestivo ? Colors.grey : Colors.purple,
-                      (hasTodayFalta || hasTodayMantenimiento || hasTodayVacaciones || hasTodayFestivo)
-                          ? null
-                          : () async {
-                              final bool? trabajoFestivo = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-      scrollable: true,
-                                  backgroundColor: Colors.grey[900],
-                                  title: const Text("DÍA FESTIVO",
-                                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                  content: const Text(
-                                      "¿Laboraste en este día festivo?",
-                                      style: TextStyle(color: Colors.white70, fontSize: 16)),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(ctx, false),
-                                      child: const Text("NO", style: TextStyle(color: Colors.orange)),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(ctx, true),
-                                      child: const Text("SÍ, TRABAJÉ", style: TextStyle(color: Colors.orange)),
-                                    ),
-                                  ],
-                                ),
-                              );
-
-                              if (!mounted || trabajoFestivo == null) return;
-
-                              if (trabajoFestivo) {
-                                _pickTimeForWorkDay(DateTime.now(), isFestivo: true);
-                              } else {
-                                DateTime now = DateTime.now();
-                                DateTime noon = DateTime(now.year, now.month, now.day, 12, 0);
-                                final double salaryForDate = _getSalaryForDate(noon);
-
-                                _addAndSortHistory(WorkDay(
-                                    entrada: noon,
-                                    salida: noon,
-                                    sueldoBase: salaryForDate,
-                                    baseHours: double.tryParse(_baseHoursController.text) ?? 9.5,
-                                    esFestivo: true,
-                                    festivoTrabajado: false));
-                              }
                             },
                       isCompact: true),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: _buildButton(
-                      hasTodayFalta ? "FALTA REGISTRADA" : "NO LABORÉ HOY",
+                      hasTodayFalta
+                          ? "FALTA REGISTRADA"
+                          : "NO LABORÉ HOY",
                       hasTodayFalta ? Colors.grey : Colors.red.shade900,
-                      (hasTodayFalta || hasTodayMantenimiento || hasTodayVacaciones || hasTodayFestivo)
+                      (hasTodayFalta ||
+                              hasTodayVacaciones ||
+                              hasTodayFestivo)
                           ? null
                           : () {
                               DateTime now = DateTime.now();
                               DateTime noon =
                                   DateTime(now.year, now.month, now.day, 12, 0);
-                              // Get the correct salary for the entry date (supports salary changes)
-                              final double salaryForDate = _getSalaryForDate(noon);
+                              final double salaryForDate =
+                                  _getSalaryForDate(noon);
 
                               _addAndSortHistory(WorkDay(
                                   entrada: noon,
                                   salida: noon,
                                   sueldoBase: salaryForDate,
-                                  baseHours:
-                                      double.tryParse(_baseHoursController.text) ??
-                                          9.5,
+                                  baseHours: double.tryParse(
+                                          _baseHoursController.text) ??
+                                      9.5,
                                   esFalta: true));
                             },
                       isCompact: true),
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            _buildButton(
+                hasTodayFestivo
+                    ? "DÍA FESTIVO REGISTRADO"
+                    : "DÍA FESTIVO (NO LABORADO)",
+                hasTodayFestivo ? Colors.grey : Colors.purple.shade700,
+                (hasTodayFalta ||
+                        hasTodayVacaciones ||
+                        hasTodayFestivo)
+                    ? null
+                    : () {
+                        DateTime now = DateTime.now();
+                        DateTime noon =
+                            DateTime(now.year, now.month, now.day, 12, 0);
+                        final double salaryForDate =
+                            _getSalaryForDate(noon);
+
+                        _addAndSortHistory(WorkDay(
+                            entrada: noon,
+                            salida: noon,
+                            sueldoBase: salaryForDate,
+                            baseHours: double.tryParse(
+                                    _baseHoursController.text) ??
+                                9.5,
+                            esFestivo: true,
+                            festivoTrabajado: false));
+                      },
+                isCompact: true),
           ],
+          const SizedBox(height: 30),
         ],
       ),
     );
@@ -2588,7 +4672,15 @@ class _TelevisaAppState extends State<TelevisaApp> {
       Container(
           padding: const EdgeInsets.all(12),
           width: double.infinity,
-          decoration: BoxDecoration(color: Colors.orange.withAlpha(25)),
+          decoration: BoxDecoration(
+            color: _isDarkMode
+                ? Colors.orange.withAlpha(25)
+                : const Color(0xFFFFF7ED),
+            border: _isDarkMode
+                ? null
+                : const Border(
+                    bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.5)),
+          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2600,13 +4692,15 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
                             child: Text("SEM. PASADA",
                                 style: TextStyle(
-                                    color: Colors.white,
+                                    color: _isDarkMode
+                                        ? Colors.white
+                                        : Colors.black,
                                     fontSize: 16,
                                     letterSpacing: 1.0,
                                     fontWeight: FontWeight.bold)),
@@ -2615,10 +4709,15 @@ class _TelevisaAppState extends State<TelevisaApp> {
                         IconButton(
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.share,
-                                color: Colors.white70, size: 16),
+                            icon: Icon(Icons.share,
+                                color: _isDarkMode
+                                    ? Colors.white70
+                                    : const Color(0xFF475569),
+                                size: 16),
                             onPressed: () => _shareSingleWeekSummary(
-                                weeks[weekNumLast] ?? [], weekNumLast, "SEMANA PASADA")),
+                                weeks[weekNumLast] ?? [],
+                                weekNumLast,
+                                "SEMANA PASADA")),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -2627,8 +4726,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         "\$${totalLastWeek.toStringAsFixed(2)} - (${hoursLastWeek.toStringAsFixed(1)} hrs)",
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: _isDarkMode
+                              ? Colors.white
+                              : Colors.black,
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
@@ -2646,13 +4747,15 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Expanded(
+                        Expanded(
                           child: FittedBox(
                             fit: BoxFit.scaleDown,
                             alignment: Alignment.centerLeft,
                             child: Text("SEM. ACTUAL",
                                 style: TextStyle(
-                                    color: Colors.orange,
+                                    color: _isDarkMode
+                                        ? Colors.orange
+                                        : const Color(0xFFC2410C),
                                     fontSize: 16,
                                     letterSpacing: 1.0,
                                     fontWeight: FontWeight.bold)),
@@ -2661,8 +4764,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
                         IconButton(
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
-                            icon: const Icon(Icons.share,
-                                color: Colors.orange, size: 18),
+                            icon: Icon(Icons.share,
+                                color: _isDarkMode
+                                    ? Colors.orange
+                                    : const Color(0xFFC2410C),
+                                size: 18),
                             onPressed: () => _shareSingleWeekSummary(
                                 weeks[weekNumCurrent] ?? [],
                                 weekNumCurrent,
@@ -2675,8 +4781,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         "\$${totalThisWeek.toStringAsFixed(2)} - (${hoursThisWeek.toStringAsFixed(1)} hrs)",
-                        style: const TextStyle(
-                          color: Colors.orange,
+                        style: TextStyle(
+                          color: _isDarkMode
+                              ? Colors.orange
+                              : const Color(0xFFC2410C),
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
                         ),
@@ -2689,7 +4797,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
           )),
       Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
-        color: Colors.black26,
+        color: _isDarkMode ? Colors.black26 : const Color(0xFFF1F5F9),
         child: Column(children: [
           _buildWeekRow(mondayLastWeek, "SEM PASADA", false),
           const SizedBox(height: 8),
@@ -2698,11 +4806,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
       ),
       Expanded(
         child: filteredHistory.isEmpty
-            ? const Padding(
-                padding: EdgeInsets.all(40),
+            ? Padding(
+                padding: const EdgeInsets.all(40),
                 child: Center(
                     child: Text("No hay registros en estas dos semanas",
-                        style: TextStyle(color: Colors.white24))))
+                        style: TextStyle(
+                            color: _isDarkMode
+                                ? Colors.white24
+                                : const Color(0xFF64748B)))))
             : ListView.builder(
                 itemCount: filteredHistory.length,
                 itemBuilder: (context, index) {
@@ -2723,11 +4834,112 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   // Construct Spanish date string
                   String dateStringES =
                       "${daysES[day.entrada.weekday - 1]}, ${day.entrada.day} ${monthsES[day.entrada.month - 1]}";
-                  if (day.esFalta) {
+
+                  if (day.isInProgress) {
                     return Card(
-                      color: Colors.red.withAlpha(40),
+                      color: _isDarkMode
+                          ? Colors.orange.withAlpha(35)
+                          : const Color(0xFFFFF7ED),
                       margin: const EdgeInsets.symmetric(
                           horizontal: 15, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                            color: _isDarkMode
+                                ? Colors.orangeAccent.withAlpha(120)
+                                : const Color(0xFFF97316),
+                            width: 1.5),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    dateStringES,
+                                    style: TextStyle(
+                                        color: _isDarkMode
+                                            ? Colors.white70
+                                            : const Color(0xFF1E293B),
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.timelapse,
+                                          color: _isDarkMode
+                                              ? Colors.orangeAccent
+                                              : const Color(0xFFC2410C),
+                                          size: 16),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          "TURNO EN PROGRESO (Entrada: ${DateFormat('hh:mm a').format(day.entrada)})",
+                                          style: TextStyle(
+                                              color: _isDarkMode
+                                                  ? Colors.orangeAccent
+                                                  : const Color(0xFFC2410C),
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(Icons.edit,
+                                      color: _isDarkMode
+                                          ? Colors.orange
+                                          : const Color(0xFFC2410C),
+                                      size: 20),
+                                  tooltip: "Editar turno",
+                                  onPressed: () => _editExistingWorkDay(
+                                      _weeklyHistory.indexOf(day)),
+                                ),
+                                IconButton(
+                                  icon: Icon(Icons.delete_outline,
+                                      color: _isDarkMode
+                                          ? Colors.white54
+                                          : const Color(0xFF64748B),
+                                      size: 24),
+                                  tooltip: "Descartar turno en progreso",
+                                  onPressed: () => _showDeleteDialog(
+                                      _weeklyHistory.indexOf(day)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (day.esFalta) {
+                    return Card(
+                      color: _isDarkMode
+                          ? Colors.red.withAlpha(40)
+                          : const Color(0xFFFEF2F2),
+                      margin: const EdgeInsets.symmetric(
+                          horizontal: 15, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(
+                          color: _isDarkMode
+                              ? Colors.transparent
+                              : const Color(0xFFFCA5A5),
+                          width: _isDarkMode ? 0 : 1.5,
+                        ),
+                      ),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -2739,26 +4951,52 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(dateStringES,
-                                          style: const TextStyle(
-                                              color: Colors.redAccent,
+                                          style: TextStyle(
+                                              color: _isDarkMode
+                                                  ? Colors.redAccent
+                                                  : const Color(0xFF991B1B),
                                               fontWeight: FontWeight.bold,
                                               fontSize: 18)),
                                       const SizedBox(height: 6),
-                                      const Text("FALTA / NO LABORADO",
+                                      Text("FALTA / NO LABORADO",
                                           style: TextStyle(
-                                              color: Colors.white,
+                                              color: _isDarkMode
+                                                  ? Colors.white
+                                                  : const Color(0xFF1E293B),
                                               fontWeight: FontWeight.bold,
                                               fontSize: 14)),
                                     ]),
-                                IconButton(
-                                    icon: const Icon(Icons.delete_outline,
-                                        color: Colors.white54, size: 24),
-                                    onPressed: () => _showDeleteDialog(
-                                        _weeklyHistory.indexOf(day)))
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(Icons.edit,
+                                          color: _isDarkMode
+                                              ? Colors.orange
+                                              : const Color(0xFFC2410C),
+                                          size: 20),
+                                      tooltip: "Editar registro",
+                                      onPressed: () => _editExistingWorkDay(
+                                          _weeklyHistory.indexOf(day)),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(Icons.delete_outline,
+                                          color: _isDarkMode
+                                              ? Colors.white54
+                                              : const Color(0xFF64748B),
+                                          size: 24),
+                                      onPressed: () => _showDeleteDialog(
+                                          _weeklyHistory.indexOf(day)),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
-                            const Divider(color: Colors.white24),
+                            Divider(
+                                color: _isDarkMode
+                                    ? Colors.white24
+                                    : const Color(0xFFE2E8F0)),
                             _buildNotesSection(day),
                           ],
                         ),
@@ -2768,13 +5006,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
                   if (day.esVacaciones) {
                     return Card(
-                      color: Colors.lightGreen.withAlpha(30),
+                      color: _isDarkMode
+                          ? Colors.lightGreen.withAlpha(30)
+                          : const Color(0xFFF0FDF4),
                       margin: const EdgeInsets.symmetric(
                           horizontal: 15, vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                         side: BorderSide(
-                            color: Colors.lightGreenAccent.withAlpha(100), width: 2),
+                            color: _isDarkMode
+                                ? Colors.lightGreenAccent.withAlpha(100)
+                                : const Color(0xFF86EFAC),
+                            width: _isDarkMode ? 2 : 1.5),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -2787,8 +5030,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(dateStringES,
-                                        style: const TextStyle(
-                                            color: Colors.lightGreenAccent,
+                                        style: TextStyle(
+                                            color: _isDarkMode
+                                                ? Colors.lightGreenAccent
+                                                : const Color(0xFF166534),
                                             fontWeight: FontWeight.bold,
                                             fontSize: 18)),
                                     const SizedBox(height: 6),
@@ -2796,19 +5041,29 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                          color: Colors.lightGreen.withAlpha(60),
+                                          color: _isDarkMode
+                                              ? Colors.lightGreen.withAlpha(60)
+                                              : const Color(0xFFDCFCE7),
                                           borderRadius:
-                                              BorderRadius.circular(4)),
-                                      child: const Row(
+                                              BorderRadius.circular(4),
+                                          border: _isDarkMode
+                                              ? null
+                                              : Border.all(
+                                                  color: const Color(0xFF86EFAC))),
+                                      child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(Icons.star,
-                                              color: Colors.lightGreenAccent,
+                                              color: _isDarkMode
+                                                  ? Colors.lightGreenAccent
+                                                  : const Color(0xFF15803D),
                                               size: 14),
-                                          SizedBox(width: 4),
+                                          const SizedBox(width: 4),
                                           Text("VACACIONES",
                                               style: TextStyle(
-                                                  color: Colors.lightGreenAccent,
+                                                  color: _isDarkMode
+                                                      ? Colors.lightGreenAccent
+                                                      : const Color(0xFF15803D),
                                                   fontSize: 11,
                                                   fontWeight:
                                                       FontWeight.bold)),
@@ -2817,11 +5072,30 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                     ),
                                   ],
                                 ),
-                                IconButton(
-                                    icon: const Icon(Icons.delete_outline,
-                                        color: Colors.white54, size: 24),
-                                    onPressed: () => _showDeleteDialog(
-                                        _weeklyHistory.indexOf(day)))
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(Icons.edit,
+                                          color: _isDarkMode
+                                              ? Colors.orange
+                                              : const Color(0xFFC2410C),
+                                          size: 20),
+                                      tooltip: "Editar registro",
+                                      onPressed: () => _editExistingWorkDay(
+                                          _weeklyHistory.indexOf(day)),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(Icons.delete_outline,
+                                          color: _isDarkMode
+                                              ? Colors.white54
+                                              : const Color(0xFF64748B),
+                                          size: 24),
+                                      onPressed: () => _showDeleteDialog(
+                                          _weeklyHistory.indexOf(day)),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -2829,30 +5103,42 @@ class _TelevisaAppState extends State<TelevisaApp> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.lightGreen.withAlpha(20),
+                                color: _isDarkMode
+                                    ? Colors.lightGreen.withAlpha(20)
+                                    : Colors.white,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                    color: Colors.lightGreenAccent.withAlpha(100)),
+                                    color: _isDarkMode
+                                        ? Colors.lightGreenAccent.withAlpha(100)
+                                        : const Color(0xFF86EFAC)),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                       "VACACIONES - PAGO BASE COMPLETO",
                                       style: TextStyle(
-                                          color: Colors.lightGreenAccent,
+                                          color: _isDarkMode
+                                              ? Colors.lightGreenAccent
+                                              : const Color(0xFF15803D),
                                           fontSize: 13,
                                           fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 4),
                                   Text(
                                       "Pago base: \$${day.dailyPay.toStringAsFixed(2)} | Sin descuento ni horas extra",
-                                      style: const TextStyle(
-                                          color: Colors.white70, fontSize: 13)),
+                                      style: TextStyle(
+                                          color: _isDarkMode
+                                              ? Colors.white70
+                                              : const Color(0xFF334155),
+                                          fontSize: 13)),
                                 ],
                               ),
                             ),
                             const SizedBox(height: 8),
-                            const Divider(color: Colors.white24),
+                            Divider(
+                                color: _isDarkMode
+                                    ? Colors.white24
+                                    : const Color(0xFFE2E8F0)),
                             _buildNotesSection(day),
                           ],
                         ),
@@ -2860,13 +5146,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     );
                   } else if (day.esFestivo && !day.festivoTrabajado) {
                     return Card(
-                      color: Colors.purple.withAlpha(30),
+                      color: _isDarkMode
+                          ? Colors.purple.withAlpha(30)
+                          : const Color(0xFFFAF5FF),
                       margin: const EdgeInsets.symmetric(
                           horizontal: 15, vertical: 10),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                         side: BorderSide(
-                            color: Colors.purpleAccent.withAlpha(100), width: 2),
+                            color: _isDarkMode
+                                ? Colors.purpleAccent.withAlpha(100)
+                                : const Color(0xFFD8B4FE),
+                            width: _isDarkMode ? 2 : 1.5),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -2879,8 +5170,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(dateStringES,
-                                        style: const TextStyle(
-                                            color: Colors.purpleAccent,
+                                        style: TextStyle(
+                                            color: _isDarkMode
+                                                ? Colors.purpleAccent
+                                                : const Color(0xFF6B21A8),
                                             fontWeight: FontWeight.bold,
                                             fontSize: 18)),
                                     const SizedBox(height: 6),
@@ -2888,19 +5181,29 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                          color: Colors.purple.withAlpha(60),
+                                          color: _isDarkMode
+                                              ? Colors.purple.withAlpha(60)
+                                              : const Color(0xFFF3E8FF),
                                           borderRadius:
-                                              BorderRadius.circular(4)),
-                                      child: const Row(
+                                              BorderRadius.circular(4),
+                                          border: _isDarkMode
+                                              ? null
+                                              : Border.all(
+                                                  color: const Color(0xFFD8B4FE))),
+                                      child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           Icon(Icons.star,
-                                              color: Colors.purpleAccent,
+                                              color: _isDarkMode
+                                                  ? Colors.purpleAccent
+                                                  : const Color(0xFF7E22CE),
                                               size: 14),
-                                          SizedBox(width: 4),
+                                          const SizedBox(width: 4),
                                           Text("DÍA FESTIVO",
                                               style: TextStyle(
-                                                  color: Colors.purpleAccent,
+                                                  color: _isDarkMode
+                                                      ? Colors.purpleAccent
+                                                      : const Color(0xFF7E22CE),
                                                   fontSize: 11,
                                                   fontWeight:
                                                       FontWeight.bold)),
@@ -2909,11 +5212,30 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                     ),
                                   ],
                                 ),
-                                IconButton(
-                                    icon: const Icon(Icons.delete_outline,
-                                        color: Colors.white54, size: 24),
-                                    onPressed: () => _showDeleteDialog(
-                                        _weeklyHistory.indexOf(day)))
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(Icons.edit,
+                                          color: _isDarkMode
+                                              ? Colors.orange
+                                              : const Color(0xFFC2410C),
+                                          size: 20),
+                                      tooltip: "Editar registro",
+                                      onPressed: () => _editExistingWorkDay(
+                                          _weeklyHistory.indexOf(day)),
+                                    ),
+                                    IconButton(
+                                      icon: Icon(Icons.delete_outline,
+                                          color: _isDarkMode
+                                              ? Colors.white54
+                                              : const Color(0xFF64748B),
+                                          size: 24),
+                                      onPressed: () => _showDeleteDialog(
+                                          _weeklyHistory.indexOf(day)),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -2921,30 +5243,42 @@ class _TelevisaAppState extends State<TelevisaApp> {
                               width: double.infinity,
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.purple.withAlpha(20),
+                                color: _isDarkMode
+                                    ? Colors.purple.withAlpha(20)
+                                    : Colors.white,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                    color: Colors.purpleAccent.withAlpha(100)),
+                                    color: _isDarkMode
+                                        ? Colors.purpleAccent.withAlpha(100)
+                                        : const Color(0xFFD8B4FE)),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
+                                  Text(
                                       "DÍA FESTIVO - PAGO BASE COMPLETO",
                                       style: TextStyle(
-                                          color: Colors.purpleAccent,
+                                          color: _isDarkMode
+                                              ? Colors.purpleAccent
+                                              : const Color(0xFF7E22CE),
                                           fontSize: 13,
                                           fontWeight: FontWeight.bold)),
                                   const SizedBox(height: 4),
                                   Text(
                                       "Pago base: \$${day.dailyPay.toStringAsFixed(2)} | Sin descuento ni horas extra",
-                                      style: const TextStyle(
-                                          color: Colors.white70, fontSize: 13)),
+                                      style: TextStyle(
+                                          color: _isDarkMode
+                                              ? Colors.white70
+                                              : const Color(0xFF334155),
+                                          fontSize: 13)),
                                 ],
                               ),
                             ),
                             const SizedBox(height: 8),
-                            const Divider(color: Colors.white24),
+                            Divider(
+                                color: _isDarkMode
+                                    ? Colors.white24
+                                    : const Color(0xFFE2E8F0)),
                             _buildNotesSection(day),
                           ],
                         ),
@@ -2963,30 +5297,59 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   Color cardColor;
                   Color headerColor;
                   Color borderColor;
-                  if (day.esMantenimiento) {
-                    cardColor = isSelected
-                        ? Colors.blue.withAlpha(50)
-                        : Colors.blue.withAlpha(20);
-                    headerColor = Colors.blueAccent;
-                    borderColor = Colors.blueAccent;
-                  } else if (day.esFestivo && day.festivoTrabajado) {
-                    cardColor = isSelected
-                        ? Colors.purple.withAlpha(50)
-                        : Colors.purple.withAlpha(20);
-                    headerColor = Colors.purpleAccent;
-                    borderColor = Colors.purpleAccent;
-                  } else if (startedOnWeekend) {
-                    cardColor = isSelected
-                        ? Colors.orange.withAlpha(50)
-                        : Colors.white.withAlpha(20);
-                    headerColor = Colors.yellowAccent;
-                    borderColor = Colors.orange;
+                  if (_isDarkMode) {
+                    if (day.esMantenimiento) {
+                      cardColor = isSelected
+                          ? Colors.blue.withAlpha(50)
+                          : Colors.blue.withAlpha(20);
+                      headerColor = Colors.blueAccent;
+                      borderColor = Colors.blueAccent;
+                    } else if (day.esFestivo && day.festivoTrabajado) {
+                      cardColor = isSelected
+                          ? Colors.purple.withAlpha(50)
+                          : Colors.purple.withAlpha(20);
+                      headerColor = Colors.purpleAccent;
+                      borderColor = Colors.purpleAccent;
+                    } else if (startedOnWeekend) {
+                      cardColor = isSelected
+                          ? Colors.orange.withAlpha(50)
+                          : Colors.white.withAlpha(20);
+                      headerColor = Colors.yellowAccent;
+                      borderColor = Colors.orange;
+                    } else {
+                      cardColor = isSelected
+                          ? Colors.orange.withAlpha(50)
+                          : Colors.white.withAlpha(20);
+                      headerColor = Colors.orange;
+                      borderColor = Colors.orange;
+                    }
                   } else {
-                    cardColor = isSelected
-                        ? Colors.orange.withAlpha(50)
-                        : Colors.white.withAlpha(20);
-                    headerColor = Colors.orange;
-                    borderColor = Colors.orange;
+                    // Light Mode
+                    if (day.esMantenimiento) {
+                      cardColor = isSelected
+                          ? const Color(0xFFEFF6FF)
+                          : Colors.white;
+                      headerColor = const Color(0xFF1D4ED8);
+                      borderColor = isSelected
+                          ? const Color(0xFF2563EB)
+                          : const Color(0xFF93C5FD);
+                    } else if (day.esFestivo && day.festivoTrabajado) {
+                      cardColor = isSelected
+                          ? const Color(0xFFFAF5FF)
+                          : Colors.white;
+                      headerColor = const Color(0xFF6B21A8);
+                      borderColor = isSelected
+                          ? const Color(0xFF9333EA)
+                          : const Color(0xFFD8B4FE);
+                    } else {
+                      cardColor = isSelected
+                          ? const Color(0xFFFFF7ED)
+                          : Colors.white;
+                      headerColor = Colors.black;
+                      borderColor = isSelected
+                          ? const Color(0xFFEA580C)
+                          : const Color(0xFFCBD5E1);
+                    }
                   }
 
                   return Card(
@@ -2996,8 +5359,12 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                         side: BorderSide(
-                            color: borderColor.withAlpha(100),
-                            width: (day.esMantenimiento || (day.esFestivo && day.festivoTrabajado)) ? 2 : 0),
+                            color: _isDarkMode
+                                ? borderColor.withAlpha(100)
+                                : borderColor,
+                            width: _isDarkMode
+                                ? ((day.esMantenimiento || (day.esFestivo && day.festivoTrabajado)) ? 2 : 0)
+                                : (isSelected ? 2.0 : 1.5)),
                       ),
                       child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -3024,14 +5391,21 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                                       horizontal: 8,
                                                       vertical: 4),
                                               decoration: BoxDecoration(
-                                                  color: Colors.blueAccent
-                                                      .withAlpha(60),
+                                                  color: _isDarkMode
+                                                      ? Colors.blueAccent.withAlpha(60)
+                                                      : const Color(0xFFDBEAFE),
                                                   borderRadius:
-                                                      BorderRadius.circular(4)),
-                                              child: const Text(
+                                                      BorderRadius.circular(4),
+                                                  border: _isDarkMode
+                                                      ? null
+                                                      : Border.all(
+                                                          color: const Color(0xFF93C5FD))),
+                                              child: Text(
                                                   "DÍA DE MANTENIMIENTO",
                                                   style: TextStyle(
-                                                      color: Colors.blueAccent,
+                                                      color: _isDarkMode
+                                                          ? Colors.blueAccent
+                                                          : const Color(0xFF1D4ED8),
                                                       fontSize: 11,
                                                       fontWeight:
                                                           FontWeight.bold))),
@@ -3044,14 +5418,21 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                                       horizontal: 8,
                                                       vertical: 4),
                                               decoration: BoxDecoration(
-                                                  color: Colors.purpleAccent
-                                                      .withAlpha(60),
+                                                  color: _isDarkMode
+                                                      ? Colors.purpleAccent.withAlpha(60)
+                                                      : const Color(0xFFF3E8FF),
                                                   borderRadius:
-                                                      BorderRadius.circular(4)),
-                                              child: const Text(
+                                                      BorderRadius.circular(4),
+                                                  border: _isDarkMode
+                                                      ? null
+                                                      : Border.all(
+                                                          color: const Color(0xFFD8B4FE))),
+                                              child: Text(
                                                   "DÍA FESTIVO",
                                                   style: TextStyle(
-                                                      color: Colors.purpleAccent,
+                                                      color: _isDarkMode
+                                                          ? Colors.purpleAccent
+                                                          : const Color(0xFF6B21A8),
                                                       fontSize: 11,
                                                       fontWeight:
                                                           FontWeight.bold))),
@@ -3065,25 +5446,54 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                                       horizontal: 8,
                                                       vertical: 4),
                                               decoration: BoxDecoration(
-                                                  color: Colors.redAccent
-                                                      .withAlpha(60),
+                                                  color: _isDarkMode
+                                                      ? Colors.redAccent.withAlpha(60)
+                                                      : const Color(0xFFFEE2E2),
                                                   borderRadius:
-                                                      BorderRadius.circular(4)),
-                                              child: const Text(
+                                                      BorderRadius.circular(4),
+                                                  border: _isDarkMode
+                                                      ? null
+                                                      : Border.all(
+                                                          color: const Color(0xFFFCA5A5))),
+                                              child: Text(
                                                   "SALIDA DÍA SIGUIENTE",
                                                   style: TextStyle(
-                                                      color: Colors.redAccent,
+                                                      color: _isDarkMode
+                                                          ? Colors.redAccent
+                                                          : const Color(0xFFB91C1C),
                                                       fontSize: 11,
                                                       fontWeight:
                                                           FontWeight.bold)))
                                       ]),
-                                  IconButton(
-                                      icon: const Icon(Icons.delete_outline,
-                                          color: Colors.white54, size: 24),
-                                      onPressed: () => _showDeleteDialog(
-                                          _weeklyHistory.indexOf(day)))
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: Icon(Icons.edit,
+                                            color: _isDarkMode
+                                                ? Colors.orange
+                                                : const Color(0xFFC2410C),
+                                            size: 20),
+                                        tooltip: "Editar turno",
+                                        onPressed: () => _editExistingWorkDay(
+                                            _weeklyHistory.indexOf(day)),
+                                      ),
+                                      IconButton(
+                                        icon: Icon(Icons.delete_outline,
+                                            color: _isDarkMode
+                                                ? Colors.white54
+                                                : const Color(0xFF64748B),
+                                            size: 24),
+                                        onPressed: () => _showDeleteDialog(
+                                            _weeklyHistory.indexOf(day)),
+                                      ),
+                                    ],
+                                  ),
                                 ]),
-                            const Divider(color: Colors.white24),
+                            Divider(
+                                color: _isDarkMode
+                                    ? Colors.white24
+                                    : const Color(0xFFE2E8F0)),
                             Padding(
                               padding: const EdgeInsets.only(bottom: 12.0),
                               child: Column(
@@ -3096,15 +5506,21 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                       Text(
                                           "Entrada Asignada: ${DateFormat('hh:mm a').format(day.entrada)}",
                                           style: TextStyle(
-                                              color: day.esMantenimiento
-                                                  ? Colors.blueAccent
-                                                  : Colors.orangeAccent,
+                                              color: _isDarkMode
+                                                  ? (day.esMantenimiento
+                                                      ? Colors.blueAccent
+                                                      : Colors.orangeAccent)
+                                                  : (day.esMantenimiento
+                                                      ? const Color(0xFF1D4ED8)
+                                                      : const Color(0xFFC2410C)),
                                               fontSize: 14,
                                               fontWeight: FontWeight.w500)),
                                       Text(
                                           "Salida: ${DateFormat('hh:mm a').format(day.salida)}",
-                                          style: const TextStyle(
-                                              color: Colors.redAccent,
+                                          style: TextStyle(
+                                              color: _isDarkMode
+                                                  ? Colors.redAccent
+                                                  : const Color(0xFFB91C1C),
                                               fontSize: 14,
                                               fontWeight: FontWeight.w500)),
                                     ],
@@ -3116,10 +5532,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                       child: Text(
                                           "Registro Real: ${DateFormat('hh:mm a').format(day.entradaReal!)} ${day.entradaReal!.isBefore(day.entrada) ? '(Temprano)' : '(Tarde)'}",
                                           style: TextStyle(
-                                              color: day.entradaReal!
-                                                      .isBefore(day.entrada)
-                                                  ? Colors.greenAccent
-                                                  : Colors.yellowAccent,
+                                              color: _isDarkMode
+                                                  ? (day.entradaReal!.isBefore(day.entrada)
+                                                      ? Colors.greenAccent
+                                                      : Colors.yellowAccent)
+                                                  : (day.entradaReal!.isBefore(day.entrada)
+                                                      ? const Color(0xFF15803D)
+                                                      : const Color(0xFFB45309)),
                                               fontSize: 13,
                                               fontWeight: FontWeight.w500)),
                                     ),
@@ -3164,31 +5583,42 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: Colors.blue.withAlpha(30),
+                                  color: _isDarkMode
+                                      ? Colors.blue.withAlpha(30)
+                                      : const Color(0xFFEFF6FF),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                      color: Colors.blueAccent.withAlpha(100)),
+                                      color: _isDarkMode
+                                          ? Colors.blueAccent.withAlpha(100)
+                                          : const Color(0xFF93C5FD)),
                                 ),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    const Text(
+                                    Text(
                                         "MANTENIMIENTO - SIN HORAS EXTRA",
                                         style: TextStyle(
-                                            color: Colors.blueAccent,
+                                            color: _isDarkMode
+                                                ? Colors.blueAccent
+                                                : const Color(0xFF1D4ED8),
                                             fontSize: 14,
                                             fontWeight: FontWeight.bold)),
                                     const SizedBox(height: 4),
                                     Text(
                                         "Jornada: ${day.totalHours.toStringAsFixed(2)} hrs | Pago base: \$${day.dailyPay.toStringAsFixed(2)}",
-                                        style: const TextStyle(
-                                            color: Colors.white70,
+                                        style: TextStyle(
+                                            color: _isDarkMode
+                                                ? Colors.white70
+                                                : const Color(0xFF334155),
                                             fontSize: 13)),
                                   ],
                                 ),
                               ),
                             const SizedBox(height: 8),
-                            const Divider(color: Colors.white24),
+                            Divider(
+                                color: _isDarkMode
+                                    ? Colors.white24
+                                    : const Color(0xFFE2E8F0)),
                             _buildNotesSection(day),
                           ])));
                 }),
@@ -3271,58 +5701,82 @@ class _TelevisaAppState extends State<TelevisaApp> {
         Container(
           padding: const EdgeInsets.all(20),
           width: double.infinity,
-          color: Colors.orange.withAlpha(30),
+          decoration: BoxDecoration(
+            color: _isDarkMode
+                ? Colors.orange.withAlpha(30)
+                : const Color(0xFFFFF7ED),
+            border: _isDarkMode
+                ? null
+                : const Border(
+                    bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.5)),
+          ),
           child: Text("REGISTRO ANUAL $year",
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: Colors.orange,
+              style: TextStyle(
+                  color: _isDarkMode
+                      ? Colors.orange
+                      : const Color(0xFFC2410C),
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 2)),
         ),
         // Month header row
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: Row(
             children: [
-              SizedBox(width: 60), // Space for week label
+              const SizedBox(width: 60), // Space for week label
               Expanded(
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     Text('L',
                         style: TextStyle(
-                            color: Colors.orange,
+                            color: _isDarkMode
+                                ? Colors.orange
+                                : const Color(0xFFC2410C),
                             fontSize: 14,
                             fontWeight: FontWeight.bold)),
                     Text('M',
                         style: TextStyle(
-                            color: Colors.orange,
+                            color: _isDarkMode
+                                ? Colors.orange
+                                : const Color(0xFFC2410C),
                             fontSize: 14,
                             fontWeight: FontWeight.bold)),
                     Text('M',
                         style: TextStyle(
-                            color: Colors.orange,
+                            color: _isDarkMode
+                                ? Colors.orange
+                                : const Color(0xFFC2410C),
                             fontSize: 14,
                             fontWeight: FontWeight.bold)),
                     Text('J',
                         style: TextStyle(
-                            color: Colors.orange,
+                            color: _isDarkMode
+                                ? Colors.orange
+                                : const Color(0xFFC2410C),
                             fontSize: 14,
                             fontWeight: FontWeight.bold)),
                     Text('V',
                         style: TextStyle(
-                            color: Colors.orange,
+                            color: _isDarkMode
+                                ? Colors.orange
+                                : const Color(0xFFC2410C),
                             fontSize: 14,
                             fontWeight: FontWeight.bold)),
                     Text('S',
                         style: TextStyle(
-                            color: Colors.orange,
+                            color: _isDarkMode
+                                ? Colors.orange
+                                : const Color(0xFFC2410C),
                             fontSize: 14,
                             fontWeight: FontWeight.bold)),
                     Text('D',
                         style: TextStyle(
-                            color: Colors.orange,
+                            color: _isDarkMode
+                                ? Colors.orange
+                                : const Color(0xFFC2410C),
                             fontSize: 14,
                             fontWeight: FontWeight.bold)),
                   ],
@@ -3331,7 +5785,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
             ],
           ),
         ),
-        const Divider(color: Colors.white24, height: 1),
+        Divider(
+            color: _isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1),
+            height: 1),
         ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -3363,11 +5819,17 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 child: Container(
                   decoration: BoxDecoration(
-                    color: isCurrent ? Colors.orange.withAlpha(30) : null,
+                    color: isCurrent
+                        ? (_isDarkMode
+                            ? Colors.orange.withAlpha(30)
+                            : const Color(0xFFFFF7ED))
+                        : null,
                     borderRadius: BorderRadius.circular(12),
                     border: isCurrent
                         ? Border.all(
-                            color: Colors.orangeAccent.withAlpha(150),
+                            color: _isDarkMode
+                                ? Colors.orangeAccent.withAlpha(150)
+                                : const Color(0xFFEA580C),
                             width: 2,
                           )
                         : null,
@@ -3383,19 +5845,26 @@ class _TelevisaAppState extends State<TelevisaApp> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 6),
                           decoration: BoxDecoration(
-                            color: Colors.orangeAccent,
+                            color: _isDarkMode
+                                ? Colors.orangeAccent
+                                : const Color(0xFFEA580C),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Row(
+                          child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(Icons.today,
-                                    color: Colors.black, size: 18),
-                                SizedBox(width: 8),
+                                    color: _isDarkMode
+                                        ? Colors.black
+                                        : Colors.white,
+                                    size: 18),
+                                const SizedBox(width: 8),
                                 Text(
                                   "SEMANA ACTUAL",
                                   style: TextStyle(
-                                    color: Colors.black,
+                                    color: _isDarkMode
+                                        ? Colors.black
+                                        : Colors.white,
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                   ),
@@ -3409,10 +5878,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
-                              color: Colors.orange.withAlpha(80),
+                              color: _isDarkMode
+                                  ? Colors.orange.withAlpha(80)
+                                  : const Color(0xFFC2410C),
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                  color: Colors.orangeAccent.withAlpha(100)),
+                              border: _isDarkMode
+                                  ? Border.all(
+                                      color: Colors.orangeAccent.withAlpha(100))
+                                  : null,
                             ),
                             child: Text(
                               monthLabel,
@@ -3465,25 +5938,33 @@ class _TelevisaAppState extends State<TelevisaApp> {
       margin: const EdgeInsets.only(left: 70, right: 10, bottom: 8, top: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.orange.withAlpha(30),
+        color: _isDarkMode
+            ? Colors.orange.withAlpha(30)
+            : const Color(0xFFFFF7ED),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.withAlpha(60)),
+        border: _isDarkMode
+            ? Border.all(color: Colors.orange.withAlpha(60))
+            : Border.all(color: const Color(0xFFFED7AA), width: 1.2),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             "Extras: ${totalHours.toStringAsFixed(1)} hrs",
-            style: const TextStyle(
-              color: Colors.orangeAccent,
+            style: TextStyle(
+              color: _isDarkMode
+                  ? Colors.orangeAccent
+                  : const Color(0xFFC2410C),
               fontSize: 13,
               fontWeight: FontWeight.bold,
             ),
           ),
           Text(
             "\$${totalPay.toStringAsFixed(2)}",
-            style: const TextStyle(
-              color: Colors.greenAccent,
+            style: TextStyle(
+              color: _isDarkMode
+                  ? Colors.greenAccent
+                  : const Color(0xFF15803D),
               fontSize: 14,
               fontWeight: FontWeight.bold,
             ),
@@ -3506,7 +5987,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
               children: [
                 Text(label,
                     style: TextStyle(
-                        color: isCurrent ? Colors.orangeAccent : Colors.white54,
+                        color: isCurrent
+                            ? (_isDarkMode
+                                ? Colors.orangeAccent
+                                : Colors.black)
+                            : (_isDarkMode
+                                ? Colors.white54
+                                : Colors.black),
                         fontSize: isCurrent ? 14 : 12,
                         fontWeight: FontWeight.bold)),
                 if (isCurrent)
@@ -3514,8 +6001,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     margin: const EdgeInsets.only(top: 4),
                     width: 8,
                     height: 8,
-                    decoration: const BoxDecoration(
-                      color: Colors.orangeAccent,
+                    decoration: BoxDecoration(
+                      color: _isDarkMode
+                          ? Colors.orangeAccent
+                          : const Color(0xFFC2410C),
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -3576,47 +6065,65 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
                     color: isToday
-                        ? Colors.orangeAccent
-                            .withAlpha(80) // Strong highlight for today
+                        ? (_isDarkMode
+                            ? Colors.orangeAccent.withAlpha(80) // Strong highlight for today
+                            : const Color(0xFFFFEDD5))
                         : isSelected
-                            ? (isMantenimiento
-                                ? Colors.blue.withAlpha(50)
-                                : isFestivo
-                                    ? Colors.purple.withAlpha(50)
-                                    : isVacaciones
-                                        ? Colors.lightGreen.withAlpha(50)
-                                        : isFalta
-                                            ? Colors.red.shade700
-                                            : Colors.green.withAlpha(50)) // Asistencia GREEN
-                            : (hasData
+                            ? (_isDarkMode
                                 ? (isMantenimiento
-                                    ? Colors.blue.withAlpha(40)
+                                    ? Colors.blue.withAlpha(50)
                                     : isFestivo
-                                        ? Colors.purple.withAlpha(40)
+                                        ? Colors.purple.withAlpha(50)
                                         : isVacaciones
-                                            ? Colors.lightGreen.withAlpha(40)
+                                            ? Colors.lightGreen.withAlpha(50)
                                             : isFalta
                                                 ? Colors.red.shade700
-                                                : Colors.green.withAlpha(40)) // Asistencia GREEN
-                                : (isCurrent
-                                    ? Colors.transparent
-                                    : Colors.white.withAlpha(5))),
+                                                : Colors.green.withAlpha(50)) // Asistencia GREEN
+                                : (isMantenimiento
+                                    ? const Color(0xFFDBEAFE)
+                                    : isFestivo
+                                        ? const Color(0xFFF3E8FF)
+                                        : isVacaciones
+                                            ? const Color(0xFFDCFCE7)
+                                            : isFalta
+                                                ? const Color(0xFFFEE2E2)
+                                                : (hasData
+                                                    ? const Color(0xFFDCFCE7)
+                                                    : Colors.white)))
+                            : (hasData
+                                ? (_isDarkMode
+                                    ? (isMantenimiento
+                                        ? Colors.blue.withAlpha(40)
+                                        : isFestivo
+                                            ? Colors.purple.withAlpha(40)
+                                            : isVacaciones
+                                                ? Colors.lightGreen.withAlpha(40)
+                                                : isFalta
+                                                    ? Colors.red.shade700
+                                                    : Colors.green.withAlpha(40)) // Asistencia GREEN
+                                    : (isMantenimiento
+                                        ? const Color(0xFFEFF6FF)
+                                        : isFestivo
+                                            ? const Color(0xFFFAF5FF)
+                                            : isVacaciones
+                                                ? const Color(0xFFDCFCE7)
+                                                : isFalta
+                                                    ? const Color(0xFFFEF2F2)
+                                                    : const Color(0xFFDCFCE7)))
+                                : (_isDarkMode
+                                    ? (isCurrent
+                                        ? Colors.transparent
+                                        : Colors.white.withAlpha(5))
+                                    : Colors.white)),
                     borderRadius: BorderRadius.circular(
                         isToday ? 12 : 8), // More rounded for today
                     border: Border.all(
                         color: isToday
-                            ? Colors.orangeAccent // Bright border for today
+                            ? (_isDarkMode
+                                ? Colors.orangeAccent // Bright border for today
+                                : const Color(0xFFEA580C))
                             : isSelected
-                                ? (isMantenimiento
-                                    ? Colors.blueAccent
-                                    : isFestivo
-                                        ? Colors.purpleAccent
-                                        : isVacaciones
-                                            ? Colors.lightGreenAccent
-                                            : isFalta
-                                                ? Colors.redAccent
-                                                : Colors.greenAccent)
-                                : (hasData
+                                ? (_isDarkMode
                                     ? (isMantenimiento
                                         ? Colors.blueAccent
                                         : isFestivo
@@ -3626,14 +6133,39 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                                 : isFalta
                                                     ? Colors.redAccent
                                                     : Colors.greenAccent)
-                                    : Colors.white10),
+                                    : const Color(0xFFEA580C))
+                                : (hasData
+                                    ? (_isDarkMode
+                                        ? (isMantenimiento
+                                            ? Colors.blueAccent
+                                            : isFestivo
+                                                ? Colors.purpleAccent
+                                                : isVacaciones
+                                                    ? Colors.lightGreenAccent
+                                                    : isFalta
+                                                        ? Colors.redAccent
+                                                        : Colors.greenAccent)
+                                        : (isMantenimiento
+                                            ? const Color(0xFF93C5FD)
+                                            : isFestivo
+                                                ? const Color(0xFFD8B4FE)
+                                                : isVacaciones
+                                                    ? const Color(0xFF16A34A)
+                                                    : isFalta
+                                                        ? const Color(0xFFFCA5A5)
+                                                        : const Color(0xFF16A34A)))
+                                    : (_isDarkMode
+                                        ? Colors.white10
+                                        : const Color(0xFFCBD5E1))),
                         width: isToday
                             ? 3
-                            : (hasData ? 2 : 1)), // Thicker border for today
+                            : (isSelected ? 2.0 : (hasData ? 2.0 : 1.2))), // Thicker border for today
                     boxShadow: isToday
                         ? [
                             BoxShadow(
-                              color: Colors.orangeAccent.withAlpha(100),
+                              color: _isDarkMode
+                                  ? Colors.orangeAccent.withAlpha(100)
+                                  : const Color(0xFFEA580C).withAlpha(60),
                               blurRadius: 8,
                               spreadRadius: 2,
                             )
@@ -3652,10 +6184,16 @@ class _TelevisaAppState extends State<TelevisaApp> {
                               Text(dayLetter,
                                   style: TextStyle(
                                       color: isToday
-                                          ? Colors.white // White for today
+                                          ? (_isDarkMode
+                                              ? Colors.white // White for today
+                                              : const Color(0xFF9A3412))
                                           : (isFalta
-                                              ? Colors.white
-                                              : Colors.white60),
+                                              ? (_isDarkMode
+                                                  ? Colors.white
+                                                  : const Color(0xFF991B1B))
+                                              : (_isDarkMode
+                                                  ? Colors.orange
+                                                  : const Color(0xFFC2410C))),
                                       fontSize: isToday ? 12 : 10,
                                       height: 1.0,
                                       fontWeight: FontWeight.bold)),
@@ -3664,17 +6202,25 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                 Container(
                                   width: 5,
                                   height: 5,
-                                  decoration: const BoxDecoration(
-                                    color: Colors.orangeAccent,
+                                  decoration: BoxDecoration(
+                                    color: _isDarkMode
+                                        ? Colors.orangeAccent
+                                        : const Color(0xFFC2410C),
                                     shape: BoxShape.circle,
                                   ),
                                 ),
                               ],
                               if (isVacaciones || isFestivo) ...[
                                 const SizedBox(width: 2),
-                                const Icon(
+                                Icon(
                                   Icons.star,
-                                  color: Colors.lightGreenAccent,
+                                  color: _isDarkMode
+                                      ? (isVacaciones
+                                          ? Colors.lightGreenAccent
+                                          : Colors.purpleAccent)
+                                      : (isVacaciones
+                                          ? const Color(0xFF16A34A)
+                                          : const Color(0xFF9333EA)),
                                   size: 10,
                                 ),
                               ],
@@ -3684,11 +6230,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
                           Text(dayDate.day.toString(),
                               style: TextStyle(
                                   color: isToday
-                                      ? Colors
-                                          .black // Black number on orange for contrast
-                                      : (isCurrent
-                                          ? Colors.white
-                                          : (hasData
+                                      ? (_isDarkMode
+                                          ? Colors.black // Black number on orange for contrast
+                                          : const Color(0xFF7C2D12))
+                                      : (hasData
+                                          ? (_isDarkMode
                                               ? (isMantenimiento
                                                   ? Colors.blueAccent
                                                   : isFestivo
@@ -3698,7 +6244,20 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                                           : isFalta
                                                               ? Colors.white
                                                               : Colors.greenAccent)
-                                              : Colors.white70)),
+                                              : (isMantenimiento
+                                                  ? const Color(0xFF1D4ED8)
+                                                  : isFestivo
+                                                      ? const Color(0xFF6B21A8)
+                                                      : isVacaciones
+                                                          ? const Color(0xFF14532D)
+                                                          : isFalta
+                                                              ? const Color(0xFF991B1B)
+                                                              : const Color(0xFF14532D)))
+                                          : (_isDarkMode
+                                              ? (isCurrent
+                                                  ? Colors.white
+                                                  : Colors.white70)
+                                              : Colors.black)),
                                   fontSize: isToday ? 16 : 14,
                                   height: 1.0,
                                   fontWeight: isToday
@@ -3949,35 +6508,89 @@ class _TelevisaAppState extends State<TelevisaApp> {
         Color borderColor;
         Color titleColor;
         Color iconColor;
+        Color statusBgColor;
+        Color statusTextColor;
         String statusLabel;
 
         if (isPaidOut) {
           // PAID OUT - Green theme (ALL past quincenas regardless of data)
-          cardColor = Colors.green.withAlpha(15);
-          borderColor = Colors.green.withAlpha(80);
-          titleColor = Colors.greenAccent;
-          iconColor = Colors.greenAccent;
+          cardColor = _isDarkMode
+              ? Colors.green.withAlpha(15)
+              : const Color(0xFFF0FDF4);
+          borderColor = _isDarkMode
+              ? Colors.green.withAlpha(80)
+              : const Color(0xFF86EFAC);
+          titleColor = _isDarkMode
+              ? Colors.greenAccent
+              : const Color(0xFF15803D);
+          iconColor = _isDarkMode
+              ? Colors.greenAccent
+              : const Color(0xFF15803D);
+          statusBgColor = _isDarkMode
+              ? borderColor.withAlpha(40)
+              : const Color(0xFFDCFCE7);
+          statusTextColor = _isDarkMode
+              ? titleColor
+              : const Color(0xFF166534);
           statusLabel = "PAGADO";
         } else if (isCurrentlyAffected) {
           // CURRENTLY AFFECTED - Orange theme
-          cardColor = Colors.orange.withAlpha(15);
-          borderColor = Colors.orange.withAlpha(80);
-          titleColor = Colors.orange;
-          iconColor = Colors.orange;
+          cardColor = _isDarkMode
+              ? Colors.orange.withAlpha(15)
+              : const Color(0xFFFFF7ED);
+          borderColor = _isDarkMode
+              ? Colors.orange.withAlpha(80)
+              : const Color(0xFFFDBA74);
+          titleColor = _isDarkMode
+              ? Colors.orange
+              : const Color(0xFFC2410C);
+          iconColor = _isDarkMode
+              ? Colors.orange
+              : const Color(0xFFC2410C);
+          statusBgColor = _isDarkMode
+              ? borderColor.withAlpha(40)
+              : const Color(0xFFFFEDD5);
+          statusTextColor = _isDarkMode
+              ? titleColor
+              : const Color(0xFF9A3412);
           statusLabel = "EN PROGRESO";
         } else if (isNextToPay) {
           // NEXT TO PAY - Yellow theme
-          cardColor = Colors.yellow.withAlpha(15);
-          borderColor = Colors.yellowAccent.withAlpha(80);
-          titleColor = Colors.yellowAccent;
-          iconColor = Colors.yellowAccent;
+          cardColor = _isDarkMode
+              ? Colors.yellow.withAlpha(15)
+              : const Color(0xFFFEFCE8);
+          borderColor = _isDarkMode
+              ? Colors.yellowAccent.withAlpha(80)
+              : const Color(0xFFFDE047);
+          titleColor = _isDarkMode
+              ? Colors.yellowAccent
+              : const Color(0xFF854D0E);
+          iconColor = _isDarkMode
+              ? Colors.yellowAccent
+              : const Color(0xFF854D0E);
+          statusBgColor = _isDarkMode
+              ? borderColor.withAlpha(40)
+              : const Color(0xFFFEF9C3);
+          statusTextColor = _isDarkMode
+              ? titleColor
+              : const Color(0xFF713F12);
           statusLabel = "PRÓXIMO PAGO";
         } else {
           // Default - Future quincenas beyond next
-          cardColor = Colors.white.withAlpha(5);
-          borderColor = Colors.transparent;
-          titleColor = Colors.white60;
-          iconColor = Colors.white38;
+          cardColor = _isDarkMode
+              ? Colors.white.withAlpha(5)
+              : Colors.white;
+          borderColor = _isDarkMode
+              ? Colors.transparent
+              : const Color(0xFFCBD5E1);
+          titleColor = _isDarkMode
+              ? Colors.white60
+              : Colors.black;
+          iconColor = _isDarkMode
+              ? Colors.white38
+              : Colors.black54;
+          statusBgColor = Colors.transparent;
+          statusTextColor = Colors.transparent;
           statusLabel = "";
         }
 
@@ -4067,14 +6680,17 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: borderColor.withAlpha(40),
+                      color: statusBgColor,
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: borderColor.withAlpha(100)),
+                      border: Border.all(
+                          color: _isDarkMode
+                              ? borderColor.withAlpha(100)
+                              : borderColor),
                     ),
                     child: Text(
                       statusLabel,
                       style: TextStyle(
-                        color: titleColor,
+                        color: statusTextColor,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -4087,13 +6703,17 @@ class _TelevisaAppState extends State<TelevisaApp> {
               children: [
                 Text(
                     "SEMANAS HRS EXTRAS A PAGAR: ${(cfg['weeks'] as List).join(', ')}",
-                    style: const TextStyle(
-                        color: Colors.white70,
+                    style: TextStyle(
+                        color: _isDarkMode
+                            ? Colors.white70
+                            : Colors.black87,
                         fontSize: 14,
                         fontWeight: FontWeight.w500)),
                 Text("DEPÓSITO EST.: \$${netDeposit.toStringAsFixed(2)}",
-                    style: const TextStyle(
-                        color: Colors.greenAccent,
+                    style: TextStyle(
+                        color: _isDarkMode
+                            ? Colors.greenAccent
+                            : const Color(0xFF15803D),
                         fontWeight: FontWeight.bold,
                         fontSize: 18)),
               ],
@@ -4105,7 +6725,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   _confirmRow("NOMBRE:",
                       "${_firstNameController.text} ${_lastNameController.text}"),
                   _confirmRow("NO. EMPLEADO:", _userEmpNoController.text),
-                  const Divider(color: Colors.white10),
+                  Divider(
+                      color: _isDarkMode
+                          ? Colors.white10
+                          : const Color(0xFFE2E8F0)),
                   _confirmRow("Salario Base (15d):",
                       "\$${baseQuincena.toStringAsFixed(2)}"),
                   if (descuentoFaltas > 0)
@@ -4121,18 +6744,26 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       "${totalHours3x.toStringAsFixed(1)} hrs"),
                   _confirmRow("I.S.R. Estimado:",
                       "-\$${isrEstimate.toStringAsFixed(2)}"),
-                  const Divider(color: Colors.orange, thickness: 2),
+                  Divider(
+                      color: _isDarkMode
+                          ? Colors.orange
+                          : const Color(0xFFEA580C),
+                      thickness: 2),
                   Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text("TOTAL NETO:",
+                        Text("TOTAL NETO:",
                             style: TextStyle(
-                                color: Colors.white,
+                                color: _isDarkMode
+                                    ? Colors.white
+                                    : Colors.black,
                                 fontWeight: FontWeight.bold,
                                 fontSize: 18)),
                         Text("\$${netDeposit.toStringAsFixed(2)}",
-                            style: const TextStyle(
-                                color: Colors.greenAccent,
+                            style: TextStyle(
+                                color: _isDarkMode
+                                    ? Colors.greenAccent
+                                    : const Color(0xFF15803D),
                                 fontWeight: FontWeight.w900,
                                 fontSize: 28)),
                       ]),
@@ -4152,9 +6783,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // SECTION 1: LINKS
-          const Text("LINKS",
+          Text("LINKS",
               style: TextStyle(
-                  color: Colors.orange,
+                  color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
                   fontWeight: FontWeight.bold,
                   fontSize: 20)),
           const SizedBox(height: 15),
@@ -4166,13 +6797,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
           _buildLinkTile("Monedero Chedraui", Icons.shopping_bag,
               "https://monederodespensa.chedraui.com.mx/home"),
           const SizedBox(height: 25),
-          const Divider(color: Colors.white24),
+          Divider(
+              color: _isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1)),
 
           // SECTION 2: REDES WI-FI
           const SizedBox(height: 25),
-          const Text("REDES WI-FI",
+          Text("REDES WI-FI",
               style: TextStyle(
-                  color: Colors.orange,
+                  color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
                   fontWeight: FontWeight.bold,
                   fontSize: 20)),
           const SizedBox(height: 15),
@@ -4181,46 +6813,86 @@ class _TelevisaAppState extends State<TelevisaApp> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withAlpha(10),
+              color: _isDarkMode ? Colors.white.withAlpha(10) : Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.orange.withAlpha(50)),
+              border: _isDarkMode
+                  ? Border.all(color: Colors.orange.withAlpha(50))
+                  : Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Televisa San Angel",
+                Text("Televisa San Angel",
                     style: TextStyle(
-                        color: Colors.white,
+                        color: _isDarkMode
+                            ? Colors.white
+                            : const Color(0xFF0F172A),
                         fontSize: 18,
                         fontWeight: FontWeight.bold)),
                 const SizedBox(height: 15),
                 _buildWifiTile("TUGuest", r"4N1V$sI0N*TvsA",
                     note: "(Tiene acceso a Portal Televisa)"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("#tvsauniv", r"welcome.2021"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("SSID FORO-1", r"7oR0_$%1"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("SSID FORO-2", r"S4g_F0%2"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("SSID FORO-4", r"4_$%5gT3I3"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("SSID FORO-5", r"T3I3@F0r0_5"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("SSID FORO-6", r"SNG_$6/For0"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("SSID FORO-8", r"f0r0_53I/8",
                     note: "(Clave vieja, nos compartes la nueva?)"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("SSID FORO-9", r"9@_T3I3v*",
                     note: "(Clave vieja, nos compartes la nueva?)"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("SSID FORO-11", r"t3@v1s4/11"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("SSID FORO-12", r"T31e$srlJ"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("SSID FORO-14", r"14_@S4g/vI5a"),
-                const Divider(color: Colors.white24, height: 20),
+                Divider(
+                    color:
+                        _isDarkMode ? Colors.white24 : const Color(0xFFE2E8F0),
+                    height: 20),
                 _buildWifiTile("SSID FORO-15", r"Sg3L/T3v15"),
               ],
             ),
@@ -4231,21 +6903,29 @@ class _TelevisaAppState extends State<TelevisaApp> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white.withAlpha(5),
+              color: _isDarkMode ? Colors.white.withAlpha(5) : Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white24),
+              border: _isDarkMode
+                  ? Border.all(color: Colors.white24)
+                  : Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
             ),
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text("Televisa Chapultepec",
                     style: TextStyle(
-                        color: Colors.white70,
+                        color: _isDarkMode
+                            ? Colors.white70
+                            : const Color(0xFF0F172A),
                         fontSize: 18,
                         fontWeight: FontWeight.bold)),
-                SizedBox(height: 15),
+                const SizedBox(height: 15),
                 Text("Información no disponible",
-                    style: TextStyle(color: Colors.white38, fontSize: 14)),
+                    style: TextStyle(
+                        color: _isDarkMode
+                            ? Colors.white38
+                            : const Color(0xFF64748B),
+                        fontSize: 14)),
               ],
             ),
           ),
@@ -4254,18 +6934,31 @@ class _TelevisaAppState extends State<TelevisaApp> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.orange.withAlpha(20),
+              color: _isDarkMode
+                  ? Colors.orange.withAlpha(20)
+                  : const Color(0xFFFFF7ED),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.withAlpha(60)),
+              border: Border.all(
+                  color: _isDarkMode
+                      ? Colors.orange.withAlpha(60)
+                      : const Color(0xFFFED7AA),
+                  width: 1.2),
             ),
-            child: const Row(
+            child: Row(
               children: [
-                Icon(Icons.info_outline, color: Colors.orange, size: 20),
-                SizedBox(width: 10),
+                Icon(Icons.info_outline,
+                    color:
+                        _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                    size: 20),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     "Las redes pueden cambiar sin previo aviso, en caso de que quieras contribuir, favor de enviarnos un correo en Ajustes > Información. Ayudanos a encontrar las claves de las redes faltantes! :D",
-                    style: TextStyle(color: Colors.orangeAccent, fontSize: 12),
+                    style: TextStyle(
+                        color: _isDarkMode
+                            ? Colors.orangeAccent
+                            : const Color(0xFF9A3412),
+                        fontSize: 12),
                   ),
                 ),
               ],
@@ -4273,13 +6966,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
           ),
 
           const SizedBox(height: 25),
-          const Divider(color: Colors.white24),
+          Divider(
+              color: _isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1)),
 
           // SECTION 3: INFORMACIÓN GENERAL
           const SizedBox(height: 25),
-          const Text("INFORMACIÓN GENERAL",
+          Text("INFORMACIÓN GENERAL",
               style: TextStyle(
-                  color: Colors.orange,
+                  color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
                   fontWeight: FontWeight.bold,
                   fontSize: 20)),
           const SizedBox(height: 15),
@@ -4287,14 +6981,20 @@ class _TelevisaAppState extends State<TelevisaApp> {
             width: double.infinity,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white.withAlpha(5),
+              color: _isDarkMode ? Colors.white.withAlpha(5) : Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white24),
+              border: _isDarkMode
+                  ? Border.all(color: Colors.white24)
+                  : Border.all(color: const Color(0xFFCBD5E1), width: 1.5),
             ),
-            child: const Center(
+            child: Center(
               child: Text(
                 "Próximamente...",
-                style: TextStyle(color: Colors.white38, fontSize: 16),
+                style: TextStyle(
+                    color: _isDarkMode
+                        ? Colors.white38
+                        : const Color(0xFF64748B),
+                    fontSize: 16),
               ),
             ),
           ),
@@ -4305,16 +7005,24 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
   Widget _buildLinkTile(String title, IconData icon, String url) {
     return ListTile(
-      leading: Icon(icon, color: Colors.orange, size: 28),
+      leading: Icon(icon,
+          color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+          size: 28),
       title: Text(title,
-          style: const TextStyle(
-              color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
-      trailing:
-          const Icon(Icons.open_in_new, color: Colors.orangeAccent, size: 20),
-      tileColor: Colors.white.withAlpha(10),
+          style: TextStyle(
+              color: _isDarkMode ? Colors.white : const Color(0xFF1E293B),
+              fontSize: 16,
+              fontWeight: FontWeight.w500)),
+      trailing: Icon(Icons.open_in_new,
+          color:
+              _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
+          size: 20),
+      tileColor: _isDarkMode ? Colors.white.withAlpha(10) : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.orange.withAlpha(30)),
+        side: _isDarkMode
+            ? BorderSide(color: Colors.orange.withAlpha(30))
+            : const BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
       ),
       onTap: () async {
         final Uri uri = Uri.parse(url);
@@ -4334,23 +7042,41 @@ class _TelevisaAppState extends State<TelevisaApp> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: Colors.green.withAlpha(30),
+          color: _isDarkMode
+              ? Colors.green.withAlpha(30)
+              : const Color(0xFFDCFCE7),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.green.withAlpha(80)),
+          border: Border.all(
+              color: _isDarkMode
+                  ? Colors.green.withAlpha(80)
+                  : const Color(0xFF86EFAC)),
         ),
-        child: const Icon(Icons.share, color: Colors.greenAccent, size: 28),
+        child: Icon(Icons.share,
+            color: _isDarkMode
+                ? Colors.greenAccent
+                : const Color(0xFF15803D),
+            size: 28),
       ),
-      title: const Text("Compartir App",
+      title: Text("Compartir App",
           style: TextStyle(
-              color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
-      subtitle: const Text("Invita a tus compañeros",
-          style: TextStyle(color: Colors.white54, fontSize: 12)),
-      trailing: const Icon(Icons.arrow_forward_ios,
-          color: Colors.greenAccent, size: 18),
-      tileColor: Colors.white.withAlpha(10),
+              color: _isDarkMode ? Colors.white : const Color(0xFF1E293B),
+              fontSize: 16,
+              fontWeight: FontWeight.w500)),
+      subtitle: Text("Invita a tus compañeros",
+          style: TextStyle(
+              color: _isDarkMode ? Colors.white54 : const Color(0xFF64748B),
+              fontSize: 12)),
+      trailing: Icon(Icons.arrow_forward_ios,
+          color: _isDarkMode
+              ? Colors.greenAccent
+              : const Color(0xFF15803D),
+          size: 18),
+      tileColor: _isDarkMode ? Colors.white.withAlpha(10) : Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: Colors.green.withAlpha(50)),
+        side: _isDarkMode
+            ? BorderSide(color: Colors.green.withAlpha(50))
+            : const BorderSide(color: Color(0xFFCBD5E1), width: 1.5),
       ),
       onTap: () async {
         const String appUrl = 'https://nomina-televisa-v2.web.app/';
@@ -4379,27 +7105,36 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(" $ssid",
-                      style: const TextStyle(
-                          color: Colors.white,
+                      style: TextStyle(
+                          color: _isDarkMode
+                              ? Colors.white
+                              : const Color(0xFF1E293B),
                           fontSize: 14,
                           fontWeight: FontWeight.bold)),
                   if (note != null)
                     Text(note,
                         style: TextStyle(
-                            color: Colors.orangeAccent.withAlpha(180),
+                            color: _isDarkMode
+                                ? Colors.orangeAccent.withAlpha(180)
+                                : const Color(0xFFC2410C),
                             fontSize: 11)),
                   const SizedBox(height: 4),
                   Row(
                     children: [
-                      const Text("Contraseña: ",
+                      Text("Contraseña: ",
                           style: TextStyle(
-                              color: Colors.white70,
+                              color: _isDarkMode
+                                  ? Colors.white70
+                                  : const Color(0xFF475569),
                               fontSize: 13,
                               fontWeight: FontWeight.w500)),
                       Text(password,
-                          style: const TextStyle(
-                              color: Colors.greenAccent,
+                          style: TextStyle(
+                              color: _isDarkMode
+                                  ? Colors.greenAccent
+                                  : const Color(0xFF15803D),
                               fontSize: 13,
+                              fontWeight: FontWeight.bold,
                               fontFamily: 'monospace')),
                     ],
                   ),
@@ -4407,7 +7142,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.copy, color: Colors.orange, size: 22),
+              icon: Icon(Icons.copy,
+                  color:
+                      _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                  size: 22),
               onPressed: () {
                 // Copy password to clipboard
                 Clipboard.setData(ClipboardData(text: password));
@@ -4433,9 +7171,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text("MI PERFIL",
+          Text("MI PERFIL",
               style: TextStyle(
-                  color: Colors.orange,
+                  color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
                   fontWeight: FontWeight.bold,
                   fontSize: 20)),
           const SizedBox(height: 15),
@@ -4445,10 +7183,12 @@ class _TelevisaAppState extends State<TelevisaApp> {
           _buildSettTextField(
               _recoveryEmailController, "Correo de Recuperación",
               hint: "Para restablecer contraseña"),
-          const Divider(color: Colors.white24, height: 40),
-          const Text("AJUSTES DE NÓMINA",
+          Divider(
+              color: _isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1),
+              height: 40),
+          Text("AJUSTES DE NÓMINA",
               style: TextStyle(
-                  color: Colors.orange,
+                  color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
                   fontWeight: FontWeight.bold,
                   fontSize: 20)),
           const SizedBox(height: 20),
@@ -4462,9 +7202,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.orange.withAlpha(15),
+                color: _isDarkMode
+                    ? Colors.orange.withAlpha(15)
+                    : const Color(0xFFFFF7ED),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.withAlpha(50)),
+                border: _isDarkMode
+                    ? Border.all(color: Colors.orange.withAlpha(50))
+                    : Border.all(
+                        color: const Color(0xFFFED7AA), width: 1.4),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -4472,10 +7217,12 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         "HISTORIAL DE CAMBIOS DE SUELDO",
                         style: TextStyle(
-                          color: Colors.orange,
+                          color: _isDarkMode
+                              ? Colors.orange
+                              : const Color(0xFFC2410C),
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1,
@@ -4484,12 +7231,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       if (_salaryHistory.length > 1)
                         TextButton.icon(
                           onPressed: () => _showClearSalaryHistoryDialog(),
-                          icon: const Icon(Icons.delete_forever,
-                              color: Colors.redAccent, size: 16),
-                          label: const Text(
+                          icon: Icon(Icons.delete_forever,
+                              color: _isDarkMode
+                                  ? Colors.redAccent
+                                  : const Color(0xFFDC2626),
+                              size: 16),
+                          label: Text(
                             "BORRAR TODO",
                             style: TextStyle(
-                                color: Colors.redAccent, fontSize: 11),
+                                color: _isDarkMode
+                                    ? Colors.redAccent
+                                    : const Color(0xFFDC2626),
+                                fontSize: 11),
                           ),
                         ),
                     ],
@@ -4516,16 +7269,23 @@ class _TelevisaAppState extends State<TelevisaApp> {
                               children: [
                                 Text(
                                   "Desde: ${DateFormat('dd/MM/yyyy').format(date)}",
-                                  style: const TextStyle(
-                                    color: Colors.white70,
+                                  style: TextStyle(
+                                    color: _isDarkMode
+                                        ? Colors.white70
+                                        : Colors.black,
                                     fontSize: 13,
+                                    fontWeight: _isDarkMode
+                                        ? FontWeight.normal
+                                        : FontWeight.w600,
                                   ),
                                 ),
                                 if (prevSalary != null)
                                   Text(
                                     "Anterior: \$${prevSalary.toStringAsFixed(2)}",
                                     style: TextStyle(
-                                      color: Colors.white.withAlpha(128),
+                                      color: _isDarkMode
+                                          ? Colors.white.withAlpha(128)
+                                          : Colors.black87,
                                       fontSize: 11,
                                     ),
                                   ),
@@ -4536,8 +7296,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
                             children: [
                               Text(
                                 "\$${salary.toStringAsFixed(2)}",
-                                style: const TextStyle(
-                                  color: Colors.greenAccent,
+                                style: TextStyle(
+                                  color: _isDarkMode
+                                      ? Colors.greenAccent
+                                      : const Color(0xFF15803D),
                                   fontSize: 16,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -4546,8 +7308,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
                               // Delete button for individual entry (except the first/original)
                               if (index > 0 || _salaryHistory.length > 1)
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline,
-                                      color: Colors.redAccent, size: 20),
+                                  icon: Icon(Icons.delete_outline,
+                                      color: _isDarkMode
+                                          ? Colors.redAccent
+                                          : const Color(0xFFDC2626),
+                                      size: 20),
                                   onPressed: () =>
                                       _showDeleteSalaryEntryDialog(index),
                                   padding: EdgeInsets.zero,
@@ -4577,18 +7342,28 @@ class _TelevisaAppState extends State<TelevisaApp> {
           const SizedBox(height: 20),
           OutlinedButton(
               style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.blueAccent),
+                  backgroundColor:
+                      _isDarkMode ? Colors.transparent : Colors.white,
+                  side: BorderSide(
+                      color: _isDarkMode
+                          ? Colors.blueAccent
+                          : const Color(0xFF2563EB),
+                      width: 1.5),
                   minimumSize: const Size(double.infinity, 50)),
               onPressed: _showInfoDialog,
-              child: const Text("INFORMACIÓN",
+              child: Text("INFORMACIÓN",
                   style: TextStyle(
-                      color: Colors.blueAccent, fontWeight: FontWeight.bold))),
+                      color: _isDarkMode
+                          ? Colors.blueAccent
+                          : const Color(0xFF1D4ED8),
+                      fontWeight: FontWeight.bold))),
           const SizedBox(height: 25),
-          const Divider(color: Colors.white24),
+          Divider(
+              color: _isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1)),
           const SizedBox(height: 25),
-          const Text("MIGRACIÓN DE DATOS",
+          Text("MIGRACIÓN DE DATOS",
               style: TextStyle(
-                  color: Colors.orange,
+                  color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
                   fontWeight: FontWeight.bold,
                   fontSize: 20)),
           const SizedBox(height: 15),
@@ -4597,36 +7372,65 @@ class _TelevisaAppState extends State<TelevisaApp> {
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _exportData,
-                  icon: const Icon(Icons.upload_file, color: Colors.green),
-                  label: const Text("EXPORTAR",
-                      style: TextStyle(color: Colors.green)),
+                  icon: Icon(Icons.upload_file,
+                      color: _isDarkMode
+                          ? Colors.green
+                          : const Color(0xFF15803D)),
+                  label: Text("EXPORTAR",
+                      style: TextStyle(
+                          color: _isDarkMode
+                              ? Colors.green
+                              : const Color(0xFF15803D),
+                          fontWeight: FontWeight.bold)),
                   style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.green)),
+                      backgroundColor:
+                          _isDarkMode ? Colors.transparent : Colors.white,
+                      side: BorderSide(
+                          color: _isDarkMode
+                              ? Colors.green
+                              : const Color(0xFF16A34A),
+                          width: 1.5)),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: OutlinedButton.icon(
                   onPressed: _importData,
-                  icon: const Icon(Icons.download, color: Colors.blue),
-                  label: const Text("IMPORTAR",
-                      style: TextStyle(color: Colors.blue)),
+                  icon: Icon(Icons.download,
+                      color: _isDarkMode
+                          ? Colors.blue
+                          : const Color(0xFF1D4ED8)),
+                  label: Text("IMPORTAR",
+                      style: TextStyle(
+                          color: _isDarkMode
+                              ? Colors.blue
+                              : const Color(0xFF1D4ED8),
+                          fontWeight: FontWeight.bold)),
                   style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.blue)),
+                      backgroundColor:
+                          _isDarkMode ? Colors.transparent : Colors.white,
+                      side: BorderSide(
+                          color: _isDarkMode
+                              ? Colors.blue
+                              : const Color(0xFF2563EB),
+                          width: 1.5)),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          _buildButton("CAMBIAR CONTRASEÑA", Colors.orangeAccent, () {
+          _buildButton("CAMBIAR CONTRASEÑA",
+              _isDarkMode ? Colors.orangeAccent : const Color(0xFFEA580C), () {
             _showChangePasswordDialog();
           }),
           const SizedBox(height: 12),
-          _buildButton("RECUPERAR CONTRASEÑA", Colors.blueAccent, () {
+          _buildButton("RECUPERAR CONTRASEÑA",
+              _isDarkMode ? Colors.blueAccent : const Color(0xFF2563EB), () {
             _showForgotPasswordFromSettingsDialog();
           }),
           const SizedBox(height: 30),
-          _buildButton("CERRAR SESIÓN", Colors.redAccent, () {
+          _buildButton("CERRAR SESIÓN",
+              _isDarkMode ? Colors.redAccent : const Color(0xFFDC2626), () {
             _confirmSignOut(context);
           }),
         ],
@@ -4639,28 +7443,34 @@ class _TelevisaAppState extends State<TelevisaApp> {
       context: context,
       builder: (BuildContext dialogContext) {
         return AlertDialog(
-      scrollable: true,
-          backgroundColor: Colors.grey[900],
-          title: const Text(
+          scrollable: true,
+          backgroundColor: _isDarkMode ? Colors.grey[900] : Colors.white,
+          title: Text(
             "¿Cerrar sesión?",
             style: TextStyle(
-                color: Colors.orange, fontWeight: FontWeight.bold),
+                color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                fontWeight: FontWeight.bold),
           ),
-          content: const Text(
+          content: Text(
             "¿Estás seguro de que deseas cerrar sesión?",
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(
+                color: _isDarkMode ? Colors.white : const Color(0xFF1E293B)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(),
-              child: const Text(
+              child: Text(
                 "Cancelar",
-                style: TextStyle(color: Colors.white54),
+                style: TextStyle(
+                    color: _isDarkMode
+                        ? Colors.white54
+                        : const Color(0xFF64748B)),
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
+                backgroundColor:
+                    _isDarkMode ? Colors.redAccent : const Color(0xFFDC2626),
               ),
               onPressed: () {
                 Navigator.of(dialogContext).pop();
@@ -5540,39 +8350,53 @@ class _TelevisaAppState extends State<TelevisaApp> {
       context: context,
       builder: (context) => AlertDialog(
       scrollable: true,
-        backgroundColor: Colors.grey[900],
-        title: const Text("INFORMACIÓN",
+        backgroundColor: _isDarkMode ? Colors.grey[900] : Colors.white,
+        title: Text("INFORMACIÓN",
             style: TextStyle(
-                color: Colors.orange,
+                color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
                 fontSize: 22,
                 fontWeight: FontWeight.bold)),
-        content: const Column(
+        content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text("Mi Nómina Pro",
                 style: TextStyle(
-                    color: Colors.white,
+                    color: _isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.9.2 12/10/26",
-                style: TextStyle(color: Colors.orangeAccent, fontSize: 14)),
-            Divider(color: Colors.white38, height: 25),
+            Text("Versión v.23.10.1 13/10/26",
+                style: TextStyle(
+                    color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
+                    fontSize: 14)),
+            Divider(
+                color: _isDarkMode ? Colors.white38 : const Color(0xFFCBD5E1),
+                height: 25),
             Text(
                 "Esta aplicación es una herramienta independiente creada con el objetivo de ayudar a los usuarios a estimar y visualizar cierta información de forma práctica.\n\nNo es una aplicación oficial ni está afiliada, respaldada o relacionada de ninguna manera con Televisa.\n\nLas cantidades, cálculos o resultados mostrados son estimaciones generadas con base en la información disponible al momento de su desarrollo. Estos valores pueden contener errores o variaciones, ya que Televisa puede modificar en cualquier momento sus métodos de cálculo, agregar conceptos adicionales o aplicar retenciones distintas sin previo aviso.\n\nPor lo tanto, la información proporcionada por esta aplicación debe considerarse únicamente como una referencia orientativa y no como un dato definitivo, oficial o garantizado.",
-                style: TextStyle(color: Colors.white70, fontSize: 13)),
-            Divider(color: Colors.white38, height: 25),
+                style: TextStyle(
+                    color: _isDarkMode ? Colors.white70 : Colors.black87,
+                    fontSize: 13)),
+            Divider(
+                color: _isDarkMode ? Colors.white38 : const Color(0xFFCBD5E1),
+                height: 25),
             Text("Desarrollado por: MD",
-                style: TextStyle(color: Colors.white, fontSize: 16)),
-            SizedBox(height: 12),
+                style: TextStyle(
+                    color: _isDarkMode ? Colors.white : Colors.black,
+                    fontSize: 16)),
+            const SizedBox(height: 12),
             Text("Sugerencias y/o quejas a: minominapro@gmail.com",
-                style: TextStyle(fontSize: 14, color: Colors.white70)),
+                style: TextStyle(
+                    fontSize: 14,
+                    color: _isDarkMode ? Colors.white70 : Colors.black87)),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text("CERRAR", style: TextStyle(color: Colors.orange)),
+            child: Text("CERRAR",
+                style: TextStyle(
+                    color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C))),
           )
         ],
       ),
@@ -5704,20 +8528,31 @@ class _TelevisaAppState extends State<TelevisaApp> {
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey[900],
+        backgroundColor: _isDarkMode ? Colors.grey[900] : Colors.white,
         title: Text("¿Editar $label?",
-            style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+            style: TextStyle(
+                color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                fontWeight: FontWeight.bold)),
         content: Text("Podrás modificar la información de '$label'.",
-            style: const TextStyle(color: Colors.white)),
+            style: TextStyle(
+                color: _isDarkMode ? Colors.white : const Color(0xFF1E293B))),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text("Cancelar", style: TextStyle(color: Colors.white54)),
+            child: Text("Cancelar",
+                style: TextStyle(
+                    color: _isDarkMode
+                        ? Colors.white54
+                        : const Color(0xFF64748B))),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    _isDarkMode ? Colors.orange : const Color(0xFFEA580C)),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text("Sí, editar", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            child: const Text("Sí, editar",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -5738,24 +8573,35 @@ class _TelevisaAppState extends State<TelevisaApp> {
     final String? action = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.grey[900],
+        backgroundColor: _isDarkMode ? Colors.grey[900] : Colors.white,
         title: Text("¿Guardar $label?",
-            style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+            style: TextStyle(
+                color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                fontWeight: FontWeight.bold)),
         content: Text(
           hasChanged
               ? "¿Estás seguro de que deseas guardar la nueva información para '$label'?"
               : "No se detectaron cambios en '$label'. ¿Deseas salir del modo de edición?",
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(
+              color: _isDarkMode ? Colors.white : const Color(0xFF1E293B)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop("cancel"),
-            child: const Text("Cancelar cambios", style: TextStyle(color: Colors.redAccent)),
+            child: Text("Cancelar cambios",
+                style: TextStyle(
+                    color: _isDarkMode
+                        ? Colors.redAccent
+                        : const Color(0xFFDC2626))),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            style: ElevatedButton.styleFrom(
+                backgroundColor:
+                    _isDarkMode ? Colors.green : const Color(0xFF15803D)),
             onPressed: () => Navigator.of(ctx).pop("save"),
-            child: const Text("Guardar", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text("Guardar",
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -5786,26 +8632,48 @@ class _TelevisaAppState extends State<TelevisaApp> {
         controller: controller,
         readOnly: !isEditing,
         style: TextStyle(
-          color: isEditing ? Colors.white : Colors.white70,
+          color: _isDarkMode
+              ? (isEditing ? Colors.white : Colors.white70)
+              : Colors.black,
           fontSize: 18,
-          fontWeight: isEditing ? FontWeight.bold : FontWeight.normal,
+          fontWeight: _isDarkMode
+              ? (isEditing ? FontWeight.bold : FontWeight.normal)
+              : FontWeight.w600,
         ),
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
-          hintStyle: const TextStyle(color: Colors.white30, fontSize: 14),
-          labelStyle: const TextStyle(
-              color: Colors.orange, fontSize: 16, fontWeight: FontWeight.bold),
+          hintStyle: TextStyle(
+              color: _isDarkMode ? Colors.white30 : const Color(0xFF94A3B8),
+              fontSize: 14),
+          labelStyle: TextStyle(
+              color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+              fontSize: 16,
+              fontWeight: FontWeight.bold),
           prefixText: prefix,
-          prefixStyle: const TextStyle(color: Colors.white, fontSize: 18),
+          prefixStyle: TextStyle(
+              color: _isDarkMode ? Colors.white : Colors.black,
+              fontSize: 18,
+              fontWeight: FontWeight.bold),
           suffixText: suffix,
-          suffixStyle: const TextStyle(color: Colors.white, fontSize: 16),
-          helperText: isEditing ? "Los cambios no se aplicarán hasta que los guardes" : null,
-          helperStyle: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+          suffixStyle: TextStyle(
+              color: _isDarkMode ? Colors.white : Colors.black,
+              fontSize: 16,
+              fontWeight: FontWeight.bold),
+          helperText: isEditing
+              ? "Los cambios no se aplicarán hasta que los guardes"
+              : null,
+          helperStyle: TextStyle(
+              color: _isDarkMode
+                  ? Colors.orangeAccent
+                  : const Color(0xFFEA580C),
+              fontSize: 12),
           suffixIcon: IconButton(
             icon: Icon(
               isEditing ? Icons.check_circle : Icons.edit,
-              color: isEditing ? Colors.greenAccent : Colors.orange,
+              color: isEditing
+                  ? (_isDarkMode ? Colors.greenAccent : const Color(0xFF15803D))
+                  : (_isDarkMode ? Colors.orange : const Color(0xFFC2410C)),
               size: 22,
             ),
             tooltip: isEditing ? "Guardar cambios" : "Editar campo",
@@ -5830,15 +8698,19 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 isMoney ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             children: [
           Text(label,
-              style: const TextStyle(
-                  color: Colors.white60,
+              style: TextStyle(
+                  color: _isDarkMode ? Colors.white60 : Colors.black87,
                   fontSize: 11,
                   fontWeight: FontWeight.bold)),
           Text(breakdown,
-              style: const TextStyle(color: Colors.white, fontSize: 13)),
+              style: TextStyle(
+                  color: _isDarkMode ? Colors.white : Colors.black,
+                  fontSize: 13)),
           Text(total,
               style: TextStyle(
-                  color: isMoney ? Colors.greenAccent : Colors.white,
+                  color: isMoney
+                      ? (_isDarkMode ? Colors.greenAccent : const Color(0xFF2E7D32))
+                      : (_isDarkMode ? Colors.white : Colors.black),
                   fontSize: 18,
                   fontWeight: FontWeight.w900))
         ]));
@@ -5901,6 +8773,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       );
 
       if (switchRequested) {
+        if (!context.mounted) return null;
         return await _showScrollTimePicker(
           context,
           initialTime: initialTime,
@@ -6061,6 +8934,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     );
 
     if (switchRequested) {
+      if (!context.mounted) return null;
       return await _showScrollTimePicker(
         context,
         initialTime: initialTime,
@@ -6079,9 +8953,15 @@ class _TelevisaAppState extends State<TelevisaApp> {
         margin: const EdgeInsets.only(top: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.orange.withAlpha(25),
+          color: _isDarkMode
+              ? Colors.orange.withAlpha(25)
+              : const Color(0xFFFEF3C7),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.orangeAccent.withAlpha(100)),
+          border: Border.all(
+              color: _isDarkMode
+                  ? Colors.orangeAccent.withAlpha(100)
+                  : const Color(0xFFFCD34D),
+              width: _isDarkMode ? 1.0 : 1.4),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -6089,14 +8969,19 @@ class _TelevisaAppState extends State<TelevisaApp> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
+                Row(
                   children: [
                     Icon(Icons.note_alt_outlined,
-                        color: Colors.orangeAccent, size: 16),
-                    SizedBox(width: 6),
+                        color: _isDarkMode
+                            ? Colors.orangeAccent
+                            : const Color(0xFFD97706),
+                        size: 16),
+                    const SizedBox(width: 6),
                     Text("NOTAS:",
                         style: TextStyle(
-                            color: Colors.orangeAccent,
+                            color: _isDarkMode
+                                ? Colors.orangeAccent
+                                : const Color(0xFF334155),
                             fontWeight: FontWeight.bold,
                             fontSize: 13)),
                   ],
@@ -6113,9 +8998,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       await _saveData();
                     }
                   },
-                  child: const Text("Editar",
+                  child: Text("Editar",
                       style: TextStyle(
-                          color: Colors.orangeAccent,
+                          color: _isDarkMode
+                              ? Colors.orangeAccent
+                              : const Color(0xFFB45309),
                           fontSize: 12,
                           decoration: TextDecoration.underline)),
                 ),
@@ -6123,7 +9010,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
             ),
             const SizedBox(height: 6),
             Text(day.notas,
-                style: const TextStyle(color: Colors.white, fontSize: 13)),
+                style: TextStyle(
+                    color: _isDarkMode ? Colors.white : Colors.black,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600)),
           ],
         ),
       );
@@ -6132,15 +9022,35 @@ class _TelevisaAppState extends State<TelevisaApp> {
         padding: const EdgeInsets.only(top: 8),
         child: SizedBox(
           width: double.infinity,
-          child: OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.orangeAccent,
-              side: const BorderSide(color: Colors.orangeAccent),
-              padding: const EdgeInsets.symmetric(vertical: 8),
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _isDarkMode
+                  ? Colors.orange.withAlpha(25)
+                  : const Color(0xFFFEF3C7),
+              foregroundColor: _isDarkMode
+                  ? Colors.orangeAccent
+                  : const Color(0xFF78350F),
+              elevation: _isDarkMode ? 0 : 1,
+              side: BorderSide(
+                color: _isDarkMode
+                    ? Colors.orangeAccent.withAlpha(120)
+                    : const Color(0xFFD97706),
+                width: _isDarkMode ? 1.2 : 1.5,
+              ),
+              minimumSize: const Size(double.infinity, 48),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-            icon: const Icon(Icons.note_add_outlined, size: 18),
-            label: const Text("Agregar notas",
-                style: TextStyle(fontWeight: FontWeight.bold)),
+            icon: const Icon(Icons.note_add_outlined, size: 20),
+            label: const Text(
+              "Agregar notas",
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             onPressed: () async {
               final String? newNotes =
                   await _promptForNotes(ctx, initialNotes: "");
@@ -6166,17 +9076,23 @@ class _TelevisaAppState extends State<TelevisaApp> {
       context: context,
       builder: (context) {
         return AlertDialog(
-      scrollable: true,
-          backgroundColor: const Color(0xFF1E1E1E),
+          scrollable: true,
+          backgroundColor:
+              _isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.note_alt_outlined, color: Colors.orangeAccent),
-              SizedBox(width: 8),
+              Icon(Icons.note_alt_outlined,
+                  color: _isDarkMode
+                      ? Colors.orangeAccent
+                      : const Color(0xFFD9531E)),
+              const SizedBox(width: 8),
               Text("Notas del registro",
                   style: TextStyle(
-                      color: Colors.white,
+                      color: _isDarkMode
+                          ? Colors.white
+                          : const Color(0xFF111827),
                       fontSize: 18,
                       fontWeight: FontWeight.bold)),
             ],
@@ -6185,25 +9101,47 @@ class _TelevisaAppState extends State<TelevisaApp> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 "¿Deseas agregar notas a este registro?",
-                style: TextStyle(color: Colors.white70, fontSize: 14),
+                style: TextStyle(
+                    color: _isDarkMode
+                        ? Colors.white70
+                        : const Color(0xFF4B5563),
+                    fontSize: 14),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: notesController,
                 maxLines: 3,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(
+                    color: _isDarkMode
+                        ? Colors.white
+                        : const Color(0xFF111827)),
                 decoration: InputDecoration(
                   hintText:
                       "Escribe tus notas aquí (ej. Guardia, Turno especial, etc.)...",
-                  hintStyle:
-                      const TextStyle(color: Colors.white38, fontSize: 13),
+                  hintStyle: TextStyle(
+                      color: _isDarkMode
+                          ? Colors.white38
+                          : const Color(0xFF9CA3AF),
+                      fontSize: 13),
                   filled: true,
-                  fillColor: const Color(0xFF2C2C2C),
+                  fillColor: _isDarkMode
+                      ? const Color(0xFF2C2C2C)
+                      : const Color(0xFFF3F4F6),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
+                    borderSide: BorderSide(
+                        color: _isDarkMode
+                            ? Colors.transparent
+                            : const Color(0xFFD1D5DB)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(
+                        color: _isDarkMode
+                            ? Colors.transparent
+                            : const Color(0xFFD1D5DB)),
                   ),
                 ),
               ),
@@ -6212,14 +9150,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, initialNotes),
-              child: const Text("OMITIR",
+              child: Text("OMITIR",
                   style: TextStyle(
-                      color: Colors.white54, fontWeight: FontWeight.bold)),
+                      color: _isDarkMode
+                          ? Colors.white54
+                          : const Color(0xFF6B7280),
+                      fontWeight: FontWeight.bold)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.black,
+                backgroundColor:
+                    _isDarkMode ? Colors.orange : const Color(0xFFD9531E),
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8)),
               ),
@@ -6815,6 +9757,55 @@ class _TelevisaAppState extends State<TelevisaApp> {
     if (existingIndex < 0 || existingIndex >= _weeklyHistory.length) return;
     WorkDay day = _weeklyHistory[existingIndex];
 
+    if (day.esVacaciones || day.esFalta || (day.esFestivo && !day.festivoTrabajado)) {
+      final String? updatedNotes =
+          await _promptForNotes(context, initialNotes: day.notas);
+      if (!mounted) return;
+      setState(() {
+        day.notas = updatedNotes ?? day.notas;
+      });
+      await _userHistory.doc(day.id).set(day.toJson());
+      await _saveData();
+      _syncTodayStateFromHistory();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Notas actualizadas exitosamente"),
+          backgroundColor: Colors.green,
+        ));
+      }
+      return;
+    }
+
+    if (day.isInProgress) {
+      final TimeOfDay? inTime = await _showScrollTimePicker(
+        context,
+        initialTime: TimeOfDay.fromDateTime(day.entrada),
+        title: "EDITAR HORA ENTRADA",
+      );
+      if (!mounted || inTime == null) return;
+      final String? updatedNotes =
+          await _promptForNotes(context, initialNotes: day.notas);
+      if (!mounted) return;
+      DateTime date = day.entrada;
+      DateTime fEntrada =
+          DateTime(date.year, date.month, date.day, inTime.hour, inTime.minute);
+      setState(() {
+        day.entrada = fEntrada;
+        day.entradaReal = fEntrada;
+        day.notas = updatedNotes ?? day.notas;
+      });
+      await _userHistory.doc(day.id).set(day.toJson());
+      await _saveData();
+      _syncTodayStateFromHistory();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text("Turno en progreso actualizado"),
+          backgroundColor: Colors.green,
+        ));
+      }
+      return;
+    }
+
     // Step 1: Pick updated entrance time (pre-filled)
     final TimeOfDay? inTime = await _showScrollTimePicker(
       context,
@@ -6854,6 +9845,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
     await _userHistory.doc(day.id).set(day.toJson());
     await _saveData();
+    _syncTodayStateFromHistory();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -6904,10 +9896,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
   Widget _confirmRow(String label, String val) =>
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
         Text(label,
-            style: const TextStyle(color: Colors.white70, fontSize: 14)),
+            style: TextStyle(
+                color: _isDarkMode
+                    ? Colors.white70
+                    : Colors.black87,
+                fontSize: 14)),
         Text(val,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))
+            style: TextStyle(
+                color: _isDarkMode
+                    ? Colors.white
+                    : Colors.black,
+                fontSize: 16,
+                fontWeight: FontWeight.bold))
       ]);
   void _showDeleteDialog(int index) {
     showDialog(
@@ -6930,9 +9930,39 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       final messenger = ScaffoldMessenger.of(context);
                       final navigator = Navigator.of(context);
                       final dayToDelete = _weeklyHistory[index];
+                      final bool isCurrentShift = dayToDelete.id == _currentShiftId ||
+                          dayToDelete.isInProgress ||
+                          (_entradaDateTime != null && dayToDelete.entrada == _entradaDateTime) ||
+                          (dayToDelete.entrada.year == DateTime.now().year &&
+                              dayToDelete.entrada.month == DateTime.now().month &&
+                              dayToDelete.entrada.day == DateTime.now().day);
+
+                      if (isCurrentShift) {
+                        _countdownTimer?.cancel();
+                      }
+
                       setState(() {
                         _weeklyHistory.removeAt(index);
+                        if (isCurrentShift) {
+                          _isClockedIn = false;
+                          _completedToday = false;
+                          _currentShiftId = null;
+                          _entradaDateTime = null;
+                          _entradaRealDateTime = null;
+                          _salidaDateTime = null;
+                          _entradaDisplay = "--/-- --:--";
+                          _salidaDisplay = "--/-- --:--";
+                          _timeRemainingMessage = "";
+                        }
                       });
+
+                      if (isCurrentShift) {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.remove('pending_entrada');
+                        await prefs.remove('pending_entrada_real');
+                        await prefs.setBool('pending_clocked_in', false);
+                      }
+
                       await _userHistory.doc(dayToDelete.id).delete();
                       await _saveData();
                       navigator.pop();
@@ -6946,26 +9976,16 @@ class _TelevisaAppState extends State<TelevisaApp> {
         });
   }
 
-  Widget _buildRow(String label, String value, Color color) =>
-      Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label,
-            style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 20,
-                fontWeight: FontWeight.bold)),
-        Text(value,
-            style: TextStyle(
-                color: value.contains("--") ? Colors.white24 : color,
-                fontSize: 22,
-                fontWeight: FontWeight.bold))
-      ]);
+
   Widget _buildButton(String text, Color color, VoidCallback? onPressed, {bool isCompact = false}) {
     // If the app is uploading, we force the button to be disabled (null)
     final bool isDisabled = onPressed == null || _isProcessing;
 
     return ElevatedButton(
         style: ElevatedButton.styleFrom(
-            backgroundColor: isDisabled ? Colors.grey.shade800 : color,
+            backgroundColor: isDisabled
+                ? (_isDarkMode ? Colors.grey.shade800 : const Color(0xFFD1D5DB))
+                : color,
             minimumSize: Size(double.infinity, isCompact ? 50 : 70),
             shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12))),

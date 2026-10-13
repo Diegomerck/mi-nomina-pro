@@ -45,8 +45,8 @@ Since you exported the workspace from Firebase Studio to Antigravity (via `@fbs-
 *   **v.23.7.10:** Added Vacaciones day type, shift notes integration, and overtime calculation refinements.
 *   **v.23.7.11:** Added notification bell for in-app update notices and logout confirmation dialog.
 *   **v.23.8.1:** Added Día Festivo day type (LFT compliant, double base pay + separate 3x extra hours), compact Hoy tab layout, and web instant reload button.
-*   **v.23.9.1 (07/10/26):** Enhanced small-screen keyboard adaptability (scrollable dialogs), compact single-line weekly summaries with fixed header in Quincena, always-visible share icons, and auto-scroll in Nómina.
-*   **v.23.9.2 (Official Current Release - 12/10/26):** Auto-scroll to current week on entry/tap in Año tab, in-line settings field editing with safety lock & confirmation dialogs, removed legacy save and refresh buttons.
+*   **v.23.9.2 (12/10/26):** Auto-scroll to current week on entry/tap in Año tab, in-line settings field editing with safety lock & confirmation dialogs, removed legacy save and refresh buttons.
+*   **v.23.10.1 (Official Current Release - 13/10/26):** High-contrast Daylight / Light theme with AppBar toggle & SharedPreferences persistence, visual accessibility overhaul on Hoy tab (enlarged clock, buttons, tactile hit targets), direct 1-step manual clock-in/out, live shift notes integration, and pure solid black (#000000) typography for sunlight readability across all 6 tabs.
 
 
 ---
