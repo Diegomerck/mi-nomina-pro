@@ -27,9 +27,22 @@ Future<void> reloadApp() async {
     // ignore
   }
 
-  // Force reload with cache-busting timestamp
-  final timestamp = DateTime.now().millisecondsSinceEpoch;
-  final currentUrl = html.window.location.href;
-  final separator = currentUrl.contains('?') ? '&' : '?';
-  html.window.location.href = '$currentUrl${separator}v=$timestamp';
+  // Clear session storage
+  try {
+    html.window.sessionStorage.clear();
+  } catch (e) {
+    // ignore
+  }
+
+  // Force clean reload with cache-busting timestamp without chaining params
+  try {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final uri = Uri.parse(html.window.location.href);
+    final cleanParams = Map<String, String>.from(uri.queryParameters)..remove('v');
+    cleanParams['v'] = '$timestamp';
+    final newUri = uri.replace(queryParameters: cleanParams);
+    html.window.location.replace(newUri.toString());
+  } catch (_) {
+    html.window.location.reload();
+  }
 }
