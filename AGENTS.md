@@ -44,3 +44,12 @@ Any agent generating code changes must follow these exact instructions:
 - **Overtime Calculations**: All payroll formulas, overtime multipliers, and rounding behaviors must be deterministic and verifiable.
 - **User Scoping & Isolation**: All Firestore reads/writes must be scoped strictly under the authenticated user's ID (`users/{uid}/...`).
 - **Version Control Hygiene**: All synchronization across machines must go through Git/GitHub branches using concise, imperative commit messages.
+
+---
+
+## 5. Release & Deployment Protocol ("Publish New Version")
+Whenever the user instructs to "publish this new version" (or any equivalent wording):
+1. **Version Documentation**: Update `_changelogByVersion`, version strings in `lib/main.dart`, `PROJECT_OVERVIEW.md`, and `blueprint.md`.
+2. **GitHub Synchronization**: Stage, commit, and push all changes to `origin/master`.
+3. **Production Web Build**: Compile the release bundle using `flutter build web`.
+4. **Live Deployment**: Deploy to Firebase Hosting using `firebase deploy --only hosting`.
