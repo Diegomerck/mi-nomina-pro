@@ -1,8 +1,8 @@
-﻿# PROJECT OVERVIEW: Mi Nómina Pro (nomina-televisa-v2)
+# PROJECT OVERVIEW: Mi Nómina Pro (nomina-televisa-v2)
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: October 2026  
-> **Version**: `v.23.9.1 07/10/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.9.2 12/10/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.9.1` (October 2026 Release).
+- **Internal Version**: `v.23.9.2` (October 2026 Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -103,7 +103,7 @@ TelevisaApp (DefaultTabController - 6 Tabs)
 - **Data Displayed**: Overtime analytics filtered by customizable date ranges, detailing 2× double hours and 3× triple hours.
 
 #### 6. AJUSTES (Settings Tab)
-- **Data Displayed**: User employee number, UID, salary history list (`_salaryHistory`), app version `v.23.9.1`.
+- **Data Displayed**: User employee number, UID, salary history list (`_salaryHistory`), app version `v.23.9.2`.
 - **Inputs**: Text fields for Daily Salary (`_salaryController`), Base Shift Hours (`_baseHoursController`, default `9.5`), and Retention Amount (`_retentionController`). "Guardar Configuración" button syncs changes to Firestore.
 
 ### Custom Reusable Widgets & Dialogs
@@ -234,7 +234,8 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
-- **v.23.9.1 07/10/26 (Current - Stabilized)**: Mejora de adaptabilidad responsive en pantallas pequeñas (formularios y diálogos con scroll para evitar bloqueo por teclado virtual). Pestaña Quincena con diseño más compacto, cabecera fija y resumen de semanas en una sola línea. Iconos para compartir resúmenes semanales siempre accesibles. Pestaña Nómina con desplazamiento automático a periodos activos.
+- **v.23.9.2 12/10/26 (Current - Stabilized)**: Desplazamiento automático al entrar a la pestaña Año enfocado en la semana actual. Flujo de edición y guardado en línea en la pestaña Ajustes con bloqueo por defecto, icono de lápiz, verificación y confirmación previa. Eliminación de los botones redundantes 'Guardar Ajustes' y 'Refrescar datos'.
+- **v.23.9.1 07/10/26**: Mejora de adaptabilidad responsive en pantallas pequeñas (formularios y diálogos con scroll para evitar bloqueo por teclado virtual). Pestaña Quincena con diseño más compacto, cabecera fija y resumen de semanas en una sola línea. Iconos para compartir resúmenes semanales siempre accesibles. Pestaña Nómina con desplazamiento automático a periodos activos.
 - **v.23.8.1**: Se agregó la opción "Festivo" para registrar y gestionar días feriados oficiales (LFT). Rediseño de pestaña "Hoy" con botones más compactos y botón "Reiniciar hoy". Botón de recarga web (flecha circular) junto a la campana para actualización rápida.
 - **v.23.7.11**: Campana de notificaciones para comunicar actualizaciones a los usuarios. Confirmación para cerrar sesión (prevenir salidas accidentales).
 - **v.23.7.10**: Opción "Vacaciones" para marcar días sin afectar el pago. Notas integradas a registros en Quincena. Corrección visual en calendario y ajuste al cálculo de horas extra.

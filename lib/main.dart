@@ -17,6 +17,11 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'web_reload_stub.dart' if (dart.library.html) 'web_reload.dart';
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.9.2": [
+    "Pestaña Año: Desplazamiento automático enfocado en la semana actual al entrar o seleccionar la pestaña.",
+    "Pestaña Ajustes: Edición y guardado individual de campos con confirmación previa y bloqueo de seguridad por defecto.",
+    "Pestaña Ajustes: Se eliminaron los botones redundantes 'Guardar Ajustes' y 'Refrescar datos' para un flujo más limpio.",
+  ],
   "23.9.1": [
     "Mejora de adaptabilidad: se corrigieron los formularios y pantallas emergentes para que el teclado no bloquee la vista en teléfonos pequeños.",
     "Pestaña Quincena: diseño más compacto con cabecera fija y resumen de semanas en una sola línea.",
@@ -644,6 +649,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
       TextEditingController(text: ""); // For password recovery
 
   final ScrollController _nominaScrollController = ScrollController();
+  final ScrollController _anoScrollController = ScrollController();
+
+  final Map<String, String> _originalFieldValues = {};
+  final Set<String> _editingFieldLabels = {};
 
   late Timer _timer;
   Timer? _countdownTimer;
@@ -1548,33 +1557,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     }
   }
 
-  Future<void> _forceRefresh() async {
-    setState(() => _isProcessing = true);
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      // Limpia el cache local del dispositivo
-      await prefs.clear();
-      // Descarga los datos correctos desde Firebase para el usuario actual
-      await _loadData();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Datos actualizados correctamente"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error al refrescar: $e")),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isProcessing = false);
-    }
-  }
 
   @override
   void dispose() {
@@ -2047,7 +2030,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               const Text(
-                "v.23.9.1 07/10/26",
+                "v.23.9.2 12/10/26",
                 style: TextStyle(
                   color: Colors.orangeAccent,
                   fontSize: 18,
@@ -2115,6 +2098,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
           ],
           bottom: TabBar(
             onTap: (index) {
+              if (index == 2) {
+                _scrollToCurrentWeek();
+              }
               if (index == 3) {
                 _scrollToActiveNomina();
               }
@@ -3214,6 +3200,40 @@ class _TelevisaAppState extends State<TelevisaApp> {
   final List<GlobalKey> _weekKeys = List.generate(53, (_) => GlobalKey());
   bool _hasAutoScrolledAnoTab = false;
 
+  void _scrollToCurrentWeek() {
+    Future.delayed(const Duration(milliseconds: 150), () {
+      if (!mounted) return;
+      DateTime now = DateTime.now();
+      int year = now.year;
+      DateTime jan1 = DateTime(year, 1, 1);
+      DateTime firstMonday = jan1.subtract(Duration(days: jan1.weekday - 1));
+
+      int currentWeekIndex = -1;
+      for (int i = 0; i < 53; i++) {
+        DateTime weekStart = firstMonday.add(Duration(days: i * 7));
+        DateTime weekEnd = weekStart.add(const Duration(days: 6));
+
+        if (now.isAfter(weekStart.subtract(const Duration(seconds: 1))) &&
+            now.isBefore(weekEnd.add(const Duration(seconds: 1)))) {
+          currentWeekIndex = i;
+          break;
+        }
+      }
+
+      if (currentWeekIndex != -1 && currentWeekIndex < _weekKeys.length) {
+        final key = _weekKeys[currentWeekIndex];
+        if (key.currentContext != null) {
+          Scrollable.ensureVisible(
+            key.currentContext!,
+            duration: const Duration(milliseconds: 400),
+            curve: Curves.easeOutCubic,
+            alignment: 0.15,
+          );
+        }
+      }
+    });
+  }
+
   Widget _buildAnoTab() {
     int year = DateTime.now().year;
     DateTime jan1 = DateTime(year, 1, 1);
@@ -3236,40 +3256,16 @@ class _TelevisaAppState extends State<TelevisaApp> {
       'DIC'
     ];
 
-    // Auto-scroll to current week only on first build of this tab session
+    // Trigger auto-scroll on first display of this tab
     if (!_hasAutoScrolledAnoTab) {
+      _hasAutoScrolledAnoTab = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        DateTime now = DateTime.now();
-        int currentWeekIndex = -1;
-
-        // Find which week contains today
-        for (int i = 0; i < 53; i++) {
-          DateTime weekStart = firstMonday.add(Duration(days: i * 7));
-          DateTime weekEnd = weekStart.add(const Duration(days: 6));
-
-          if (now.isAfter(weekStart.subtract(const Duration(seconds: 1))) &&
-              now.isBefore(weekEnd.add(const Duration(seconds: 1)))) {
-            currentWeekIndex = i;
-            break;
-          }
-        }
-
-        if (currentWeekIndex != -1 && currentWeekIndex < _weekKeys.length) {
-          final key = _weekKeys[currentWeekIndex];
-          if (key.currentContext != null) {
-            Scrollable.ensureVisible(
-              key.currentContext!,
-              duration: const Duration(milliseconds: 500),
-              curve: Curves.easeInOut,
-              alignment: 0.3, // Position near top but not at very top
-            );
-            _hasAutoScrolledAnoTab = true;
-          }
-        }
+        _scrollToCurrentWeek();
       });
     }
 
     return SingleChildScrollView(
+      controller: _anoScrollController,
       child: Column(
         children: [
         Container(
@@ -4587,20 +4583,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
               child: const Text("INFORMACIÓN",
                   style: TextStyle(
                       color: Colors.blueAccent, fontWeight: FontWeight.bold))),
-          const SizedBox(height: 15),
-          _buildButton("GUARDAR AJUSTES", Colors.orange, () async {
-            try {
-              await _saveData();
-            } catch (e) {
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                      content: Text("Error al guardar: $e"),
-                      backgroundColor: Colors.red),
-                );
-              }
-            }
-          }),
           const SizedBox(height: 25),
           const Divider(color: Colors.white24),
           const SizedBox(height: 25),
@@ -4635,9 +4617,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
             ],
           ),
-          _buildButton(
-              "REFRESCAR DATOS", Colors.blueGrey.shade800, _forceRefresh),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           _buildButton("CAMBIAR CONTRASEÑA", Colors.orangeAccent, () {
             _showChangePasswordDialog();
           }),
@@ -5575,7 +5555,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.9.1 07/10/26",
+            Text("Versión v.23.9.2 12/10/26",
                 style: TextStyle(color: Colors.orangeAccent, fontSize: 14)),
             Divider(color: Colors.white38, height: 25),
             Text(
@@ -5720,13 +5700,96 @@ class _TelevisaAppState extends State<TelevisaApp> {
     );
   }
 
+  Future<void> _startEditingField(String label, TextEditingController controller) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: Text("¿Editar $label?",
+            style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+        content: Text("Podrás modificar la información de '$label'.",
+            style: const TextStyle(color: Colors.white)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text("Cancelar", style: TextStyle(color: Colors.white54)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text("Sí, editar", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      setState(() {
+        _originalFieldValues[label] = controller.text;
+        _editingFieldLabels.add(label);
+      });
+    }
+  }
+
+  Future<void> _confirmSaveField(String label, TextEditingController controller) async {
+    final String originalVal = _originalFieldValues[label] ?? controller.text;
+    final bool hasChanged = controller.text != originalVal;
+
+    final String? action = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        title: Text("¿Guardar $label?",
+            style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+        content: Text(
+          hasChanged
+              ? "¿Estás seguro de que deseas guardar la nueva información para '$label'?"
+              : "No se detectaron cambios en '$label'. ¿Deseas salir del modo de edición?",
+          style: const TextStyle(color: Colors.white),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop("cancel"),
+            child: const Text("Cancelar cambios", style: TextStyle(color: Colors.redAccent)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+            onPressed: () => Navigator.of(ctx).pop("save"),
+            child: const Text("Guardar", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (action == "cancel" && mounted) {
+      setState(() {
+        controller.text = originalVal;
+        _editingFieldLabels.remove(label);
+        _originalFieldValues.remove(label);
+      });
+    } else if (action == "save" && mounted) {
+      setState(() {
+        _editingFieldLabels.remove(label);
+        _originalFieldValues.remove(label);
+      });
+      await _saveData();
+    }
+  }
+
   Widget _buildSettTextField(TextEditingController controller, String label,
       {String? prefix, String? suffix, String? hint}) {
+    final bool isEditing = _editingFieldLabels.contains(label);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: TextField(
         controller: controller,
-        style: const TextStyle(color: Colors.white, fontSize: 18),
+        readOnly: !isEditing,
+        style: TextStyle(
+          color: isEditing ? Colors.white : Colors.white70,
+          fontSize: 18,
+          fontWeight: isEditing ? FontWeight.bold : FontWeight.normal,
+        ),
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
@@ -5737,6 +5800,23 @@ class _TelevisaAppState extends State<TelevisaApp> {
           prefixStyle: const TextStyle(color: Colors.white, fontSize: 18),
           suffixText: suffix,
           suffixStyle: const TextStyle(color: Colors.white, fontSize: 16),
+          helperText: isEditing ? "Los cambios no se aplicarán hasta que los guardes" : null,
+          helperStyle: const TextStyle(color: Colors.orangeAccent, fontSize: 12),
+          suffixIcon: IconButton(
+            icon: Icon(
+              isEditing ? Icons.check_circle : Icons.edit,
+              color: isEditing ? Colors.greenAccent : Colors.orange,
+              size: 22,
+            ),
+            tooltip: isEditing ? "Guardar cambios" : "Editar campo",
+            onPressed: () {
+              if (isEditing) {
+                _confirmSaveField(label, controller);
+              } else {
+                _startEditingField(label, controller);
+              }
+            },
+          ),
         ),
       ),
     );
