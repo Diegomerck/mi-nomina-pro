@@ -7077,7 +7077,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               color: _isDarkMode ? Colors.white : const Color(0xFF1E293B),
               fontSize: 16,
               fontWeight: FontWeight.w500)),
-      subtitle: Text("Invita a tus compañeros",
+      subtitle: Text("¡Invita a tus compañeros utilizando este boton!",
           style: TextStyle(
               color: _isDarkMode ? Colors.white54 : const Color(0xFF64748B),
               fontSize: 12)),
