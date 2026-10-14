@@ -2,7 +2,7 @@
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: October 2026  
-> **Version**: `v.23.10.1 13/10/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.11.1 13/10/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.10.1` (October 2026 Release).
+- **Internal Version**: `v.23.11.1` (October 2026 Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,7 +234,7 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
-- **v.23.10.1 13/10/26 (Current - Production)**: Implementación de Modo Claro / Modo Luz de Día (Daylight Theme) con botón de alternancia en AppBar y persistencia local en SharedPreferences. Accesibilidad visual de alto contraste con textos y números en negro puro (#000000) para lectura bajo luz solar. Rediseño ergonómico de la sección Entrada/Salida en la pestaña Hoy (botones y reloj más grandes, blancos táctiles amplios). Entrada Manual y Salida Manual directa en un paso. Notas integradas a turnos activos antes del cierre. Compatibilidad visual completa en todas las pestañas (Hoy, Quincena, Año, Nómina, Extras, Ajustes).
+- **v.23.11.1 13/10/26 (Current - Production)**: Implementación de Modo Claro / Modo Luz de Día (Daylight Theme) con botón de alternancia en AppBar y persistencia local en SharedPreferences. Accesibilidad visual de alto contraste con textos y números en negro puro (#000000) para lectura bajo luz solar. Rediseño ergonómico de la sección Entrada/Salida en la pestaña Hoy (botones y reloj más grandes, blancos táctiles amplios). Entrada Manual y Salida Manual directa en un paso. Notas integradas a turnos activos antes del cierre. Compatibilidad visual completa en todas las pestañas (Hoy, Quincena, Año, Nómina, Extras, Ajustes). Corrección matemática en el cálculo de nómina para deducciones por faltas (días no laborados) eliminando doble descuento y garantizando pago neto de $0.00 en periodos completos sin asistencia.
 - **v.23.9.2 12/10/26**: Desplazamiento automático al entrar a la pestaña Año enfocado en la semana actual. Flujo de edición y guardado en línea en la pestaña Ajustes con bloqueo por defecto, icono de lápiz, verificación y confirmación previa. Eliminación de los botones redundantes 'Guardar Ajustes' y 'Refrescar datos'.
 - **v.23.9.1 07/10/26**: Mejora de adaptabilidad responsive en pantallas pequeñas (formularios y diálogos con scroll para evitar bloqueo por teclado virtual). Pestaña Quincena con diseño más compacto, cabecera fija y resumen de semanas en una sola línea. Iconos para compartir resúmenes semanales siempre accesibles. Pestaña Nómina con desplazamiento automático a periodos activos.
 - **v.23.8.1**: Se agregó la opción "Festivo" para registrar y gestionar días feriados oficiales (LFT). Rediseño de pestaña "Hoy" con botones más compactos y botón "Reiniciar hoy". Botón de recarga web (flecha circular) junto a la campana para actualización rápida.

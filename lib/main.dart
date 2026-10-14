@@ -17,16 +17,17 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'web_reload_stub.dart' if (dart.library.html) 'web_reload.dart';
 
 final Map<String, String> _changelogTitles = {
-  "23.10.1": "✨ Versión 23.10.1 (13/10/26) — Modo Luz & Alta Visibilidad",
+  "23.11.1": "✨ Versión 23.11.1 (13/10/26) — Modo Luz & Alta Visibilidad",
 };
 
 final Map<String, List<String>> _changelogByVersion = {
-  "23.10.1": [
+  "23.11.1": [
     "☀️ Modo Día / Modo Luz: Nuevo botón de alternancia rápida en la barra superior (AppBar) con persistencia automática de tu preferencia.",
     "👁️ Accesibilidad Visual en \"HOY\": Reloj digital más grande y legible, botones de acción aumentados de tamaño con superficie táctil sólida y mayor contraste bajo luz solar directa.",
     "⚡ Registro Manual Directo: Marcaje de entrada y salida manual en 1 solo paso con hora prellenada.",
     "📝 Notas en Turno Activo: Ahora puedes agregar o editar notas de turno directamente sin necesidad de finalizar la jornada primero.",
     "🎨 Contraste Mejorado: Tipografía en negro absoluto y bordes reforzados en todas las pestañas para máxima visibilidad en exteriores.",
+    "💰 Cálculo de Nómina / Días No Laborados: Corrección en deducciones por faltas para evitar doble descuento y reflejar \$0.00 en periodos completos sin asistencia.",
   ],
   "23.9.2": [
     "Pestaña Año: Desplazamiento automático enfocado en la semana actual al entrar o seleccionar la pestaña.",
@@ -2665,7 +2666,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.10.1 13/10/26",
+                "v.23.11.1 13/10/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,
@@ -6597,38 +6598,45 @@ class _TelevisaAppState extends State<TelevisaApp> {
           statusLabel = "";
         }
 
-        // Calculate base quincena using actual stored salaries per day
-        // to support salary history (different salaries on different dates)
-        double baseQuincena = 0.0;
-        int faltasCount = 0;
-        double descuentoFaltas = 0.0;
+        // Calculate base quincena using actual applicable salary for date
+        // A standard Mexican quincena represents 15 calendar days of base salary.
+        DateTime referenceDate = payoutDate ?? now;
+        double applicableSalary = _getSalaryForDate(referenceDate);
+        double baseQuincena = applicableSalary * 15;
 
-        for (var d in matched) {
-          if (d.esFalta) {
-            faltasCount++;
-            descuentoFaltas +=
-                d.sueldoBase; // Use historical salary for that day
+        int faltasCount = matched.where((d) => d.esFalta).length;
+        int diasLaborados =
+            matched.where((d) => !d.esFalta && !d.isInProgress).length;
+
+        // Total scheduled workdays in this quincena's weeks (e.g., 2 weeks = 10 workdays)
+        int scheduledWorkdays = (cfg['weeks'] as List).length * 5;
+        if (scheduledWorkdays == 0) scheduledWorkdays = 10;
+
+        double descuentoFaltas = 0.0;
+        if (faltasCount > 0) {
+          if (faltasCount >= scheduledWorkdays && diasLaborados == 0) {
+            // Employee missed all scheduled workdays in the period: 100% deduction ($0 payout)
+            descuentoFaltas = baseQuincena;
           } else {
-            baseQuincena += d.sueldoBase; // Use historical salary for that day
+            // Each missed workday discounts its proportional share of the 15-day base quincena
+            // (e.g., In a 10-day period, 1 falta discounts 15/10 = 1.5 days of base pay,
+            // covering 1 workday + 0.5 proportional rest day per Mexican LFT Art. 29/30).
+            double factorPerFalta = 15.0 / scheduledWorkdays;
+            descuentoFaltas = faltasCount * factorPerFalta * applicableSalary;
+            if (descuentoFaltas > baseQuincena) {
+              descuentoFaltas = baseQuincena;
+            }
           }
         }
 
-        // Add estimated salary for remaining days (not yet worked) using salary based on effective date
-        int diasLaborados = matched.where((d) => !d.esFalta).length;
-        int diasFaltantes = 15 - diasLaborados - faltasCount;
-        if (diasFaltantes > 0) {
-          // Use the salary that would be effective for the payout date
-          // or today if payout is in the future
-          DateTime referenceDate = payoutDate ?? now;
-          double applicableSalaryForFuture = _getSalaryForDate(referenceDate);
-          baseQuincena += applicableSalaryForFuture * diasFaltantes;
-        }
+        double baseEarned = baseQuincena - descuentoFaltas;
+        if (baseEarned < 0) baseEarned = 0.0;
 
         double totalExtras = 0.0;
         double totalHours2x = 0.0;
         double totalHours3x = 0.0;
 
-// Group days by ISO week (Monday–Sunday)
+        // Group days by ISO week (Monday–Sunday)
         final Map<int, List<WorkDay>> weeks = {};
 
         for (final d in matched) {
@@ -6637,7 +6645,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
           weeks[week]!.add(d);
         }
 
-// Apply centralized weekly overtime logic and accumulate hours
+        // Apply centralized weekly overtime logic and accumulate hours
         for (final weekDays in weeks.values) {
           final breakdownMap = calculateWeeklyOvertimeBreakdown(weekDays);
           for (var b in breakdownMap.values) {
@@ -6650,14 +6658,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
         double weekendBonus = matched
             .where((d) => d.entrada.weekday > 5 && !d.esFalta)
             .fold(0, (totalSum, d) => totalSum + d.dailyPay);
-        double fomentoEficiencia = baseQuincena * fomentoRate;
-        double totalBruto = (baseQuincena - descuentoFaltas) +
+        double fomentoEficiencia = baseEarned * fomentoRate;
+        double totalBruto = baseEarned +
             fomentoEficiencia +
             totalExtras +
             weekendBonus;
-        double cuotaSindical = baseQuincena * cuotaSindicalRate;
-        double isrEstimate = totalBruto * (retentionPct / 100);
+        if (totalBruto < 0) totalBruto = 0.0;
+
+        double cuotaSindical = baseEarned * cuotaSindicalRate;
+        double isrEstimate =
+            totalBruto > 0 ? totalBruto * (retentionPct / 100) : 0.0;
         double netDeposit = totalBruto - (isrEstimate + cuotaSindical);
+        if (netDeposit < 0) netDeposit = 0.0;
         return Card(
           color: cardColor,
           margin: const EdgeInsets.only(bottom: 12),
@@ -8410,7 +8422,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     color: _isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.10.1 13/10/26",
+            Text("Versión v.23.11.1 13/10/26",
                 style: TextStyle(
                     color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
                     fontSize: 14)),

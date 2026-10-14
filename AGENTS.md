@@ -17,11 +17,14 @@ All work within this repository is partitioned across three distinct agent roles
 
 ### Role 1: Project Manager / Planning Architect (PM)
 - **Primary Objective**: Break down feature requirements, evaluate architectural risks, define atomic work items, and maintain the implementation roadmap.
-- **Boundaries**: Does not write or modify executable application code. Delivers structured specifications and explicit acceptance criteria for the Developer.
+- **Boundaries & Tool Restrictions**: 
+  - **Strict Read-Only on App Code**: The PM Agent is strictly prohibited from modifying executable code (`lib/**`). It must never invoke code-editing tools (`replace_file_content`, `multi_replace_file_content`, `write_to_file` on application code).
+  - **Token-Efficient Prompt Handoffs**: When preparing tasks for the Developer, the PM must output **ONLY a concise, high-level prompt (under 15 lines)** containing the problem context, required logic, and acceptance criteria. The PM must **never dump raw code blocks, diffs, or replacement snippets** into the PM chat.
+  - **No Unilateral Reversions**: The PM Agent must **NEVER** run destructive git commands (`git checkout`, `git restore`, `git reset`) on modified or working code without explicit user consent. If code exists on disk outside the expected workflow, the PM must pause and ask the user for direction.
 
-### Role 2: Developer
+### Role 2: Developer (Implementation Agent)
 - **Primary Objective**: Implement approved specifications while adhering strictly to code modification constraints.
-- **Boundaries**: Focuses solely on the assigned atomic task without introducing unsolicited refactoring or scope creep.
+- **Boundaries**: Focuses solely on the assigned atomic task without introducing unsolicited refactoring or scope creep. Executes static analysis and verification tests.
 
 ### Role 3: Code Reviewer / QA
 - **Primary Objective**: Audit all proposed changes prior to integration. Validates business logic (overtime arithmetic), checks Firestore security models, and enforces state consistency.
