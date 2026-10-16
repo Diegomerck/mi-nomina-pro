@@ -17,29 +17,36 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'web_reload_stub.dart' if (dart.library.html) 'web_reload.dart';
 
 final Map<String, String> _changelogTitles = {
-  "23.11.1": "✨ Versión 23.11.1 (13/10/26) — Modo Luz & Alta Visibilidad",
+  "23.12.1": "🎉 Versión 23.12.1 (15/10/26) — Días de Descanso & Historial de Cambios",
+  "23.11.1": "☀️ Versión 23.11.1 (13/10/26) — Modo Luz y Pantalla más Clara",
 };
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.12.1": [
+    "📅 Días de descanso a tu medida: Ahora puedes elegir qué días descansas (por ejemplo si descansas entre semana).",
+    "💵 Historial de aumentos y jornada: Si te suben el sueldo o cambia tu horario, puedes guardarlo por fecha sin que se alteren tus quincenas anteriores.",
+    "⭐ Horas extra en descanso: Si trabajas en tu día de descanso, tus horas extra ahora se pagan al triple automáticamente como marca la ley.",
+    "🔍 Desglose más claro: En tus días de descanso laborados verás por separado tu pago base y el pago de tu descanso.",
+    "⌨️ Centavos en tu sueldo: El teclado ahora te permite escribir punto decimal fácilmente al ingresar tu salario.",
+  ],
   "23.11.1": [
-    "☀️ Modo Día / Modo Luz: Nuevo botón de alternancia rápida en la barra superior (AppBar) con persistencia automática de tu preferencia.",
-    "👁️ Accesibilidad Visual en \"HOY\": Reloj digital más grande y legible, botones de acción aumentados de tamaño con superficie táctil sólida y mayor contraste bajo luz solar directa.",
-    "⚡ Registro Manual Directo: Marcaje de entrada y salida manual en 1 solo paso con hora prellenada.",
-    "📝 Notas en Turno Activo: Ahora puedes agregar o editar notas de turno directamente sin necesidad de finalizar la jornada primero.",
-    "🎨 Contraste Mejorado: Tipografía en negro absoluto y bordes reforzados en todas las pestañas para máxima visibilidad en exteriores.",
-    "💰 Cálculo de Nómina / Días No Laborados: Corrección en deducciones por faltas para evitar doble descuento y reflejar \$0.00 en periodos completos sin asistencia.",
+    "☀️ Modo Día: Agregamos un botón para cambiar entre fondo oscuro y fondo claro según tu preferencia.",
+    "👁️ Reloj y letras más grandes: La pestaña Hoy ahora tiene números y botones más grandes para que puedas verlos fácil bajo la luz del sol.",
+    "⚡ Entrada y salida rápida: Ahora puedes registrar tu marcaje manual en un solo paso.",
+    "📝 Notas en turno: Ya puedes anotar detalles de tu jornada sin tener que esperar a finalizarla.",
+    "💰 Descuento por faltas: Si faltas en la quincena, el descuento ahora se calcula de forma exacta y sin duplicar cobros.",
   ],
   "23.9.2": [
-    "Pestaña Año: Desplazamiento automático enfocado en la semana actual al entrar o seleccionar la pestaña.",
-    "Pestaña Ajustes: Edición y guardado individual de campos con confirmación previa y bloqueo de seguridad por defecto.",
-    "Pestaña Ajustes: Se eliminaron los botones redundantes 'Guardar Ajustes' y 'Refrescar datos' para un flujo más limpio.",
+    "📅 Calendario del Año: Al entrar a la pestaña Año, la pantalla va directo a tu semana actual para que no tengas que buscarla.",
+    "🔒 Ajustes protegidos: Ahora puedes editar cada dato con el icono de lápiz y confirmar antes de guardar, evitando cambios por accidente.",
+    "✨ Ajustes más limpios: Se quitaron botones innecesarios para que la pantalla sea más sencilla y clara.",
   ],
   "23.9.1": [
-    "Mejora de adaptabilidad: se corrigieron los formularios y pantallas emergentes para que el teclado no bloquee la vista en teléfonos pequeños.",
-    "Pestaña Quincena: diseño más compacto con cabecera fija y resumen de semanas en una sola línea.",
-    "Iconos para compartir los resúmenes semanales siempre accesibles en la pestaña Quincena.",
-    "Pestaña Nómina: desplazamiento automático enfocado en los periodos de pago activos.",
-    "Por ahora no es posible acceder a la aplicacion en las redes de Televisa, ya estamos trabajando con Televisa directamente para solucionarlo.",
+    "📱 Mejor vista en tu celular: Los formularios ahora se adaptan bien cuando se abre el teclado, sin tapar lo que estás escribiendo.",
+    "📋 Quincena más clara: Diseño más compacto para ver tus semanas y horas extra de un vistazo.",
+    "📤 Compartir resumen: Ahora es más fácil y rápido compartir tu reporte semanal por mensaje o correo.",
+    "💰 Nómina directa: La pestaña Nómina te muestra directo tu quincena activa sin tener que buscarla.",
+    "📶 Redes de Televisa: Seguimos trabajando para que la app funcione directo en las redes internas de la empresa.",
   ],
   "23.8.1": [
     "Se agregó la opción 'Festivo' para registrar y gestionar días feriados.",
@@ -455,12 +462,170 @@ class _LoginScreenState extends State<LoginScreen> {
   // Users must use Settings tab when logged in, or contact admin if locked out
 }
 
+double getNumericParamForDate(
+    DateTime date, List<dynamic> history, double fallback) {
+  final targetDate = DateTime(date.year, date.month, date.day);
+  if (history.isEmpty) return fallback;
+
+  List<Map<String, dynamic>> matching = [];
+
+  for (var raw in history) {
+    if (raw is! Map) continue;
+    final entry = Map<String, dynamic>.from(raw);
+
+    DateTime? startDate;
+    if (entry['start_date'] != null &&
+        entry['start_date'].toString().isNotEmpty) {
+      startDate = DateTime.tryParse(entry['start_date'].toString());
+    } else if (entry['effective_date'] != null &&
+        entry['effective_date'].toString().isNotEmpty) {
+      startDate = DateTime.tryParse(entry['effective_date'].toString());
+    }
+    if (startDate == null) continue;
+    final normalizedStart =
+        DateTime(startDate.year, startDate.month, startDate.day);
+
+    DateTime? endDate;
+    if (entry['end_date'] != null && entry['end_date'].toString().isNotEmpty) {
+      final parsedEnd = DateTime.tryParse(entry['end_date'].toString());
+      if (parsedEnd != null) {
+        endDate = DateTime(parsedEnd.year, parsedEnd.month, parsedEnd.day);
+      }
+    }
+
+    // Check if targetDate is in [normalizedStart, endDate ?? Present]
+    if (!targetDate.isBefore(normalizedStart)) {
+      if (endDate == null || !targetDate.isAfter(endDate)) {
+        matching.add({
+          'entry': entry,
+          'start': normalizedStart,
+          'end': endDate,
+        });
+      }
+    }
+  }
+
+  if (matching.isEmpty) {
+    // Backwards compatibility for legacy salary_history with 'previous_salary'
+    DateTime? earliestStart;
+    dynamic earliestVal;
+    for (var raw in history) {
+      if (raw is! Map) continue;
+      final entry = Map<String, dynamic>.from(raw);
+      DateTime? s = DateTime.tryParse(
+          (entry['start_date'] ?? entry['effective_date'] ?? '').toString());
+      if (s != null) {
+        if (earliestStart == null || s.isBefore(earliestStart)) {
+          earliestStart = s;
+          earliestVal = entry['previous_salary'] ?? entry['previous_value'];
+        }
+      }
+    }
+    if (earliestVal != null &&
+        earliestStart != null &&
+        targetDate.isBefore(earliestStart)) {
+      if (earliestVal is num) return earliestVal.toDouble();
+      return double.tryParse(earliestVal.toString()) ?? fallback;
+    }
+    return fallback;
+  }
+
+  // Sort matching entries: highest start_date first (most specific/latest period)
+  matching.sort(
+      (a, b) => (b['start'] as DateTime).compareTo(a['start'] as DateTime));
+  final chosen = matching.first['entry'] as Map<String, dynamic>;
+  final val = chosen['value'] ?? chosen['salary'];
+  if (val is num) return val.toDouble();
+  if (val != null) {
+    return double.tryParse(val.toString()) ?? fallback;
+  }
+  return fallback;
+}
+
+List<int> getRestDaysForDate(
+    DateTime date, List<dynamic> history, List<int> fallback) {
+  final targetDate = DateTime(date.year, date.month, date.day);
+  if (history.isEmpty) return fallback;
+
+  List<Map<String, dynamic>> matching = [];
+
+  for (var raw in history) {
+    if (raw is! Map) continue;
+    final entry = Map<String, dynamic>.from(raw);
+
+    DateTime? startDate;
+    if (entry['start_date'] != null &&
+        entry['start_date'].toString().isNotEmpty) {
+      startDate = DateTime.tryParse(entry['start_date'].toString());
+    } else if (entry['effective_date'] != null &&
+        entry['effective_date'].toString().isNotEmpty) {
+      startDate = DateTime.tryParse(entry['effective_date'].toString());
+    }
+    if (startDate == null) continue;
+    final normalizedStart =
+        DateTime(startDate.year, startDate.month, startDate.day);
+
+    DateTime? endDate;
+    if (entry['end_date'] != null && entry['end_date'].toString().isNotEmpty) {
+      final parsedEnd = DateTime.tryParse(entry['end_date'].toString());
+      if (parsedEnd != null) {
+        endDate = DateTime(parsedEnd.year, parsedEnd.month, parsedEnd.day);
+      }
+    }
+
+    // Check if targetDate is in [normalizedStart, endDate ?? Present]
+    if (!targetDate.isBefore(normalizedStart)) {
+      if (endDate == null || !targetDate.isAfter(endDate)) {
+        matching.add({
+          'entry': entry,
+          'start': normalizedStart,
+          'end': endDate,
+        });
+      }
+    }
+  }
+
+  if (matching.isEmpty) {
+    return fallback;
+  }
+
+  // Sort matching entries: highest start_date first (most specific/latest period)
+  matching.sort(
+      (a, b) => (b['start'] as DateTime).compareTo(a['start'] as DateTime));
+  final chosen = matching.first['entry'] as Map<String, dynamic>;
+  final rawDays = chosen['rest_days'];
+  if (rawDays is List) {
+    final parsed = rawDays
+        .map((e) => int.tryParse(e.toString()) ?? (e is int ? e : null))
+        .whereType<int>()
+        .where((d) => d >= 1 && d <= 7)
+        .toList();
+    if (parsed.isNotEmpty) {
+      parsed.sort();
+      return parsed;
+    }
+  }
+  return fallback;
+}
+
 class WorkDay {
+  static List<int> restDays = [DateTime.saturday, DateTime.sunday];
+  static List<Map<String, dynamic>> restDaysHistory = [];
+  static List<Map<String, dynamic>> salaryHistory = [];
+  static List<Map<String, dynamic>> jornadaHistory = [];
+  static double defaultSalary = 0.0;
+  static double defaultJornada = 9.5;
+
+  List<int> get applicableRestDays =>
+      getRestDaysForDate(entrada, restDaysHistory, restDays);
+
+  bool get isRestDay => applicableRestDays.contains(entrada.weekday);
+
   DateTime entrada;
   DateTime salida;
   DateTime? entradaReal; // Actual clock-in time (when button was pressed)
-  double sueldoBase;
-  double baseHours;
+  double _storedSueldoBase;
+  double _storedBaseHours;
   String id;
   bool isInProgress;
   bool esFalta;
@@ -474,8 +639,8 @@ class WorkDay {
       {required this.entrada,
       required this.salida,
       this.entradaReal,
-      required this.sueldoBase,
-      this.baseHours = 9.5,
+      double sueldoBase = 0.0,
+      double baseHours = 9.5,
       this.isInProgress = false,
       this.esFalta = false,
       this.esMantenimiento = false,
@@ -484,7 +649,29 @@ class WorkDay {
       this.festivoTrabajado = false,
       this.notas = "",
       String? id})
-      : id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
+      : _storedSueldoBase = sueldoBase,
+        _storedBaseHours = baseHours,
+        id = id ?? DateTime.now().millisecondsSinceEpoch.toString();
+
+  double get sueldoBase {
+    if (salaryHistory.isNotEmpty) {
+      return getNumericParamForDate(
+          entrada, salaryHistory, _storedSueldoBase > 0 ? _storedSueldoBase : defaultSalary);
+    }
+    return _storedSueldoBase > 0 ? _storedSueldoBase : defaultSalary;
+  }
+
+  set sueldoBase(double val) => _storedSueldoBase = val;
+
+  double get baseHours {
+    if (jornadaHistory.isNotEmpty) {
+      return getNumericParamForDate(
+          entrada, jornadaHistory, _storedBaseHours > 0 ? _storedBaseHours : defaultJornada);
+    }
+    return _storedBaseHours > 0 ? _storedBaseHours : defaultJornada;
+  }
+
+  set baseHours(double val) => _storedBaseHours = val;
 
   DateTime get effectiveStart {
     if (entradaReal != null && entradaReal!.isAfter(entrada)) {
@@ -534,9 +721,8 @@ class WorkDay {
 
   double get dailyPay {
     if (isInProgress || esFalta) return 0.0;
-    bool isWeekend = entrada.weekday == DateTime.saturday ||
-        entrada.weekday == DateTime.sunday;
-    double baseDailyPay = isWeekend ? sueldoBase * 2 : sueldoBase;
+    bool restDay = isRestDay;
+    double baseDailyPay = restDay ? sueldoBase * 2 : sueldoBase;
     if (esMantenimiento || esVacaciones || (esFestivo && !festivoTrabajado)) {
       return baseDailyPay;
     }
@@ -576,6 +762,9 @@ class WorkDay {
     }
     if (creditedExtraHours <= 0) return 0.0;
     if (esFestivo && festivoTrabajado) {
+      return creditedExtraHours * (hourlyRate * 3);
+    }
+    if (isRestDay) {
       return creditedExtraHours * (hourlyRate * 3);
     }
     return creditedExtraHours * (hourlyRate * 2);
@@ -672,8 +861,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
     return count;
   }
 
-  // Salary history to track changes with effective dates
+  // History lists to track changes with date ranges
   List<Map<String, dynamic>> _salaryHistory = [];
+  List<Map<String, dynamic>> _jornadaHistory = [];
+  List<Map<String, dynamic>> _retentionHistory = [];
+  List<Map<String, dynamic>> _fomentoHistory = [];
+  List<Map<String, dynamic>> _cuotaHistory = [];
+  List<Map<String, dynamic>> _restDaysHistory = [];
 
   // Theme preference (Dark OLED vs Soft Light)
   bool _isDarkMode = true;
@@ -704,6 +898,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
   final Map<String, String> _originalFieldValues = {};
   final Set<String> _editingFieldLabels = {};
+  List<int> _restDays = [DateTime.saturday, DateTime.sunday];
 
   late Timer _timer;
   Timer? _countdownTimer;
@@ -878,6 +1073,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     final TextEditingController salaryInputController = TextEditingController();
     final TextEditingController jornadaInputController =
         TextEditingController(text: "9.5");
+    List<int> onboardingRestDays = List<int>.from(_restDays);
 
     showDialog(
       context: context,
@@ -886,203 +1082,284 @@ class _TelevisaAppState extends State<TelevisaApp> {
         return PopScope(
           // Prevent back button from closing - user MUST complete setup
           canPop: false,
-          child: AlertDialog(
-      scrollable: true,
-            backgroundColor: Colors.grey[900],
-            title: const Column(
-              children: [
-                Icon(
-                  Icons.person_add,
-                  color: Colors.orange,
-                  size: 48,
-                ),
-                SizedBox(height: 16),
-                Text(
-                  "¡Bienvenido a Mi Nómina Pro!",
-                  style: TextStyle(
-                    color: Colors.orange,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Para poder calcular correctamente tus pagos y horas extras, necesitamos que nos proporciones la siguiente información:",
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    "SUELDO DIARIO BASE",
-                    style: TextStyle(
+          child: StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                scrollable: true,
+                backgroundColor: Colors.grey[900],
+                title: const Column(
+                  children: [
+                    Icon(
+                      Icons.person_add,
                       color: Colors.orange,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
+                      size: 48,
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: salaryInputController,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    decoration: const InputDecoration(
-                      hintText: "Ej: 876.47",
-                      hintStyle: TextStyle(color: Colors.white30),
-                      prefixText: "\$ ",
-                      prefixStyle:
-                          TextStyle(color: Colors.orange, fontSize: 20),
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.orange),
+                    SizedBox(height: 16),
+                    Text(
+                      "¡Bienvenido a Mi Nómina Pro!",
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.orange, width: 2),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Para poder calcular correctamente tus pagos y horas extras, necesitamos que nos proporciones la siguiente información:",
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    "HORAS BASE DIARIAS (JORNADA)",
-                    style: TextStyle(
-                      color: Colors.orange,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: jornadaInputController,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    decoration: const InputDecoration(
-                      hintText: "Ej: 9.5",
-                      hintStyle: TextStyle(color: Colors.white30),
-                      suffixText: " hrs",
-                      suffixStyle:
-                          TextStyle(color: Colors.white70, fontSize: 16),
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.orange),
+                      const SizedBox(height: 24),
+                      const Text(
+                        "SUELDO DIARIO BASE",
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(color: Colors.orange, width: 2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withAlpha(30),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.orange.withAlpha(60)),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.info_outline,
-                            color: Colors.orange, size: 20),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            "Esta información es necesaria para calcular tus horas extras y pagos correctamente.",
-                            style: TextStyle(
-                              color: Colors.orangeAccent,
-                              fontSize: 12,
-                            ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: salaryInputController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: "Ej: 876.47",
+                          hintStyle: TextStyle(color: Colors.white30),
+                          prefixText: "\$ ",
+                          prefixStyle:
+                              TextStyle(color: Colors.orange, fontSize: 20),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.orange),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide:
+                                BorderSide(color: Colors.orange, width: 2),
                           ),
                         ),
-                      ],
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        "HORAS BASE DIARIAS (JORNADA)",
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: jornadaInputController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        decoration: const InputDecoration(
+                          hintText: "Ej: 9.5",
+                          hintStyle: TextStyle(color: Colors.white30),
+                          suffixText: " hrs",
+                          suffixStyle:
+                              TextStyle(color: Colors.white70, fontSize: 16),
+                          enabledBorder: OutlineInputBorder(
+                            borderSide: BorderSide(color: Colors.orange),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderSide:
+                                BorderSide(color: Colors.orange, width: 2),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        "DÍAS DE DESCANSO",
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        "Selecciona tus días de descanso habituales (turno doble):",
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: List.generate(7, (index) {
+                          final int dayNum = index + 1; // 1: Lun .. 7: Dom
+                          const dialNames = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+                          final bool isSelected =
+                              onboardingRestDays.contains(dayNum);
+                          return InkWell(
+                            onTap: () {
+                              setDialogState(() {
+                                if (isSelected) {
+                                  onboardingRestDays.remove(dayNum);
+                                } else {
+                                  onboardingRestDays.add(dayNum);
+                                  onboardingRestDays.sort();
+                                }
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              width: 36,
+                              height: 38,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Colors.orange
+                                    : Colors.white.withAlpha(20),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? Colors.orangeAccent
+                                      : Colors.white24,
+                                  width: isSelected ? 2 : 1,
+                                ),
+                              ),
+                              child: Text(
+                                dialNames[index],
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? Colors.black
+                                      : Colors.white70,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withAlpha(30),
+                          borderRadius: BorderRadius.circular(8),
+                          border:
+                              Border.all(color: Colors.orange.withAlpha(60)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline,
+                                color: Colors.orange, size: 20),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                "Esta información es necesaria para calcular tus horas extras y pagos correctamente.",
+                                style: TextStyle(
+                                  color: Colors.orangeAccent,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        minimumSize: const Size(double.infinity, 50),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () async {
+                        // Validate inputs
+                        double? salary =
+                            double.tryParse(salaryInputController.text);
+                        double? jornada =
+                            double.tryParse(jornadaInputController.text);
+
+                        if (salary == null || salary <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Por favor ingresa un sueldo válido"),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+
+                        if (jornada == null || jornada <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Por favor ingresa una jornada válida"),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+
+                        // Update controllers and rest days
+                        setState(() {
+                          _salaryController.text = salary.toString();
+                          _baseHoursController.text = jornada.toString();
+                          _restDays = onboardingRestDays.isNotEmpty
+                              ? onboardingRestDays
+                              : [6, 7];
+                          WorkDay.restDays = _restDays;
+                        });
+
+                        // Save to cloud
+                        await _saveData();
+
+                        if (!context.mounted) return;
+                        Navigator.pop(context);
+
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text("¡Información guardada exitosamente!"),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                      },
+                      child: const Text(
+                        "GUARDAR Y CONTINUAR",
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ),
                 ],
-              ),
-            ),
-            actions: [
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.orange,
-                    minimumSize: const Size(double.infinity, 50),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: () async {
-                    // Validate inputs
-                    double? salary =
-                        double.tryParse(salaryInputController.text);
-                    double? jornada =
-                        double.tryParse(jornadaInputController.text);
-
-                    if (salary == null || salary <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Por favor ingresa un sueldo válido"),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                      return;
-                    }
-
-                    if (jornada == null || jornada <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Por favor ingresa una jornada válida"),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                      return;
-                    }
-
-                    // Update controllers
-                    setState(() {
-                      _salaryController.text = salary.toString();
-                      _baseHoursController.text = jornada.toString();
-                    });
-
-                    // Save to cloud
-                    await _saveData();
-
-                    if (!context.mounted) return;
-                    Navigator.pop(context);
-
-                    if (!context.mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text("¡Información guardada exitosamente!"),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
-                  },
-                  child: const Text(
-                    "GUARDAR Y CONTINUAR",
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+              );
+            },
           ),
         );
       },
@@ -1319,43 +1596,120 @@ class _TelevisaAppState extends State<TelevisaApp> {
     );
   }
 
-  // Helper to get applicable salary for a specific date
+  // Helpers to get applicable numeric parameters for a specific date using date-range history
   double _getSalaryForDate(DateTime date) {
-    // Normalize date to midnight for comparison
-    final normalizedDate = DateTime(date.year, date.month, date.day);
+    return getNumericParamForDate(
+        date, _salaryHistory, double.tryParse(_salaryController.text) ?? 0.0);
+  }
 
-    if (_salaryHistory.isEmpty) {
-      // No history at all - use current salary for everything
-      return double.tryParse(_salaryController.text) ?? 0.0;
-    }
+  double _getJornadaForDate(DateTime date) {
+    return getNumericParamForDate(
+        date, _jornadaHistory, double.tryParse(_baseHoursController.text) ?? 9.5);
+  }
 
-    // Sort history by effective date (oldest first)
-    final sortedHistory = [..._salaryHistory]..sort((a, b) {
-        final dateA = DateTime.parse(a['effective_date'] as String);
-        final dateB = DateTime.parse(b['effective_date'] as String);
-        return dateA.compareTo(dateB);
-      });
+  double _getRetentionForDate(DateTime date) {
+    return getNumericParamForDate(
+        date, _retentionHistory, double.tryParse(_retentionController.text) ?? 15.22);
+  }
 
-    // Initialize with the salary BEFORE the first change
-    // This is the 'previous_salary' of the earliest history entry
-    double applicableSalary =
-        (sortedHistory.first['previous_salary'] as num?)?.toDouble() ??
-            (sortedHistory.first['salary'] as num).toDouble();
+  double _getFomentoForDate(DateTime date) {
+    return getNumericParamForDate(
+        date, _fomentoHistory, double.tryParse(_fomentoController.text) ?? 2.0);
+  }
 
-    // Apply changes that occurred on or before the target date
-    for (var entry in sortedHistory) {
-      DateTime effectiveDate =
-          DateTime.parse(entry['effective_date'] as String);
+  double _getCuotaForDate(DateTime date) {
+    return getNumericParamForDate(
+        date, _cuotaHistory, double.tryParse(_cuotaController.text) ?? 2.0);
+  }
 
-      // Compare as dates, not strings
-      if (normalizedDate.isAtSameMomentAs(effectiveDate) ||
-          normalizedDate.isAfter(effectiveDate)) {
-        // This change has taken effect by the target date
-        applicableSalary = (entry['salary'] as num).toDouble();
+  List<int> _getRestDaysForDate(DateTime date) {
+    return getRestDaysForDate(date, _restDaysHistory, _restDays);
+  }
+
+  String _formatRestDaysDisplay(List<int> days) {
+    if (days.isEmpty) return "Ninguno";
+    const shortNames = {
+      1: 'Lun',
+      2: 'Mar',
+      3: 'Mié',
+      4: 'Jue',
+      5: 'Vie',
+      6: 'Sáb',
+      7: 'Dom',
+    };
+    final sorted = List<int>.from(days)..sort();
+    return sorted.map((d) => shortNames[d] ?? d.toString()).join(", ");
+  }
+
+  List<Map<String, dynamic>> _normalizeRestDaysHistoryList(dynamic rawList) {
+    if (rawList == null || rawList is! List) return [];
+    List<Map<String, dynamic>> result = [];
+    for (var item in rawList) {
+      if (item is Map) {
+        final map = Map<String, dynamic>.from(item);
+        final rawDays = map['rest_days'];
+        List<int> days = [];
+        if (rawDays is List) {
+          days = rawDays
+              .map((e) => int.tryParse(e.toString()) ?? (e is int ? e : null))
+              .whereType<int>()
+              .where((d) => d >= 1 && d <= 7)
+              .toList();
+          days.sort();
+        }
+        if (days.isEmpty) days = [DateTime.saturday, DateTime.sunday];
+
+        final sDate =
+            (map['start_date'] ?? map['effective_date'] ?? '').toString();
+        final eDate = (map['end_date'] ?? '').toString();
+
+        result.add({
+          'rest_days': days,
+          'start_date': sDate,
+          'end_date': (eDate.isEmpty || eDate == 'null') ? null : eDate,
+        });
       }
     }
+    return result;
+  }
 
-    return applicableSalary;
+  List<Map<String, dynamic>> _normalizeHistoryList(dynamic rawList,
+      {double? fallbackVal}) {
+    if (rawList == null || rawList is! List) return [];
+    List<Map<String, dynamic>> result = [];
+    for (var item in rawList) {
+      if (item is Map) {
+        final map = Map<String, dynamic>.from(item);
+        final valNum = (map['value'] ?? map['salary']) is num
+            ? (map['value'] ?? map['salary']).toDouble()
+            : (double.tryParse((map['value'] ?? map['salary'] ?? '').toString()) ??
+                (fallbackVal ?? 0.0));
+        final sDate =
+            (map['start_date'] ?? map['effective_date'] ?? '').toString();
+        final eDate = (map['end_date'] ?? '').toString();
+
+        Map<String, dynamic> entry = {
+          'value': valNum,
+          'start_date': sDate,
+          'end_date': (eDate.isEmpty || eDate == 'null') ? null : eDate,
+        };
+        if (map.containsKey('salary')) entry['salary'] = valNum;
+        if (map.containsKey('previous_salary')) {
+          entry['previous_salary'] = map['previous_salary'];
+        }
+        result.add(entry);
+      }
+    }
+    return result;
+  }
+
+  void _syncWorkDayStatics() {
+    WorkDay.restDays = _restDays;
+    WorkDay.restDaysHistory = _restDaysHistory;
+    WorkDay.salaryHistory = _salaryHistory;
+    WorkDay.jornadaHistory = _jornadaHistory;
+    WorkDay.defaultSalary = double.tryParse(_salaryController.text) ?? 0.0;
+    WorkDay.defaultJornada = double.tryParse(_baseHoursController.text) ?? 9.5;
   }
 
   CollectionReference get _userHistory => FirebaseFirestore.instance
@@ -1413,6 +1767,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
       await prefs.setString('history_v2', jsonHistory);
       await prefs.setString('salary', _salaryController.text);
       await prefs.setString('salary_history', jsonEncode(_salaryHistory));
+      await prefs.setString('jornada_history', jsonEncode(_jornadaHistory));
+      await prefs.setString('retention_history', jsonEncode(_retentionHistory));
+      await prefs.setString('fomento_history', jsonEncode(_fomentoHistory));
+      await prefs.setString('cuota_history', jsonEncode(_cuotaHistory));
+      await prefs.setString('rest_days_history', jsonEncode(_restDaysHistory));
+      await prefs.setStringList(
+          'rest_days', _restDays.map((e) => e.toString()).toList());
       await prefs.setString('base_hours', _baseHoursController.text);
       await prefs.setString('retention', _retentionController.text);
       await prefs.setString('fomento', _fomentoController.text);
@@ -1446,7 +1807,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
             {
               'salary': _salaryController.text,
               'salary_history': _salaryHistory,
+              'jornada_history': _jornadaHistory,
+              'retention_history': _retentionHistory,
+              'fomento_history': _fomentoHistory,
+              'cuota_history': _cuotaHistory,
+              'rest_days_history': _restDaysHistory,
               'base_hours': _baseHoursController.text,
+              'rest_days': _restDays,
               'retention': _retentionController.text,
               'fomento': _fomentoController.text,
               'cuota': _cuotaController.text,
@@ -1510,16 +1877,85 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _isDarkMode = prefs.getBool('app_is_dark_mode') ?? true;
       _salaryController.text = prefs.getString('salary') ?? "";
 
-      // Load salary history
+      // Load history lists
       String? salaryHistoryJson = prefs.getString('salary_history');
       if (salaryHistoryJson != null && salaryHistoryJson.isNotEmpty) {
         try {
-          _salaryHistory =
-              List<Map<String, dynamic>>.from(jsonDecode(salaryHistoryJson));
+          _salaryHistory = _normalizeHistoryList(jsonDecode(salaryHistoryJson));
         } catch (e) {
           _salaryHistory = [];
         }
+      } else {
+        _salaryHistory = [];
       }
+
+      String? jornadaHistoryJson = prefs.getString('jornada_history');
+      if (jornadaHistoryJson != null && jornadaHistoryJson.isNotEmpty) {
+        try {
+          _jornadaHistory = _normalizeHistoryList(jsonDecode(jornadaHistoryJson));
+        } catch (e) {
+          _jornadaHistory = [];
+        }
+      } else {
+        _jornadaHistory = [];
+      }
+
+      String? retentionHistoryJson = prefs.getString('retention_history');
+      if (retentionHistoryJson != null && retentionHistoryJson.isNotEmpty) {
+        try {
+          _retentionHistory = _normalizeHistoryList(jsonDecode(retentionHistoryJson));
+        } catch (e) {
+          _retentionHistory = [];
+        }
+      } else {
+        _retentionHistory = [];
+      }
+
+      String? fomentoHistoryJson = prefs.getString('fomento_history');
+      if (fomentoHistoryJson != null && fomentoHistoryJson.isNotEmpty) {
+        try {
+          _fomentoHistory = _normalizeHistoryList(jsonDecode(fomentoHistoryJson));
+        } catch (e) {
+          _fomentoHistory = [];
+        }
+      } else {
+        _fomentoHistory = [];
+      }
+
+      String? cuotaHistoryJson = prefs.getString('cuota_history');
+      if (cuotaHistoryJson != null && cuotaHistoryJson.isNotEmpty) {
+        try {
+          _cuotaHistory = _normalizeHistoryList(jsonDecode(cuotaHistoryJson));
+        } catch (e) {
+          _cuotaHistory = [];
+        }
+      } else {
+        _cuotaHistory = [];
+      }
+
+      String? restDaysHistoryJson = prefs.getString('rest_days_history');
+      if (restDaysHistoryJson != null && restDaysHistoryJson.isNotEmpty) {
+        try {
+          _restDaysHistory =
+              _normalizeRestDaysHistoryList(jsonDecode(restDaysHistoryJson));
+        } catch (e) {
+          _restDaysHistory = [];
+        }
+      } else {
+        _restDaysHistory = [];
+      }
+
+      List<String>? savedRestDays = prefs.getStringList('rest_days');
+      if (savedRestDays != null && savedRestDays.isNotEmpty) {
+        _restDays = savedRestDays
+            .map((e) => int.tryParse(e) ?? 0)
+            .where((e) => e >= 1 && e <= 7)
+            .toList();
+      } else {
+        _restDays = [6, 7];
+      }
+      WorkDay.restDays = _restDays;
+      WorkDay.restDaysHistory = _restDaysHistory;
 
       _baseHoursController.text = prefs.getString('base_hours') ?? "9.5";
       _retentionController.text = prefs.getString('retention') ?? "15.22";
@@ -1568,6 +2004,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
             List<WorkDay>.from(l.map((model) => WorkDay.fromJson(model)));
         _weeklyHistory.sort((a, b) => b.entrada.compareTo(a.entrada));
       }
+      _syncWorkDayStatics();
     });
 
     if (user != null) {
@@ -1581,12 +2018,42 @@ class _TelevisaAppState extends State<TelevisaApp> {
         setState(() {
           _salaryController.text = data['salary'] ?? _salaryController.text;
 
-          // Load salary history from cloud
+          // Load history lists from cloud
           if (data['salary_history'] != null) {
-            _salaryHistory =
-                List<Map<String, dynamic>>.from(data['salary_history']);
-            // Also save locally
+            _salaryHistory = _normalizeHistoryList(data['salary_history']);
             prefs.setString('salary_history', jsonEncode(_salaryHistory));
+          }
+          if (data['jornada_history'] != null) {
+            _jornadaHistory = _normalizeHistoryList(data['jornada_history']);
+            prefs.setString('jornada_history', jsonEncode(_jornadaHistory));
+          }
+          if (data['retention_history'] != null) {
+            _retentionHistory = _normalizeHistoryList(data['retention_history']);
+            prefs.setString('retention_history', jsonEncode(_retentionHistory));
+          }
+          if (data['fomento_history'] != null) {
+            _fomentoHistory = _normalizeHistoryList(data['fomento_history']);
+            prefs.setString('fomento_history', jsonEncode(_fomentoHistory));
+          }
+          if (data['cuota_history'] != null) {
+            _cuotaHistory = _normalizeHistoryList(data['cuota_history']);
+            prefs.setString('cuota_history', jsonEncode(_cuotaHistory));
+          }
+          if (data['rest_days_history'] != null) {
+            _restDaysHistory =
+                _normalizeRestDaysHistoryList(data['rest_days_history']);
+            prefs.setString(
+                'rest_days_history', jsonEncode(_restDaysHistory));
+          }
+          _syncWorkDayStatics();
+
+          if (data['rest_days'] != null) {
+            _restDays = List<int>.from(
+                (data['rest_days'] as List).map((x) => (x as num).toInt()));
+            if (_restDays.isEmpty) _restDays = [6, 7];
+            prefs.setStringList(
+                'rest_days', _restDays.map((e) => e.toString()).toList());
+            WorkDay.restDays = _restDays;
           }
 
           _baseHoursController.text = data['base_hours'] ?? "9.5";
@@ -1706,7 +2173,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
   Map<WorkDay, OvertimeBreakdown> calculateWeeklyOvertimeBreakdown(
       List<WorkDay> weekDays) {
     final sortedDays = [...weekDays]
-      ..sort((a, b) => a.entrada.compareTo(a.entrada));
+      ..sort((a, b) => a.entrada.compareTo(b.entrada));
 
     double accumulatedCreditedOT = 0.0;
     final Map<WorkDay, OvertimeBreakdown> result = {};
@@ -1718,24 +2185,34 @@ class _TelevisaAppState extends State<TelevisaApp> {
           !day.esMantenimiento &&
           !day.esFestivo &&
           day.creditedExtraHours > 0) {
-        double remainingOT = day.creditedExtraHours;
         double hourlyRate = day.hourlyRate; // sueldoBase / baseHours
 
-        while (remainingOT > 0.001) {
-          double remaining2xQuota =
-              (9.0 - accumulatedCreditedOT).clamp(0.0, double.infinity);
-          if (remaining2xQuota > 0) {
-            double h2x = remainingOT.clamp(0.0, remaining2xQuota);
-            breakdown.hours2x += h2x;
-            breakdown.pay2x += h2x * hourlyRate * 2;
-            accumulatedCreditedOT += h2x;
-            remainingOT -= h2x;
-          } else {
-            double h3x = remainingOT;
-            breakdown.hours3x += h3x;
-            breakdown.pay3x += h3x * hourlyRate * 3;
-            accumulatedCreditedOT += h3x;
-            remainingOT = 0;
+        if (day.isRestDay) {
+          // Rest-day overtime is 100% 3x and does not consume regular 9h quota
+          double h3x = day.creditedExtraHours;
+          breakdown.hours2x = 0.0;
+          breakdown.pay2x = 0.0;
+          breakdown.hours3x = h3x;
+          breakdown.pay3x = h3x * hourlyRate * 3;
+        } else {
+          double remainingOT = day.creditedExtraHours;
+
+          while (remainingOT > 0.001) {
+            double remaining2xQuota =
+                (9.0 - accumulatedCreditedOT).clamp(0.0, double.infinity);
+            if (remaining2xQuota > 0) {
+              double h2x = remainingOT.clamp(0.0, remaining2xQuota);
+              breakdown.hours2x += h2x;
+              breakdown.pay2x += h2x * hourlyRate * 2;
+              accumulatedCreditedOT += h2x;
+              remainingOT -= h2x;
+            } else {
+              double h3x = remainingOT;
+              breakdown.hours3x += h3x;
+              breakdown.pay3x += h3x * hourlyRate * 3;
+              accumulatedCreditedOT += h3x;
+              remainingOT = 0;
+            }
           }
         }
       }
@@ -2090,7 +2567,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         backgroundColor: Colors.blueAccent));
 
     final double salaryForDate = _getSalaryForDate(assignedTime);
-    final double bHrs = double.tryParse(_baseHoursController.text) ?? 9.5;
+    final double bHrs = _getJornadaForDate(assignedTime);
 
     final inProgressDay = WorkDay(
       entrada: assignedTime,
@@ -2155,7 +2632,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
     } else {
       final double salaryForDate =
           _getSalaryForDate(_entradaDateTime ?? salidaTime);
-      final double bHrs = double.tryParse(_baseHoursController.text) ?? 9.5;
+      final double bHrs =
+          _getJornadaForDate(_entradaDateTime ?? salidaTime);
       shift = WorkDay(
         entrada: _entradaDateTime ?? salidaTime,
         salida: salidaTime,
@@ -2666,7 +3144,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.11.1 13/10/26",
+                "v.23.12.1 15/10/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,
@@ -3339,9 +3817,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     final double normalHrs =
         day.totalHours > day.baseHours ? day.baseHours : day.totalHours;
 
-    bool startedOnWeekend =
-        day.entrada.weekday == DateTime.saturday ||
-        day.entrada.weekday == DateTime.sunday;
+    bool startedOnWeekend = day.isRestDay;
 
     Color cardColor;
     Color headerColor;
@@ -3560,9 +4036,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
                           "${day.totalHours.toStringAsFixed(2)} hrs totales"),
                       _statDetail(
                           "DESGLOSE DE PAGO",
-                          "\$${day.dailyPay.toStringAsFixed(2)} Base\n"
-                          "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
-                          "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}",
+                          day.isRestDay
+                              ? "\$${day.sueldoBase.toStringAsFixed(2)} Base\n"
+                                  "\$${day.sueldoBase.toStringAsFixed(2)} Día de descanso\n"
+                                  "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
+                                  "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}"
+                              : "\$${day.dailyPay.toStringAsFixed(2)} Base\n"
+                                  "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
+                                  "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}",
                           "\$${(day.dailyPay + realExtrasPay).toStringAsFixed(2)}",
                           isMoney: true),
                     ],
@@ -4529,9 +5010,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                   entrada: noon,
                                   salida: noon,
                                   sueldoBase: salaryForDate,
-                                  baseHours: double.tryParse(
-                                          _baseHoursController.text) ??
-                                      9.5,
+                                  baseHours: _getJornadaForDate(noon),
                                   esVacaciones: true));
                             },
                       isCompact: true),
@@ -4558,9 +5037,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                   entrada: noon,
                                   salida: noon,
                                   sueldoBase: salaryForDate,
-                                  baseHours: double.tryParse(
-                                          _baseHoursController.text) ??
-                                      9.5,
+                                  baseHours: _getJornadaForDate(noon),
                                   esFalta: true));
                             },
                       isCompact: true),
@@ -4588,9 +5065,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                             entrada: noon,
                             salida: noon,
                             sueldoBase: salaryForDate,
-                            baseHours: double.tryParse(
-                                    _baseHoursController.text) ??
-                                9.5,
+                            baseHours: _getJornadaForDate(noon),
                             esFestivo: true,
                             festivoTrabajado: false));
                       },
@@ -5290,9 +5765,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     );
                   }
 
-                  bool startedOnWeekend =
-                      day.entrada.weekday == DateTime.saturday ||
-                          day.entrada.weekday == DateTime.sunday;
+                  bool startedOnWeekend = day.isRestDay;
                   double normalHrs = day.totalHours > day.baseHours
                       ? day.baseHours
                       : day.totalHours;
@@ -5576,9 +6049,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                         "${day.totalHours.toStringAsFixed(2)} hrs totales"),
                                     _statDetail(
                                         "DESGLOSE DE PAGO",
-                                        "\$${day.dailyPay.toStringAsFixed(2)} Base\n"
-                                            "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
-                                            "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}",
+                                        _restDays.contains(day.entrada.weekday)
+                                            ? "\$${day.sueldoBase.toStringAsFixed(2)} Base\n"
+                                                "\$${day.sueldoBase.toStringAsFixed(2)} Día de descanso\n"
+                                                "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
+                                                "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}"
+                                            : "\$${day.dailyPay.toStringAsFixed(2)} Base\n"
+                                                "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
+                                                "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}",
                                         "\$${(day.dailyPay + realExtrasPay).toStringAsFixed(2)}",
                                         isMoney: true)
                                   ])
@@ -6329,12 +6807,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
   }
 
   Widget _buildNominaTab() {
-    double retentionPct = double.tryParse(_retentionController.text) ?? 15.22;
-    double fomentoRate =
-        (double.tryParse(_fomentoController.text) ?? 2.0) / 100.0;
-    double cuotaSindicalRate =
-        (double.tryParse(_cuotaController.text) ?? 2.0) / 100.0;
-
     // Get current date info for determining quincena status
     DateTime now = DateTime.now();
 
@@ -6602,6 +7074,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
         // A standard Mexican quincena represents 15 calendar days of base salary.
         DateTime referenceDate = payoutDate ?? now;
         double applicableSalary = _getSalaryForDate(referenceDate);
+        double applicableRetention = _getRetentionForDate(referenceDate);
+        double applicableFomentoRate =
+            _getFomentoForDate(referenceDate) / 100.0;
+        double applicableCuotaRate =
+            _getCuotaForDate(referenceDate) / 100.0;
         double baseQuincena = applicableSalary * 15;
 
         int faltasCount = matched.where((d) => d.esFalta).length;
@@ -6656,18 +7133,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
         }
 
         double weekendBonus = matched
-            .where((d) => d.entrada.weekday > 5 && !d.esFalta)
+            .where((d) => d.isRestDay && !d.esFalta)
             .fold(0, (totalSum, d) => totalSum + d.dailyPay);
-        double fomentoEficiencia = baseEarned * fomentoRate;
+        double fomentoEficiencia = baseEarned * applicableFomentoRate;
         double totalBruto = baseEarned +
             fomentoEficiencia +
             totalExtras +
             weekendBonus;
         if (totalBruto < 0) totalBruto = 0.0;
 
-        double cuotaSindical = baseEarned * cuotaSindicalRate;
+        double cuotaSindical = baseEarned * applicableCuotaRate;
         double isrEstimate =
-            totalBruto > 0 ? totalBruto * (retentionPct / 100) : 0.0;
+            totalBruto > 0 ? totalBruto * (applicableRetention / 100) : 0.0;
         double netDeposit = totalBruto - (isrEstimate + cuotaSindical);
         if (netDeposit < 0) netDeposit = 0.0;
         return Card(
@@ -7206,154 +7683,156 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
                   fontWeight: FontWeight.bold,
                   fontSize: 20)),
-          const SizedBox(height: 20),
-          _buildSettTextField(_salaryController, "Sueldo Diario Base (Actual)",
-              prefix: "\$ "),
-
-          // Show salary history if available
-          if (_salaryHistory.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: _isDarkMode
-                    ? Colors.orange.withAlpha(15)
-                    : const Color(0xFFFFF7ED),
-                borderRadius: BorderRadius.circular(12),
-                border: _isDarkMode
-                    ? Border.all(color: Colors.orange.withAlpha(50))
-                    : Border.all(
-                        color: const Color(0xFFFED7AA), width: 1.4),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        "HISTORIAL DE CAMBIOS DE SUELDO",
-                        style: TextStyle(
-                          color: _isDarkMode
-                              ? Colors.orange
-                              : const Color(0xFFC2410C),
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                        ),
-                      ),
-                      if (_salaryHistory.length > 1)
-                        TextButton.icon(
-                          onPressed: () => _showClearSalaryHistoryDialog(),
-                          icon: Icon(Icons.delete_forever,
-                              color: _isDarkMode
-                                  ? Colors.redAccent
-                                  : const Color(0xFFDC2626),
-                              size: 16),
-                          label: Text(
-                            "BORRAR TODO",
-                            style: TextStyle(
-                                color: _isDarkMode
-                                    ? Colors.redAccent
-                                    : const Color(0xFFDC2626),
-                                fontSize: 11),
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  ..._salaryHistory.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final historyEntry = entry.value;
-                    final date = DateTime.parse(
-                        historyEntry['effective_date'] as String);
-                    final salary = (historyEntry['salary'] as num).toDouble();
-                    final prevSalary = historyEntry['previous_salary'] != null
-                        ? (historyEntry['previous_salary'] as num).toDouble()
-                        : null;
-
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  "Desde: ${DateFormat('dd/MM/yyyy').format(date)}",
-                                  style: TextStyle(
-                                    color: _isDarkMode
-                                        ? Colors.white70
-                                        : Colors.black,
-                                    fontSize: 13,
-                                    fontWeight: _isDarkMode
-                                        ? FontWeight.normal
-                                        : FontWeight.w600,
-                                  ),
-                                ),
-                                if (prevSalary != null)
-                                  Text(
-                                    "Anterior: \$${prevSalary.toStringAsFixed(2)}",
-                                    style: TextStyle(
-                                      color: _isDarkMode
-                                          ? Colors.white.withAlpha(128)
-                                          : Colors.black87,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              Text(
-                                "\$${salary.toStringAsFixed(2)}",
-                                style: TextStyle(
-                                  color: _isDarkMode
-                                      ? Colors.greenAccent
-                                      : const Color(0xFF15803D),
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // Delete button for individual entry (except the first/original)
-                              if (index > 0 || _salaryHistory.length > 1)
-                                IconButton(
-                                  icon: Icon(Icons.delete_outline,
-                                      color: _isDarkMode
-                                          ? Colors.redAccent
-                                          : const Color(0xFFDC2626),
-                                      size: 20),
-                                  onPressed: () =>
-                                      _showDeleteSalaryEntryDialog(index),
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  tooltip: "Eliminar este cambio",
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
+          const SizedBox(height: 8),
+          Text(
+            "Toca cualquier ajuste para consultar o registrar su historial de vigencias por rango de fechas.",
+            style: TextStyle(
+              color: _isDarkMode ? Colors.white60 : const Color(0xFF64748B),
+              fontSize: 13,
             ),
-          ],
+          ),
+          const SizedBox(height: 18),
 
-          _buildSettTextField(
-              _baseHoursController, "Horas Base Diarias (Jornada)",
-              suffix: " hrs"),
-          _buildSettTextField(_retentionController, "Retención I.S.R. (%)",
-              suffix: "%"),
-          _buildSettTextField(_fomentoController, "Fomento Eficiencia (%)",
-              suffix: "%"),
-          _buildSettTextField(_cuotaController, "Cuota Sindical (%)",
-              suffix: "%"),
+          // 1. Sueldo Diario Base
+          _buildNumericSettingCard(
+            title: "Sueldo Diario Base",
+            valueDisplay: "\$ ${_getSalaryForDate(DateTime.now()).toStringAsFixed(2)}",
+            periodCount: _salaryHistory.length,
+            icon: Icons.attach_money,
+            onTap: () => _navigateToParamHistory(
+              title: "Sueldo Diario Base",
+              unitPrefix: "\$ ",
+              unitSuffix: "",
+              controller: _salaryController,
+              history: _salaryHistory,
+              icon: Icons.attach_money,
+              isSalary: true,
+              onSave: (updatedHistory, newBaseValue) async {
+                setState(() {
+                  _salaryHistory = updatedHistory;
+                  if (newBaseValue != null) {
+                    _salaryController.text = newBaseValue.toStringAsFixed(2);
+                  }
+                  _syncWorkDayStatics();
+                });
+                await _saveData(checkSalaryChange: false);
+              },
+            ),
+          ),
+
+          // 2. Horas Base Diarias (Jornada)
+          _buildNumericSettingCard(
+            title: "Horas Base Diarias (Jornada)",
+            valueDisplay: "${_getJornadaForDate(DateTime.now()).toStringAsFixed(1)} hrs",
+            periodCount: _jornadaHistory.length,
+            icon: Icons.access_time_rounded,
+            onTap: () => _navigateToParamHistory(
+              title: "Horas Base Diarias (Jornada)",
+              unitPrefix: "",
+              unitSuffix: " hrs",
+              controller: _baseHoursController,
+              history: _jornadaHistory,
+              icon: Icons.access_time_rounded,
+              onSave: (updatedHistory, newBaseValue) async {
+                setState(() {
+                  _jornadaHistory = updatedHistory;
+                  if (newBaseValue != null) {
+                    _baseHoursController.text = newBaseValue.toString();
+                  }
+                  _syncWorkDayStatics();
+                });
+                await _saveData(checkSalaryChange: false);
+              },
+            ),
+          ),
+
+          // 3. Días de Descanso
+          _buildNumericSettingCard(
+            title: "Días de Descanso",
+            valueDisplay:
+                _formatRestDaysDisplay(_getRestDaysForDate(DateTime.now())),
+            periodCount: _restDaysHistory.length,
+            subtitle: _restDaysHistory.isEmpty
+                ? "Sin historial (días base fijos)"
+                : null,
+            icon: Icons.calendar_month_rounded,
+            onTap: () => _navigateToRestDaysHistory(),
+          ),
+
+          // 3. Retención I.S.R. (%)
+          _buildNumericSettingCard(
+            title: "Retención I.S.R.",
+            valueDisplay: "${_getRetentionForDate(DateTime.now()).toStringAsFixed(2)} %",
+            periodCount: _retentionHistory.length,
+            icon: Icons.percent,
+            onTap: () => _navigateToParamHistory(
+              title: "Retención I.S.R.",
+              unitPrefix: "",
+              unitSuffix: " %",
+              controller: _retentionController,
+              history: _retentionHistory,
+              icon: Icons.percent,
+              onSave: (updatedHistory, newBaseValue) async {
+                setState(() {
+                  _retentionHistory = updatedHistory;
+                  if (newBaseValue != null) {
+                    _retentionController.text = newBaseValue.toString();
+                  }
+                });
+                await _saveData(checkSalaryChange: false);
+              },
+            ),
+          ),
+
+          // 4. Fomento Eficiencia (%)
+          _buildNumericSettingCard(
+            title: "Fomento a la Eficiencia",
+            valueDisplay: "${_getFomentoForDate(DateTime.now()).toStringAsFixed(2)} %",
+            periodCount: _fomentoHistory.length,
+            icon: Icons.trending_up,
+            onTap: () => _navigateToParamHistory(
+              title: "Fomento a la Eficiencia",
+              unitPrefix: "",
+              unitSuffix: " %",
+              controller: _fomentoController,
+              history: _fomentoHistory,
+              icon: Icons.trending_up,
+              onSave: (updatedHistory, newBaseValue) async {
+                setState(() {
+                  _fomentoHistory = updatedHistory;
+                  if (newBaseValue != null) {
+                    _fomentoController.text = newBaseValue.toString();
+                  }
+                });
+                await _saveData(checkSalaryChange: false);
+              },
+            ),
+          ),
+
+          // 5. Cuota Sindical (%)
+          _buildNumericSettingCard(
+            title: "Cuota Sindical",
+            valueDisplay: "${_getCuotaForDate(DateTime.now()).toStringAsFixed(2)} %",
+            periodCount: _cuotaHistory.length,
+            icon: Icons.groups_rounded,
+            onTap: () => _navigateToParamHistory(
+              title: "Cuota Sindical",
+              unitPrefix: "",
+              unitSuffix: " %",
+              controller: _cuotaController,
+              history: _cuotaHistory,
+              icon: Icons.groups_rounded,
+              onSave: (updatedHistory, newBaseValue) async {
+                setState(() {
+                  _cuotaHistory = updatedHistory;
+                  if (newBaseValue != null) {
+                    _cuotaController.text = newBaseValue.toString();
+                  }
+                });
+                await _saveData(checkSalaryChange: false);
+              },
+            ),
+          ),
           const SizedBox(height: 20),
           OutlinedButton(
               style: OutlinedButton.styleFrom(
@@ -7670,90 +8149,132 @@ class _TelevisaAppState extends State<TelevisaApp> {
     });
   }
 
-  void _showDeleteSalaryEntryDialog(int index) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-      scrollable: true,
-        backgroundColor: Colors.grey[900],
-        title: const Text("Eliminar Cambio de Sueldo",
-            style: TextStyle(
-                color: Colors.orange,
-                fontSize: 20,
-                fontWeight: FontWeight.bold)),
-        content: const Text(
-          "¿Estás seguro de que deseas eliminar este cambio de sueldo? Los registros de trabajo existentes mantendrán sus valores, pero los cálculos futuros usarán el sueldo anterior.",
-          style: TextStyle(color: Colors.white70, fontSize: 14),
+  void _navigateToParamHistory({
+    required String title,
+    required String unitPrefix,
+    required String unitSuffix,
+    required TextEditingController controller,
+    required List<Map<String, dynamic>> history,
+    required IconData icon,
+    required Function(List<Map<String, dynamic>> updatedHistory, double? newBaseValue) onSave,
+    bool isSalary = false,
+  }) async {
+    final double currVal = double.tryParse(controller.text) ?? 0.0;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ParameterHistoryScreen(
+          title: title,
+          unitPrefix: unitPrefix,
+          unitSuffix: unitSuffix,
+          currentValue: currVal,
+          history: history,
+          isDarkMode: _isDarkMode,
+          icon: icon,
+          isSalary: isSalary,
+          onCommit: (updatedHistory, newActiveValue) async {
+            await onSave(updatedHistory, newActiveValue);
+          },
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child:
-                const Text("CANCELAR", style: TextStyle(color: Colors.white54)),
-          ),
-          TextButton(
-            onPressed: () async {
-              setState(() {
-                _salaryHistory.removeAt(index);
-              });
-              await _saveData(checkSalaryChange: false);
-              if (!context.mounted) return;
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Cambio de sueldo eliminado"),
-                  backgroundColor: Colors.orange,
-                ),
-              );
-            },
-            child: const Text("ELIMINAR",
-                style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
       ),
     );
   }
 
-  void _showClearSalaryHistoryDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-      scrollable: true,
-        backgroundColor: Colors.grey[900],
-        title: const Text("Borrar Todo el Historial",
-            style: TextStyle(
-                color: Colors.redAccent,
-                fontSize: 20,
-                fontWeight: FontWeight.bold)),
-        content: const Text(
-          "¿Estás seguro de que deseas borrar TODO el historial de cambios de sueldo? Se mantendrá solo el sueldo actual. Esta acción no se puede deshacer.",
-          style: TextStyle(color: Colors.white70, fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child:
-                const Text("CANCELAR", style: TextStyle(color: Colors.white54)),
-          ),
-          TextButton(
-            onPressed: () async {
-              setState(() {
-                _salaryHistory = [];
-              });
-              await _saveData(checkSalaryChange: false);
-              if (!context.mounted) return;
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Historial de sueldos borrado"),
-                  backgroundColor: Colors.redAccent,
-                ),
-              );
-            },
-            child: const Text("BORRAR TODO",
-                style: TextStyle(color: Colors.redAccent)),
+  Widget _buildNumericSettingCard({
+    required String title,
+    required String valueDisplay,
+    required int periodCount,
+    required VoidCallback onTap,
+    required IconData icon,
+    String? subtitle,
+  }) {
+    final Color accentColor =
+        _isDarkMode ? Colors.orange : const Color(0xFFC2410C);
+    final Color cardBg = _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+    final Color borderColor =
+        _isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
+    final Color textColor = _isDarkMode ? Colors.white : Colors.black87;
+    final Color subtextColor =
+        _isDarkMode ? Colors.white54 : const Color(0xFF64748B);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(_isDarkMode ? 30 : 10),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           ),
         ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: accentColor.withAlpha(_isDarkMode ? 35 : 25),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon, color: accentColor, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        subtitle ??
+                            (periodCount == 0
+                                ? "Sin historial (valor base fijo)"
+                                : "$periodCount ${periodCount == 1 ? 'periodo configurado' : 'periodos configurados'}"),
+                        style: TextStyle(
+                          color: subtextColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  valueDisplay,
+                  style: TextStyle(
+                    color: accentColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.chevron_right,
+                  color: _isDarkMode ? Colors.white38 : Colors.grey.shade400,
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -8422,7 +8943,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     color: _isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.11.1 13/10/26",
+            Text("Versión v.23.12.1 15/10/26",
                 style: TextStyle(
                     color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
                     fontSize: 14)),
@@ -8465,7 +8986,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
       Map<String, dynamic> exportData = {
         'salary': _salaryController.text,
         'salary_history': _salaryHistory,
+        'jornada_history': _jornadaHistory,
+        'retention_history': _retentionHistory,
+        'fomento_history': _fomentoHistory,
+        'cuota_history': _cuotaHistory,
+        'rest_days_history': _restDaysHistory,
         'base_hours': _baseHoursController.text,
+        'rest_days': _restDays,
         'retention': _retentionController.text,
         'fomento': _fomentoController.text,
         'cuota': _cuotaController.text,
@@ -8531,10 +9058,36 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 setState(() {
                   _salaryController.text = data['salary'] ?? "";
 
-                  // Import salary history
+                  // Import history lists
                   if (data['salary_history'] != null) {
                     _salaryHistory =
-                        List<Map<String, dynamic>>.from(data['salary_history']);
+                        _normalizeHistoryList(data['salary_history']);
+                  }
+                  if (data['jornada_history'] != null) {
+                    _jornadaHistory =
+                        _normalizeHistoryList(data['jornada_history']);
+                  }
+                  if (data['retention_history'] != null) {
+                    _retentionHistory =
+                        _normalizeHistoryList(data['retention_history']);
+                  }
+                  if (data['fomento_history'] != null) {
+                    _fomentoHistory =
+                        _normalizeHistoryList(data['fomento_history']);
+                  }
+                  if (data['cuota_history'] != null) {
+                    _cuotaHistory =
+                        _normalizeHistoryList(data['cuota_history']);
+                  }
+                  if (data['rest_days_history'] != null) {
+                    _restDaysHistory =
+                        _normalizeRestDaysHistoryList(data['rest_days_history']);
+                  }
+
+                  if (data['rest_days'] != null) {
+                    _restDays = List<int>.from(
+                        (data['rest_days'] as List).map((x) => (x as num).toInt()));
+                    WorkDay.restDays = _restDays;
                   }
 
                   _baseHoursController.text = data['base_hours'] ?? "9.5";
@@ -8552,8 +9105,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     _weeklyHistory
                         .sort((a, b) => b.entrada.compareTo(a.entrada));
                   }
+                  _syncWorkDayStatics();
                 });
-                await _saveData();
+                await _saveData(checkSalaryChange: false);
 
                 if (!dialogContext.mounted) return;
                 Navigator.pop(dialogContext);
@@ -8677,6 +9231,27 @@ class _TelevisaAppState extends State<TelevisaApp> {
       });
       await _saveData();
     }
+  }
+
+  Future<void> _navigateToRestDaysHistory() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RestDaysHistoryScreen(
+          history: _restDaysHistory,
+          baseRestDays: _restDays,
+          isDarkMode: _isDarkMode,
+          onCommit: (updatedHistory, newBaseRestDays) async {
+            setState(() {
+              _restDaysHistory = updatedHistory;
+              _restDays = newBaseRestDays;
+              _syncWorkDayStatics();
+            });
+            await _saveData(checkSalaryChange: false);
+          },
+        ),
+      ),
+    );
   }
 
   Widget _buildSettTextField(TextEditingController controller, String label,
@@ -9283,8 +9858,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
           final breakdown = weeklyOTMap[day] ?? OvertimeBreakdown();
           final double realExtrasPay = breakdown.totalPay;
 
-          bool startedOnWeekend = day.entrada.weekday == DateTime.saturday ||
-              day.entrada.weekday == DateTime.sunday;
+          bool startedOnWeekend = day.isRestDay;
           double normalHrs =
               day.totalHours > day.baseHours ? day.baseHours : day.totalHours;
 
@@ -9620,27 +10194,34 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       children: [
                         if (day.esFestivo && day.festivoTrabajado)
                           _statDetail(
-                            "HORAS",
+                            "DESGLOSE DE HORAS",
                             "${normalHrs.toStringAsFixed(1)}h Base\n${day.holidayExtraHours.toStringAsFixed(2)}h Extra",
                             "${day.totalHours.toStringAsFixed(2)} hrs totales",
                           )
                         else
                           _statDetail(
-                            "HORAS",
+                            "DESGLOSE DE HORAS",
                             "${normalHrs.toStringAsFixed(1)}h Base\n${day.extraHoursCount.toStringAsFixed(2)}h Extra",
                             "${day.totalHours.toStringAsFixed(2)} hrs totales",
                           ),
                         if (day.esFestivo && day.festivoTrabajado)
                           _statDetail(
-                            "PAGO",
+                            "DESGLOSE DE PAGO",
                             "\$${day.sueldoBase.toStringAsFixed(2)} × 2 (Base)\n\$${day.holidayExtrasPay.toStringAsFixed(2)} (Extras 3×)",
                             "\$${day.totalPay.toStringAsFixed(2)}",
                             isMoney: true,
                           )
                         else
                           _statDetail(
-                            "PAGO",
-                            "\$${day.dailyPay.toStringAsFixed(2)} Base\n2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}",
+                            "DESGLOSE DE PAGO",
+                            day.isRestDay
+                                ? "\$${day.sueldoBase.toStringAsFixed(2)} Base\n"
+                                    "\$${day.sueldoBase.toStringAsFixed(2)} Día de descanso\n"
+                                    "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
+                                    "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}"
+                                : "\$${day.dailyPay.toStringAsFixed(2)} Base\n"
+                                    "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
+                                    "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}",
                             "\$${(day.dailyPay + realExtrasPay).toStringAsFixed(2)}",
                             isMoney: true,
                           ),
@@ -9692,8 +10273,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 if (!mounted || inTime == null) return;
 
                 // Calculate clock-out based on base hours
-                double baseHrs =
-                    double.tryParse(_baseHoursController.text) ?? 9.5;
+                double baseHrs = _getJornadaForDate(date);
                 int baseMinutes = (baseHrs * 60).round();
 
                 DateTime entrada = DateTime(date.year, date.month, date.day,
@@ -9727,8 +10307,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     entrada: noon,
                     salida: noon,
                     sueldoBase: salaryForDate,
-                    baseHours:
-                        double.tryParse(_baseHoursController.text) ?? 9.5,
+                    baseHours: _getJornadaForDate(noon),
                     notas: notes ?? "",
                     esVacaciones: true));
               }),
@@ -9744,8 +10323,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     entrada: noon,
                     salida: noon,
                     sueldoBase: salaryForDate,
-                    baseHours:
-                        double.tryParse(_baseHoursController.text) ?? 9.5,
+                    baseHours: _getJornadaForDate(noon),
                     notas: notes ?? "",
                     esFestivo: true,
                     festivoTrabajado: false));
@@ -9781,8 +10359,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     salida: fSalida,
                     entradaReal: fEntrada,
                     sueldoBase: salaryForDate,
-                    baseHours:
-                        double.tryParse(_baseHoursController.text) ?? 9.5,
+                    baseHours: _getJornadaForDate(fEntrada),
                     notas: notes ?? "",
                     esFestivo: true,
                     festivoTrabajado: true));
@@ -9799,8 +10376,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     entrada: noon,
                     salida: noon,
                     sueldoBase: salaryForDate,
-                    baseHours:
-                        double.tryParse(_baseHoursController.text) ?? 9.5,
+                    baseHours: _getJornadaForDate(noon),
                     esFalta: true));
               }),
             ],
@@ -9943,7 +10519,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         salida: fSalida,
         entradaReal: fEntrada,
         sueldoBase: salaryForDate,
-        baseHours: double.tryParse(_baseHoursController.text) ?? 9.5,
+        baseHours: _getJornadaForDate(fEntrada),
         notas: notes ?? "",
         esFestivo: isFestivo,
         festivoTrabajado: isFestivo,
@@ -10061,3 +10637,2276 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     color: Colors.white)));
   }
 }
+
+class ParameterHistoryResult {
+  final List<Map<String, dynamic>> history;
+  final double? baseValue;
+
+  ParameterHistoryResult({required this.history, this.baseValue});
+}
+
+class ParameterHistoryScreen extends StatefulWidget {
+  final String title;
+  final String unitPrefix;
+  final String unitSuffix;
+  final double currentValue;
+  final List<Map<String, dynamic>> history;
+  final bool isDarkMode;
+  final IconData icon;
+  final bool isSalary;
+  final Future<void> Function(List<Map<String, dynamic>> updatedHistory, double newActiveValue)? onCommit;
+
+  const ParameterHistoryScreen({
+    super.key,
+    required this.title,
+    required this.unitPrefix,
+    required this.unitSuffix,
+    required this.currentValue,
+    required this.history,
+    required this.isDarkMode,
+    required this.icon,
+    this.isSalary = false,
+    this.onCommit,
+  });
+
+  @override
+  State<ParameterHistoryScreen> createState() => _ParameterHistoryScreenState();
+}
+
+class _ParameterHistoryScreenState extends State<ParameterHistoryScreen> {
+  late List<Map<String, dynamic>> _localHistory;
+  late double _localBaseValue;
+
+  @override
+  void initState() {
+    super.initState();
+    _localHistory =
+        widget.history.map((e) => Map<String, dynamic>.from(e)).toList();
+    _sortHistory();
+    _localBaseValue = widget.currentValue;
+    final bool healed = _ensureTimelineActiveContinuity();
+    if (healed && widget.onCommit != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onCommit?.call(_localHistory, _todayActiveValue);
+      });
+    }
+  }
+
+  void _sortHistory() {
+    _localHistory.sort((a, b) {
+      final sA = _parseEntryDate(a['start_date'] ?? a['effective_date']) ??
+          DateTime(1970);
+      final sB = _parseEntryDate(b['start_date'] ?? b['effective_date']) ??
+          DateTime(1970);
+      return sB.compareTo(sA);
+    });
+  }
+
+  bool _ensureTimelineActiveContinuity() {
+    if (_localHistory.isEmpty) {
+      _localBaseValue = widget.currentValue;
+      return false;
+    }
+
+    final now = DateTime.now();
+    final todayMidnight = DateTime(now.year, now.month, now.day);
+
+    final int? activeIdx = _todayActivePeriodIndex;
+    final bool hasActiveOpenEnded = activeIdx != null &&
+        _parseEntryDate(_localHistory[activeIdx]['end_date']) == null;
+
+    final bool hasFutureOpenEnded = _localHistory.any((entry) {
+      final s = _parseEntryDate(entry['start_date'] ?? entry['effective_date']);
+      final e = _parseEntryDate(entry['end_date']);
+      return s != null && s.isAfter(todayMidnight) && e == null;
+    });
+
+    final bool needsReopen =
+        !hasActiveOpenEnded && (!hasFutureOpenEnded || activeIdx == null);
+
+    if (needsReopen) {
+      Map<String, dynamic>? candidate;
+      for (final entry in _localHistory) {
+        final s =
+            _parseEntryDate(entry['start_date'] ?? entry['effective_date']);
+        if (s != null && !todayMidnight.isBefore(s)) {
+          candidate = entry;
+          break;
+        }
+      }
+      candidate ??= _localHistory.first;
+
+      candidate['end_date'] = null;
+      _sortHistory();
+
+      final reopenedVal =
+          (candidate['value'] ?? candidate['salary'] as num?)?.toDouble();
+      if (reopenedVal != null) {
+        _localBaseValue = reopenedVal;
+      } else {
+        _localBaseValue = _todayActiveValue;
+      }
+      return true;
+    } else {
+      _localBaseValue = _todayActiveValue;
+      return false;
+    }
+  }
+
+  String _formatValue(double val) {
+    String numStr = val.toStringAsFixed(
+        val.truncateToDouble() == val ? (widget.unitSuffix.contains('%') ? 2 : 1) : 2);
+    return "${widget.unitPrefix}$numStr${widget.unitSuffix}";
+  }
+
+  DateTime _normalizeDate(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  DateTime? _parseEntryDate(dynamic val) {
+    if (val == null) return null;
+    final str = val.toString().trim();
+    if (str.isEmpty || str == 'null') return null;
+    final parsed = DateTime.tryParse(str);
+    if (parsed == null) return null;
+    return _normalizeDate(parsed);
+  }
+
+  DateTime _getAccountCreationDate() {
+    final user = FirebaseAuth.instance.currentUser;
+    return _normalizeDate(user?.metadata.creationTime ?? DateTime(2026, 1, 1));
+  }
+
+  int? get _todayActivePeriodIndex {
+    final now = DateTime.now();
+    final todayMidnight = DateTime(now.year, now.month, now.day);
+    for (int i = 0; i < _localHistory.length; i++) {
+      final entry = _localHistory[i];
+      final startDate = _parseEntryDate(entry['start_date'] ?? entry['effective_date']);
+      if (startDate == null) continue;
+
+      final endDate = _parseEntryDate(entry['end_date']);
+
+      if (!todayMidnight.isBefore(startDate)) {
+        if (endDate == null || !todayMidnight.isAfter(endDate)) {
+          return i;
+        }
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? get _todayActivePeriod {
+    final idx = _todayActivePeriodIndex;
+    if (idx != null && idx >= 0 && idx < _localHistory.length) {
+      return _localHistory[idx];
+    }
+    return null;
+  }
+
+  String get _activePeriodSubtitle {
+    final active = _todayActivePeriod;
+    if (active != null) {
+      final sStr =
+          (active['start_date'] ?? active['effective_date'] ?? '').toString();
+      final dt = DateTime.tryParse(sStr);
+      final formatted = dt != null ? DateFormat('dd/MM/yyyy').format(dt) : sStr;
+      return "Vigente desde: $formatted";
+    }
+    return "Sin periodo asignado";
+  }
+
+  double get _todayActiveValue =>
+      getNumericParamForDate(DateTime.now(), _localHistory, _localBaseValue);
+
+  Future<void> _showAddOrEditPeriodDialog({
+    int? editIndex,
+    bool isFromTopPencil = false,
+  }) async {
+    final isEditing = editIndex != null;
+    final Map<String, dynamic>? existing =
+        isEditing ? _localHistory[editIndex] : null;
+
+    final double initialVal = existing != null
+        ? ((existing['value'] ?? existing['salary'] as num?)?.toDouble() ??
+            _localBaseValue)
+        : (_localHistory.isEmpty ? _localBaseValue : _todayActiveValue);
+
+    final TextEditingController valController = TextEditingController(
+      text: initialVal > 0
+          ? (initialVal % 1 == 0
+              ? initialVal.toInt().toString()
+              : initialVal.toString())
+          : "",
+    );
+
+    DateTime startDate = isFromTopPencil
+        ? DateTime.now()
+        : (existing != null
+            ? (_parseEntryDate(existing['start_date'] ??
+                    existing['effective_date']) ??
+                DateTime.now())
+            : (_localHistory.isEmpty
+                ? _getAccountCreationDate()
+                : DateTime.now()));
+
+    DateTime? endDate = existing != null
+        ? _parseEntryDate(existing['end_date'])
+        : null;
+
+    bool hasEndDate = endDate != null;
+    String? errorMessage;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final Color accentColor =
+              widget.isDarkMode ? Colors.orange : const Color(0xFFC2410C);
+          final Color dialogBg =
+              widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+          final Color textColor =
+              widget.isDarkMode ? Colors.white : Colors.black87;
+
+          return AlertDialog(
+            backgroundColor: dialogBg,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(isEditing ? Icons.edit_calendar : Icons.add_circle_outline,
+                    color: accentColor, size: 24),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isEditing ? "Editar Periodo" : "Nuevo Periodo",
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Valor del parámetro:",
+                    style: TextStyle(
+                      color:
+                          widget.isDarkMode ? Colors.white70 : Colors.black54,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: valController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(
+                        color: textColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold),
+                    decoration: InputDecoration(
+                      prefixText: widget.unitPrefix.isNotEmpty
+                          ? widget.unitPrefix
+                          : null,
+                      suffixText: widget.unitSuffix.isNotEmpty
+                          ? widget.unitSuffix
+                          : null,
+                      hintText: "Ej. 1250.00",
+                      hintStyle: TextStyle(
+                          color: widget.isDarkMode
+                              ? Colors.white30
+                              : Colors.black38),
+                      filled: true,
+                      fillColor: widget.isDarkMode
+                          ? Colors.black26
+                          : const Color(0xFFF1F5F9),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide.none),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Fecha de inicio (Vigencia desde):",
+                    style: TextStyle(
+                      color:
+                          widget.isDarkMode ? Colors.white70 : Colors.black54,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: startDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035),
+                      );
+                      if (picked != null) {
+                        setDialogState(() {
+                          startDate = picked;
+                          if (endDate != null && endDate!.isBefore(startDate)) {
+                            endDate = startDate;
+                          }
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: widget.isDarkMode
+                            ? Colors.black26
+                            : const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_today,
+                              size: 18, color: accentColor),
+                          const SizedBox(width: 10),
+                          Text(
+                            DateFormat('dd / MM / yyyy').format(startDate),
+                            style: TextStyle(
+                                color: textColor,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold),
+                          ),
+                          const Spacer(),
+                          Text("Cambiar",
+                              style:
+                                  TextStyle(color: accentColor, fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "¿Tiene fecha de término?",
+                        style: TextStyle(
+                          color: widget.isDarkMode
+                              ? Colors.white70
+                              : Colors.black54,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Switch(
+                        value: hasEndDate,
+                        activeColor: accentColor,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            hasEndDate = val;
+                            if (hasEndDate && endDate == null) {
+                              endDate = startDate.add(const Duration(days: 30));
+                            }
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  if (hasEndDate) ...[
+                    const SizedBox(height: 6),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: endDate ?? startDate,
+                          firstDate: startDate,
+                          lastDate: DateTime(2035),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            endDate = picked;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: widget.isDarkMode
+                              ? Colors.black26
+                              : const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.event_busy,
+                                size: 18, color: accentColor),
+                            const SizedBox(width: 10),
+                            Text(
+                              endDate != null
+                                  ? DateFormat('dd / MM / yyyy')
+                                      .format(endDate!)
+                                  : "Seleccionar fecha fin",
+                              style: TextStyle(
+                                  color: textColor,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold),
+                            ),
+                            const Spacer(),
+                            Text("Cambiar",
+                                style: TextStyle(
+                                    color: accentColor, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        "Vigencia abierta e indefinida hasta que se registre un nuevo periodo.",
+                        style: TextStyle(
+                          color: widget.isDarkMode
+                              ? Colors.white38
+                              : const Color(0xFF94A3B8),
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      errorMessage!,
+                      style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: Text("CANCELAR",
+                    style: TextStyle(
+                        color: widget.isDarkMode
+                            ? Colors.white54
+                            : Colors.grey)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () async {
+                  final val = double.tryParse(valController.text.trim());
+                  if (val == null || val < 0) {
+                    setDialogState(() {
+                      errorMessage =
+                          "Ingresa un valor numérico válido mayor o igual a 0.";
+                    });
+                    return;
+                  }
+
+                  final normStart = _normalizeDate(startDate);
+                  final normEnd = (hasEndDate && endDate != null)
+                      ? _normalizeDate(endDate!)
+                      : null;
+
+                  if (normEnd != null && normEnd.isBefore(normStart)) {
+                    setDialogState(() {
+                      errorMessage =
+                          "La fecha de fin no puede ser anterior a la de inicio.";
+                    });
+                    return;
+                  }
+
+                  final existingStart = existing != null
+                      ? _parseEntryDate(
+                          existing['start_date'] ?? existing['effective_date'])
+                      : null;
+                  final existingEnd = existing != null
+                      ? _parseEntryDate(existing['end_date'])
+                      : null;
+
+                  // Check if we are editing an active open-ended period
+                  final bool isActiveOpenEnded = isEditing &&
+                      existing != null &&
+                      (existingEnd == null ||
+                          editIndex == _todayActivePeriodIndex);
+
+                  // If the user selected a start date strictly after the existing active period's start date,
+                  // treat it as a rate transition/raise rather than an in-place overwrite.
+                  final bool isNewRateTransition = isActiveOpenEnded &&
+                      existingStart != null &&
+                      normStart.isAfter(existingStart);
+
+                  // Smart auto-adjustment for open-ended periods:
+                  // 1) For new rate transitions: auto-close the existing period to (newStartDate - 1 day).
+                  // 2) For any open-ended period save: auto-close any prior open-ended periods.
+                  final Map<int, String> autoAdjustEndDates = {};
+
+                  if (isNewRateTransition) {
+                    final autoEnd = normStart.subtract(const Duration(days: 1));
+                    autoAdjustEndDates[editIndex] =
+                        DateFormat('yyyy-MM-dd').format(autoEnd);
+                  }
+
+                  if (normEnd == null || isNewRateTransition) {
+                    for (int i = 0; i < _localHistory.length; i++) {
+                      if (i == editIndex) continue;
+                      final other = _localHistory[i];
+                      final otherStart = _parseEntryDate(
+                          other['start_date'] ?? other['effective_date']);
+                      final otherEnd = _parseEntryDate(other['end_date']);
+
+                      if (otherStart != null &&
+                          otherEnd == null &&
+                          otherStart.isBefore(normStart)) {
+                        final autoEnd =
+                            normStart.subtract(const Duration(days: 1));
+                        autoAdjustEndDates[i] =
+                            DateFormat('yyyy-MM-dd').format(autoEnd);
+                      }
+                    }
+                  }
+
+                  // Validate overlap: StartA <= EndB && StartB <= EndA
+                  for (int i = 0; i < _localHistory.length; i++) {
+                    if (i == editIndex) continue;
+                    final other = _localHistory[i];
+                    final otherStart = _parseEntryDate(
+                        other['start_date'] ?? other['effective_date']);
+                    if (otherStart == null) continue;
+
+                    DateTime? otherEnd;
+                    if (autoAdjustEndDates.containsKey(i)) {
+                      otherEnd = _parseEntryDate(autoAdjustEndDates[i]);
+                    } else {
+                      otherEnd = _parseEntryDate(other['end_date']);
+                    }
+
+                    final startA = normStart;
+                    final endA = (isNewRateTransition ? null : normEnd) ??
+                        DateTime(2099, 12, 31);
+                    final startB = otherStart;
+                    final endB = otherEnd ?? DateTime(2099, 12, 31);
+
+                    final bool overlaps =
+                        !startA.isAfter(endB) && !startB.isAfter(endA);
+                    if (overlaps) {
+                      final String otherRangeStr = otherEnd != null
+                          ? "del ${DateFormat('dd/MM/yyyy').format(startB)} al ${DateFormat('dd/MM/yyyy').format(otherEnd)}"
+                          : "a partir del ${DateFormat('dd/MM/yyyy').format(startB)}";
+                      setDialogState(() {
+                        errorMessage =
+                            "El rango seleccionado se empalma con un periodo existente ($otherRangeStr).";
+                      });
+                      return;
+                    }
+                  }
+
+                  // Apply any auto-adjustments
+                  autoAdjustEndDates.forEach((idx, newEnd) {
+                    _localHistory[idx]['end_date'] = newEnd;
+                  });
+
+                  final Map<String, dynamic> newEntry = {
+                    'value': val,
+                    'start_date': DateFormat('yyyy-MM-dd').format(normStart),
+                    'end_date': (isNewRateTransition || normEnd == null)
+                        ? null
+                        : DateFormat('yyyy-MM-dd').format(normEnd),
+                  };
+                  if (widget.isSalary) {
+                    newEntry['salary'] = val;
+                  }
+
+                  setState(() {
+                    if (isNewRateTransition) {
+                      _localHistory.add(newEntry);
+                    } else if (isEditing) {
+                      _localHistory[editIndex] = newEntry;
+                    } else {
+                      _localHistory.add(newEntry);
+                    }
+                    _sortHistory();
+                    _localBaseValue = _todayActiveValue;
+                  });
+
+                  Navigator.pop(dialogCtx);
+                  await widget.onCommit?.call(_localHistory, _todayActiveValue);
+                },
+                child: const Text("GUARDAR",
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showDeletePeriodDialog(int index) async {
+    final entry = _localHistory[index];
+    final dateStr =
+        (entry['start_date'] ?? entry['effective_date'] ?? '').toString();
+    final val =
+        (entry['value'] ?? entry['salary'] as num?)?.toDouble() ?? 0.0;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor:
+            widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+        title: const Text("Eliminar Periodo",
+            style: TextStyle(
+                color: Colors.redAccent, fontWeight: FontWeight.bold)),
+        content: Text(
+          "¿Deseas eliminar el periodo que inicia el $dateStr (${_formatValue(val)})?\n\nLos cálculos para fechas en este rango volverán a usar el periodo adyacente o el valor vigente.",
+          style: TextStyle(
+              color: widget.isDarkMode ? Colors.white70 : Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text("CANCELAR",
+                style: TextStyle(
+                    color:
+                        widget.isDarkMode ? Colors.white54 : Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text("ELIMINAR",
+                style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        _localHistory.removeAt(index);
+        _sortHistory();
+        _ensureTimelineActiveContinuity();
+      });
+      await widget.onCommit?.call(_localHistory, _todayActiveValue);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Color accentColor =
+        widget.isDarkMode ? Colors.orange : const Color(0xFFC2410C);
+    final Color bgColor =
+        widget.isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final Color cardBg =
+        widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+    final Color borderColor =
+        widget.isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
+    final Color textColor = widget.isDarkMode ? Colors.white : Colors.black87;
+    final Color subtextColor =
+        widget.isDarkMode ? Colors.white60 : const Color(0xFF64748B);
+    final now = DateTime.now();
+    final todayMidnight = DateTime(now.year, now.month, now.day);
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.pop(context);
+      },
+      child: Scaffold(
+        backgroundColor: bgColor,
+        appBar: AppBar(
+          backgroundColor:
+              widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+          foregroundColor: textColor,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            widget.title,
+            style: TextStyle(
+              color: textColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          backgroundColor: accentColor,
+          foregroundColor: Colors.white,
+          onPressed: () => _showAddOrEditPeriodDialog(),
+          icon: const Icon(Icons.add),
+          label: const Text("AGREGAR PERIODO",
+              style:
+                  TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+          children: [
+            // Current Active Value Card
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: widget.isDarkMode
+                      ? [accentColor.withAlpha(40), const Color(0xFF1E293B)]
+                      : [const Color(0xFFFFF7ED), Colors.white],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color:
+                        accentColor.withAlpha(widget.isDarkMode ? 80 : 120),
+                    width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: accentColor.withAlpha(35),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(widget.icon,
+                            color: accentColor, size: 22),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        "VALOR VIGENTE HOY",
+                        style: TextStyle(
+                          color: accentColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: Icon(Icons.edit,
+                            color: accentColor, size: 20),
+                        tooltip: "Editar periodo vigente",
+                        onPressed: () {
+                          if (_todayActivePeriodIndex != null) {
+                            _showAddOrEditPeriodDialog(
+                                editIndex: _todayActivePeriodIndex,
+                                isFromTopPencil: true);
+                          } else {
+                            _showAddOrEditPeriodDialog(isFromTopPencil: true);
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _formatValue(_todayActiveValue),
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 32,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _activePeriodSubtitle,
+                    style: TextStyle(
+                      color: subtextColor,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Header for registered periods
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "PERIODOS REGISTRADOS",
+                  style: TextStyle(
+                    color: accentColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color:
+                        accentColor.withAlpha(widget.isDarkMode ? 35 : 25),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    "${_localHistory.length}",
+                    style: TextStyle(
+                        color: accentColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            if (_localHistory.isEmpty) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 36, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Column(
+                  children: [
+                    Icon(Icons.history_toggle_off,
+                        size: 48, color: subtextColor.withAlpha(120)),
+                    const SizedBox(height: 12),
+                    Text(
+                      "Sin periodos específicos",
+                      style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Actualmente se aplica ${_formatValue(_todayActiveValue)} a todas las fechas. Registra periodos para definir cambios históricos o futuros.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: subtextColor, fontSize: 13),
+                    ),
+                    const SizedBox(height: 18),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: accentColor,
+                        side: BorderSide(color: accentColor),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () => _showAddOrEditPeriodDialog(),
+                      icon: const Icon(Icons.add),
+                      label: const Text("REGISTRAR UN PERIODO",
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              ..._localHistory.asMap().entries.map((entry) {
+                final int index = entry.key;
+                final Map<String, dynamic> item = entry.value;
+
+                final double val =
+                    ((item['value'] ?? item['salary']) as num?)?.toDouble() ??
+                        0.0;
+                final String sDateStr =
+                    (item['start_date'] ?? item['effective_date'] ?? '')
+                        .toString();
+                final String? eDateStr = (item['end_date'] != null &&
+                        item['end_date'].toString().isNotEmpty &&
+                        item['end_date'] != 'null')
+                    ? item['end_date'].toString()
+                    : null;
+
+                final DateTime? sDate = DateTime.tryParse(sDateStr);
+                final DateTime? eDate =
+                    eDateStr != null ? DateTime.tryParse(eDateStr) : null;
+
+                // Status calculation
+                bool isActive = false;
+                bool isFuture = false;
+
+                if (sDate != null) {
+                  final sMidnight =
+                      DateTime(sDate.year, sDate.month, sDate.day);
+                  final eMidnight = eDate != null
+                      ? DateTime(eDate.year, eDate.month, eDate.day)
+                      : null;
+
+                  if (todayMidnight.isBefore(sMidnight)) {
+                    isFuture = true;
+                  } else if (eMidnight != null &&
+                      todayMidnight.isAfter(eMidnight)) {
+                    // Past
+                  } else {
+                    isActive = true;
+                  }
+                }
+
+                Color badgeBg;
+                Color badgeText;
+                String badgeLabel;
+
+                if (isActive) {
+                  badgeBg = widget.isDarkMode
+                      ? Colors.green.withAlpha(35)
+                      : const Color(0xFFDCFCE7);
+                  badgeText = widget.isDarkMode
+                      ? Colors.greenAccent
+                      : const Color(0xFF15803D);
+                  badgeLabel = "VIGENTE";
+                } else if (isFuture) {
+                  badgeBg = widget.isDarkMode
+                      ? Colors.blue.withAlpha(35)
+                      : const Color(0xFFDBEAFE);
+                  badgeText = widget.isDarkMode
+                      ? Colors.blueAccent
+                      : const Color(0xFF1D4ED8);
+                  badgeLabel = "FUTURO";
+                } else {
+                  badgeBg = widget.isDarkMode
+                      ? Colors.white10
+                      : const Color(0xFFF1F5F9);
+                  badgeText = widget.isDarkMode
+                      ? Colors.white54
+                      : const Color(0xFF64748B);
+                  badgeLabel = "HISTÓRICO";
+                }
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isActive
+                          ? accentColor.withAlpha(
+                              widget.isDarkMode ? 90 : 140)
+                          : borderColor,
+                      width: isActive ? 1.5 : 1.0,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  _formatValue(val),
+                                  style: TextStyle(
+                                    color: isActive ? accentColor : textColor,
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: badgeBg,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    badgeLabel,
+                                    style: TextStyle(
+                                      color: badgeText,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Icon(Icons.date_range,
+                                    size: 14, color: subtextColor),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    sDate != null
+                                        ? "Desde ${DateFormat('dd/MM/yyyy').format(sDate)}${eDate != null ? ' hasta ${DateFormat('dd/MM/yyyy').format(eDate)}' : ' (Indefinido)'}"
+                                        : sDateStr,
+                                    style: TextStyle(
+                                      color: subtextColor,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.edit_outlined,
+                            color: subtextColor, size: 20),
+                        tooltip: "Editar periodo",
+                        onPressed: () =>
+                            _showAddOrEditPeriodDialog(editIndex: index),
+                      ),
+                      if (_localHistory.length > 1)
+                        IconButton(
+                          icon: Icon(Icons.delete_outline,
+                              color: widget.isDarkMode
+                                  ? Colors.redAccent
+                                  : const Color(0xFFDC2626),
+                              size: 20),
+                          tooltip: "Eliminar periodo",
+                          onPressed: () => _showDeletePeriodDialog(index),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+              if (_localHistory.length == 1) ...[
+                Container(
+                  margin: const EdgeInsets.only(top: 4, bottom: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: widget.isDarkMode
+                        ? accentColor.withAlpha(18)
+                        : const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color:
+                          accentColor.withAlpha(widget.isDarkMode ? 60 : 90),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 18, color: accentColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            "VALOR BASE PREDETERMINADO",
+                            style: TextStyle(
+                              color: accentColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Este valor se aplica a todos los cálculos pasados y presentes. Si necesitas registrar un aumento de sueldo, cambio de jornada o fecha especial, agrega un nuevo periodo.",
+                        style: TextStyle(
+                          color: subtextColor,
+                          fontSize: 13,
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: accentColor,
+                            side: BorderSide(color: accentColor),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                          ),
+                          onPressed: () => _showAddOrEditPeriodDialog(),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text("REGISTRAR UN PERIODO",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class RestDaysHistoryResult {
+  final List<Map<String, dynamic>> history;
+  final List<int> baseRestDays;
+
+  RestDaysHistoryResult({required this.history, required this.baseRestDays});
+}
+
+class RestDaysHistoryScreen extends StatefulWidget {
+  final List<Map<String, dynamic>> history;
+  final List<int> baseRestDays;
+  final bool isDarkMode;
+  final Future<void> Function(List<Map<String, dynamic>> updatedHistory, List<int> newBaseRestDays)? onCommit;
+
+  const RestDaysHistoryScreen({
+    super.key,
+    required this.history,
+    required this.baseRestDays,
+    required this.isDarkMode,
+    this.onCommit,
+  });
+
+  @override
+  State<RestDaysHistoryScreen> createState() => _RestDaysHistoryScreenState();
+}
+
+class _RestDaysHistoryScreenState extends State<RestDaysHistoryScreen> {
+  late List<Map<String, dynamic>> _localHistory;
+  late List<int> _localBaseRestDays;
+
+  static const List<String> _dialNames = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  static const List<String> _fullNames = [
+    'Lunes',
+    'Martes',
+    'Miércoles',
+    'Jueves',
+    'Viernes',
+    'Sábado',
+    'Domingo'
+  ];
+  static const Map<int, String> _shortNames = {
+    1: 'Lun',
+    2: 'Mar',
+    3: 'Mié',
+    4: 'Jue',
+    5: 'Vie',
+    6: 'Sáb',
+    7: 'Dom',
+  };
+
+  @override
+  void initState() {
+    super.initState();
+    _localHistory =
+        widget.history.map((e) => Map<String, dynamic>.from(e)).toList();
+    _localBaseRestDays = List<int>.from(widget.baseRestDays);
+    if (_localBaseRestDays.isEmpty) {
+      _localBaseRestDays = [DateTime.saturday, DateTime.sunday];
+    }
+    _sortHistory();
+    final bool healed = _ensureTimelineActiveContinuity();
+    if (healed && widget.onCommit != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        widget.onCommit?.call(_localHistory, _todayActiveRestDays);
+      });
+    }
+  }
+
+  DateTime? _parseEntryDate(dynamic val) {
+    if (val == null) return null;
+    final str = val.toString().trim();
+    if (str.isEmpty || str == 'null') return null;
+    final parsed = DateTime.tryParse(str);
+    if (parsed == null) return null;
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
+  void _sortHistory() {
+    _localHistory.sort((a, b) {
+      final sA = _parseEntryDate(a['start_date'] ?? a['effective_date']) ??
+          DateTime(1970);
+      final sB = _parseEntryDate(b['start_date'] ?? b['effective_date']) ??
+          DateTime(1970);
+      return sB.compareTo(sA); // Descending (latest first)
+    });
+  }
+
+  int? get _todayActivePeriodIndex {
+    final now = DateTime.now();
+    final todayMidnight = DateTime(now.year, now.month, now.day);
+    for (int i = 0; i < _localHistory.length; i++) {
+      final entry = _localHistory[i];
+      final startDate =
+          _parseEntryDate(entry['start_date'] ?? entry['effective_date']);
+      if (startDate == null) continue;
+
+      final endDate = _parseEntryDate(entry['end_date']);
+
+      if (!todayMidnight.isBefore(startDate)) {
+        if (endDate == null || !todayMidnight.isAfter(endDate)) {
+          return i;
+        }
+      }
+    }
+    return null;
+  }
+
+  bool _ensureTimelineActiveContinuity() {
+    if (_localHistory.isEmpty) {
+      return false;
+    }
+
+    final now = DateTime.now();
+    final todayMidnight = DateTime(now.year, now.month, now.day);
+
+    final int? activeIdx = _todayActivePeriodIndex;
+    final bool hasActiveOpenEnded = activeIdx != null &&
+        _parseEntryDate(_localHistory[activeIdx]['end_date']) == null;
+
+    final bool hasFutureOpenEnded = _localHistory.any((entry) {
+      final s = _parseEntryDate(entry['start_date'] ?? entry['effective_date']);
+      final e = _parseEntryDate(entry['end_date']);
+      return s != null && s.isAfter(todayMidnight) && e == null;
+    });
+
+    final bool needsReopen =
+        !hasActiveOpenEnded && (!hasFutureOpenEnded || activeIdx == null);
+
+    if (needsReopen) {
+      Map<String, dynamic>? candidate;
+      for (final entry in _localHistory) {
+        final s =
+            _parseEntryDate(entry['start_date'] ?? entry['effective_date']);
+        if (s != null && !todayMidnight.isBefore(s)) {
+          candidate = entry;
+          break;
+        }
+      }
+      candidate ??= _localHistory.first;
+
+      candidate['end_date'] = null;
+      _sortHistory();
+
+      final rawDays = candidate['rest_days'];
+      if (rawDays is List) {
+        final days = rawDays
+            .map((e) => int.tryParse(e.toString()) ?? (e is int ? e : null))
+            .whereType<int>()
+            .toList();
+        if (days.isNotEmpty) {
+          _localBaseRestDays = days;
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  String _formatDaysDisplay(List<int> days, {bool short = false}) {
+    if (days.isEmpty) return "Ninguno";
+    final sorted = List<int>.from(days)..sort();
+    if (short) {
+      return sorted.map((d) => _shortNames[d] ?? d.toString()).join(", ");
+    }
+    return sorted.map((d) => _fullNames[d - 1]).join(", ");
+  }
+
+  List<int> get _todayActiveRestDays {
+    return getRestDaysForDate(
+        DateTime.now(), _localHistory, _localBaseRestDays);
+  }
+
+  Widget _build7DayToggleRow({
+    required List<int> selectedDays,
+    required void Function(int dayNum) onToggle,
+    required bool isDarkMode,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: List.generate(7, (index) {
+        final int dayNum = index + 1;
+        final bool isSelected = selectedDays.contains(dayNum);
+        final bg = isSelected
+            ? (isDarkMode ? Colors.orange : const Color(0xFFEA580C))
+            : (isDarkMode
+                ? Colors.white.withAlpha(15)
+                : const Color(0xFFF1F5F9));
+        final textCol = isSelected
+            ? (isDarkMode ? Colors.black : Colors.white)
+            : (isDarkMode ? Colors.white70 : const Color(0xFF334155));
+        final border = Border.all(
+          color: isSelected
+              ? (isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C))
+              : (isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1)),
+          width: isSelected ? 2 : 1,
+        );
+
+        return Tooltip(
+          message: _fullNames[index],
+          child: InkWell(
+            onTap: () => onToggle(dayNum),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              width: 38,
+              height: 40,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(10),
+                border: border,
+              ),
+              child: Text(
+                _dialNames[index],
+                style: TextStyle(
+                  color: textCol,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  Future<void> _showAddOrEditPeriodDialog({int? editIndex}) async {
+    final bool isEditing = editIndex != null;
+    final Map<String, dynamic>? existing =
+        isEditing ? _localHistory[editIndex] : null;
+
+    DateTime startDate;
+    DateTime? endDate;
+    bool hasEndDate = false;
+    List<int> dialogRestDays = [];
+
+    if (existing != null) {
+      final sStr =
+          (existing['start_date'] ?? existing['effective_date'] ?? '').toString();
+      startDate = DateTime.tryParse(sStr) ?? DateTime.now();
+
+      final eStr = (existing['end_date'] ?? '').toString();
+      if (eStr.isNotEmpty && eStr != 'null') {
+        endDate = DateTime.tryParse(eStr);
+        hasEndDate = endDate != null;
+      }
+
+      final rawDays = existing['rest_days'];
+      if (rawDays is List) {
+        dialogRestDays = rawDays
+            .map((e) => int.tryParse(e.toString()) ?? (e is int ? e : null))
+            .whereType<int>()
+            .where((d) => d >= 1 && d <= 7)
+            .toList();
+        dialogRestDays.sort();
+      }
+    } else {
+      startDate = DateTime.now();
+      dialogRestDays = List<int>.from(_todayActiveRestDays);
+    }
+    if (dialogRestDays.isEmpty) {
+      dialogRestDays = [DateTime.saturday, DateTime.sunday];
+    }
+
+    String? errorMessage;
+
+    await showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final Color accentColor =
+              widget.isDarkMode ? Colors.orange : const Color(0xFFC2410C);
+          final Color cardBg =
+              widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+          final Color textColor =
+              widget.isDarkMode ? Colors.white : Colors.black87;
+
+          return AlertDialog(
+            scrollable: true,
+            backgroundColor: cardBg,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text(
+              isEditing ? "Editar Periodo de Descanso" : "Nuevo Periodo de Descanso",
+              style: TextStyle(
+                color: accentColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 18,
+              ),
+            ),
+            content: SizedBox(
+              width: 340,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Días de Descanso para este periodo:",
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _build7DayToggleRow(
+                    selectedDays: dialogRestDays,
+                    isDarkMode: widget.isDarkMode,
+                    onToggle: (dayNum) {
+                      setDialogState(() {
+                        if (dialogRestDays.contains(dayNum)) {
+                          dialogRestDays.remove(dayNum);
+                        } else {
+                          dialogRestDays.add(dayNum);
+                          dialogRestDays.sort();
+                        }
+                        errorMessage = null;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Seleccionados: ${_formatDaysDisplay(dialogRestDays, short: true)}",
+                    style: TextStyle(
+                      color: accentColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(),
+                  const SizedBox(height: 8),
+
+                  // Start Date Picker
+                  Text(
+                    "Fecha de Inicio (Vigencia desde):",
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: startDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2035),
+                      );
+                      if (picked != null) {
+                        setDialogState(() {
+                          startDate = picked;
+                          errorMessage = null;
+                        });
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 11),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                            color: widget.isDarkMode
+                                ? Colors.white24
+                                : Colors.grey.shade400),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.calendar_today,
+                              size: 18, color: accentColor),
+                          const SizedBox(width: 10),
+                          Text(
+                            DateFormat('dd/MM/yyyy').format(startDate),
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Has End Date Checkbox
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: hasEndDate,
+                        activeColor: accentColor,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            hasEndDate = val ?? false;
+                            if (hasEndDate && endDate == null) {
+                              endDate = startDate.add(const Duration(days: 30));
+                            }
+                            errorMessage = null;
+                          });
+                        },
+                      ),
+                      Expanded(
+                        child: Text(
+                          "Periodo con fecha de fin",
+                          style: TextStyle(color: textColor, fontSize: 13),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // End Date Picker
+                  if (hasEndDate) ...[
+                    const SizedBox(height: 6),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: endDate ??
+                              startDate.add(const Duration(days: 30)),
+                          firstDate: startDate,
+                          lastDate: DateTime(2035),
+                        );
+                        if (picked != null) {
+                          setDialogState(() {
+                            endDate = picked;
+                            errorMessage = null;
+                          });
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 11),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                              color: widget.isDarkMode
+                                  ? Colors.white24
+                                  : Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.event_busy,
+                                size: 18, color: accentColor),
+                            const SizedBox(width: 10),
+                            Text(
+                              endDate != null
+                                  ? DateFormat('dd/MM/yyyy').format(endDate!)
+                                  : "Selecciona fecha de fin",
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8.0, top: 4.0),
+                      child: Text(
+                        "Sin fecha de fin: Este horario de descanso aplicará indefinidamente a partir de la fecha de inicio.",
+                        style: TextStyle(
+                          color: widget.isDarkMode
+                              ? Colors.white38
+                              : const Color(0xFF94A3B8),
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      errorMessage!,
+                      style: const TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx),
+                child: Text("CANCELAR",
+                    style: TextStyle(
+                        color: widget.isDarkMode
+                            ? Colors.white54
+                            : Colors.grey)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () async {
+                  if (dialogRestDays.isEmpty) {
+                    setDialogState(() {
+                      errorMessage =
+                          "Selecciona al menos un día de descanso para este periodo.";
+                    });
+                    return;
+                  }
+                  if (hasEndDate &&
+                      endDate != null &&
+                      endDate!.isBefore(startDate)) {
+                    setDialogState(() {
+                      errorMessage =
+                          "La fecha de fin no puede ser anterior a la de inicio.";
+                    });
+                    return;
+                  }
+
+                  final Map<String, dynamic> newEntry = {
+                    'rest_days': List<int>.from(dialogRestDays)..sort(),
+                    'start_date': DateFormat('yyyy-MM-dd').format(startDate),
+                    'end_date': (hasEndDate && endDate != null)
+                        ? DateFormat('yyyy-MM-dd').format(endDate!)
+                        : null,
+                  };
+
+                  setState(() {
+                    if (isEditing) {
+                      _localHistory[editIndex] = newEntry;
+                    } else {
+                      _localHistory.add(newEntry);
+                    }
+                    _sortHistory();
+                  });
+
+                  Navigator.pop(dialogCtx);
+                  await widget.onCommit?.call(_localHistory, _todayActiveRestDays);
+                },
+                child: const Text("GUARDAR",
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showDeletePeriodDialog(int index) async {
+    final entry = _localHistory[index];
+    final dateStr =
+        (entry['start_date'] ?? entry['effective_date'] ?? '').toString();
+    final rawDays = entry['rest_days'];
+    List<int> days = [];
+    if (rawDays is List) {
+      days = rawDays
+          .map((e) => int.tryParse(e.toString()) ?? (e is int ? e : null))
+          .whereType<int>()
+          .toList();
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor:
+            widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+        title: const Text("Eliminar Periodo",
+            style: TextStyle(
+                color: Colors.redAccent, fontWeight: FontWeight.bold)),
+        content: Text(
+          "¿Deseas eliminar el periodo de descanso que inicia el $dateStr (${_formatDaysDisplay(days, short: true)})?\n\nLos cálculos para turnos en ese rango volverán a usar el periodo adyacente o los días base predeterminados.",
+          style: TextStyle(
+              color: widget.isDarkMode ? Colors.white70 : Colors.black87),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text("CANCELAR",
+                style: TextStyle(
+                    color:
+                        widget.isDarkMode ? Colors.white54 : Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            child: const Text("ELIMINAR",
+                style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        _localHistory.removeAt(index);
+        _sortHistory();
+        _ensureTimelineActiveContinuity();
+      });
+      await widget.onCommit?.call(_localHistory, _todayActiveRestDays);
+    }
+  }
+
+  Future<void> _showEditBaseRestDaysDialog() async {
+    List<int> tempDays = List<int>.from(_localBaseRestDays);
+
+    final updated = await showDialog<List<int>>(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final Color accentColor =
+              widget.isDarkMode ? Colors.orange : const Color(0xFFC2410C);
+          final Color cardBg =
+              widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+
+          return AlertDialog(
+            backgroundColor: cardBg,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text("Editar Días Base Predeterminados",
+                style: TextStyle(
+                    color: accentColor, fontWeight: FontWeight.bold)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Estos días de descanso se utilizan como respaldo para cualquier fecha que no tenga un periodo específico asignado.",
+                  style: TextStyle(
+                      color:
+                          widget.isDarkMode ? Colors.white70 : Colors.black54,
+                      fontSize: 13),
+                ),
+                const SizedBox(height: 16),
+                _build7DayToggleRow(
+                  selectedDays: tempDays,
+                  isDarkMode: widget.isDarkMode,
+                  onToggle: (dayNum) {
+                    setDialogState(() {
+                      if (tempDays.contains(dayNum)) {
+                        tempDays.remove(dayNum);
+                      } else {
+                        tempDays.add(dayNum);
+                        tempDays.sort();
+                      }
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "Días: ${_formatDaysDisplay(tempDays, short: false)}",
+                  style: TextStyle(
+                    color: accentColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx, null),
+                child: Text("CANCELAR",
+                    style: TextStyle(
+                        color:
+                            widget.isDarkMode ? Colors.white54 : Colors.grey)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentColor,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () {
+                  if (tempDays.isEmpty) {
+                    tempDays = [DateTime.saturday, DateTime.sunday];
+                  }
+                  tempDays.sort();
+                  Navigator.pop(dialogCtx, tempDays);
+                },
+                child: const Text("ACTUALIZAR",
+                    style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (updated != null) {
+      setState(() {
+        _localBaseRestDays = updated;
+      });
+      await widget.onCommit?.call(_localHistory, _todayActiveRestDays);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Color accentColor =
+        widget.isDarkMode ? Colors.orange : const Color(0xFFC2410C);
+    final Color bgColor =
+        widget.isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final Color cardBg =
+        widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+    final Color borderColor =
+        widget.isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
+    final Color textColor = widget.isDarkMode ? Colors.white : Colors.black87;
+    final Color subtextColor =
+        widget.isDarkMode ? Colors.white60 : const Color(0xFF64748B);
+    final now = DateTime.now();
+    final todayMidnight = DateTime(now.year, now.month, now.day);
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        Navigator.pop(context);
+      },
+      child: Scaffold(
+        backgroundColor: bgColor,
+        appBar: AppBar(
+          backgroundColor:
+              widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+          foregroundColor: textColor,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: Text(
+            "Días de Descanso",
+            style: TextStyle(
+              color: textColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 18,
+            ),
+          ),
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          backgroundColor: accentColor,
+          foregroundColor: Colors.white,
+          onPressed: () => _showAddOrEditPeriodDialog(),
+          icon: const Icon(Icons.add),
+          label: const Text("AGREGAR PERIODO",
+              style:
+                  TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        ),
+        body: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+          children: [
+            // Current Active Rest Days Banner
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: widget.isDarkMode
+                      ? [accentColor.withAlpha(40), const Color(0xFF1E293B)]
+                      : [const Color(0xFFFFF7ED), Colors.white],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color:
+                        accentColor.withAlpha(widget.isDarkMode ? 80 : 120),
+                    width: 1.5),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: accentColor.withAlpha(35),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.calendar_month_rounded,
+                            color: accentColor, size: 22),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        "DÍAS DE DESCANSO VIGENTES HOY",
+                        style: TextStyle(
+                          color: accentColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: Icon(Icons.tune, color: accentColor, size: 20),
+                        tooltip: "Editar días base predeterminados",
+                        onPressed: _showEditBaseRestDaysDialog,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    _formatDaysDisplay(_todayActiveRestDays, short: false),
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    "Días base predeterminados: ${_formatDaysDisplay(_localBaseRestDays, short: true)}",
+                    style: TextStyle(
+                      color: subtextColor,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Header for registered periods
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "PERIODOS REGISTRADOS",
+                  style: TextStyle(
+                    color: accentColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color:
+                        accentColor.withAlpha(widget.isDarkMode ? 35 : 25),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    "${_localHistory.length}",
+                    style: TextStyle(
+                        color: accentColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            if (_localHistory.isEmpty) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 36, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Column(
+                  children: [
+                    Icon(Icons.history_toggle_off,
+                        size: 48, color: subtextColor.withAlpha(120)),
+                    const SizedBox(height: 12),
+                    Text(
+                      "Sin periodos específicos",
+                      style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Se aplicarán los días base predeterminados (${_formatDaysDisplay(_localBaseRestDays, short: true)}) a todas las fechas pasadas y futuras.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: subtextColor, fontSize: 13),
+                    ),
+                    const SizedBox(height: 18),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: accentColor,
+                        side: BorderSide(color: accentColor),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10)),
+                      ),
+                      onPressed: () => _showAddOrEditPeriodDialog(),
+                      icon: const Icon(Icons.add),
+                      label: const Text("REGISTRAR UN PERIODO",
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              ..._localHistory.asMap().entries.map((entry) {
+                final int index = entry.key;
+                final Map<String, dynamic> item = entry.value;
+
+                final rawDays = item['rest_days'];
+                List<int> days = [];
+                if (rawDays is List) {
+                  days = rawDays
+                      .map((e) =>
+                          int.tryParse(e.toString()) ?? (e is int ? e : null))
+                      .whereType<int>()
+                      .toList();
+                  days.sort();
+                }
+
+                final String sDateStr =
+                    (item['start_date'] ?? item['effective_date'] ?? '')
+                        .toString();
+                final String? eDateStr = (item['end_date'] != null &&
+                        item['end_date'].toString().isNotEmpty &&
+                        item['end_date'] != 'null')
+                    ? item['end_date'].toString()
+                    : null;
+
+                final DateTime? sDate = DateTime.tryParse(sDateStr);
+                final DateTime? eDate =
+                    eDateStr != null ? DateTime.tryParse(eDateStr) : null;
+
+                // Status calculation
+                bool isActive = false;
+                bool isFuture = false;
+
+                if (sDate != null) {
+                  final sMidnight =
+                      DateTime(sDate.year, sDate.month, sDate.day);
+                  final eMidnight = eDate != null
+                      ? DateTime(eDate.year, eDate.month, eDate.day)
+                      : null;
+
+                  if (todayMidnight.isBefore(sMidnight)) {
+                    isFuture = true;
+                  } else if (eMidnight != null &&
+                      todayMidnight.isAfter(eMidnight)) {
+                    // Past
+                  } else {
+                    isActive = true;
+                  }
+                }
+
+                Color badgeBg;
+                Color badgeText;
+                String badgeLabel;
+
+                if (isActive) {
+                  badgeBg = widget.isDarkMode
+                      ? Colors.green.withAlpha(35)
+                      : const Color(0xFFDCFCE7);
+                  badgeText = widget.isDarkMode
+                      ? Colors.greenAccent
+                      : const Color(0xFF15803D);
+                  badgeLabel = "VIGENTE";
+                } else if (isFuture) {
+                  badgeBg = widget.isDarkMode
+                      ? Colors.blue.withAlpha(35)
+                      : const Color(0xFFDBEAFE);
+                  badgeText = widget.isDarkMode
+                      ? Colors.blueAccent
+                      : const Color(0xFF1D4ED8);
+                  badgeLabel = "FUTURO";
+                } else {
+                  badgeBg = widget.isDarkMode
+                      ? Colors.white10
+                      : const Color(0xFFF1F5F9);
+                  badgeText = widget.isDarkMode
+                      ? Colors.white54
+                      : const Color(0xFF64748B);
+                  badgeLabel = "HISTÓRICO";
+                }
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: cardBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isActive
+                          ? accentColor.withAlpha(
+                              widget.isDarkMode ? 90 : 140)
+                          : borderColor,
+                      width: isActive ? 1.5 : 1.0,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  _formatDaysDisplay(days, short: true),
+                                  style: TextStyle(
+                                    color: isActive ? accentColor : textColor,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 7, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: badgeBg,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    badgeLabel,
+                                    style: TextStyle(
+                                      color: badgeText,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Row(
+                              children: [
+                                Icon(Icons.date_range,
+                                    size: 14, color: subtextColor),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    sDate != null
+                                        ? "Desde ${DateFormat('dd/MM/yyyy').format(sDate)}${eDate != null ? ' hasta ${DateFormat('dd/MM/yyyy').format(eDate)}' : ' (Indefinido)'}"
+                                        : sDateStr,
+                                    style: TextStyle(
+                                      color: subtextColor,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.edit_outlined,
+                            color: subtextColor, size: 20),
+                        tooltip: "Editar periodo",
+                        onPressed: () =>
+                            _showAddOrEditPeriodDialog(editIndex: index),
+                      ),
+                      if (_localHistory.length > 1)
+                        IconButton(
+                          icon: Icon(Icons.delete_outline,
+                              color: widget.isDarkMode
+                                  ? Colors.redAccent
+                                  : const Color(0xFFDC2626),
+                              size: 20),
+                          tooltip: "Eliminar periodo",
+                          onPressed: () => _showDeletePeriodDialog(index),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+              if (_localHistory.length == 1) ...[
+                Container(
+                  margin: const EdgeInsets.only(top: 4, bottom: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: widget.isDarkMode
+                        ? accentColor.withAlpha(18)
+                        : const Color(0xFFFFF7ED),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color:
+                          accentColor.withAlpha(widget.isDarkMode ? 60 : 90),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              size: 18, color: accentColor),
+                          const SizedBox(width: 8),
+                          Text(
+                            "DÍAS DE DESCANSO BASE",
+                            style: TextStyle(
+                              color: accentColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        "Estos días de descanso se aplican indefinidamente a todos los turnos. Si cambias de horario o rol de descansos en una fecha específica, agrega un nuevo periodo.",
+                        style: TextStyle(
+                          color: subtextColor,
+                          fontSize: 13,
+                          height: 1.35,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: accentColor,
+                            side: BorderSide(color: accentColor),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                          ),
+                          onPressed: () => _showAddOrEditPeriodDialog(),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text("REGISTRAR UN PERIODO",
+                              style: TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 13)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
