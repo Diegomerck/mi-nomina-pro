@@ -56,3 +56,9 @@ Whenever the user instructs to "publish this new version" (or any equivalent wor
 2. **GitHub Synchronization**: Stage, commit, and push all changes to `origin/master`.
 3. **Production Web Build**: Compile the release bundle using `flutter build web`.
 4. **Live Deployment**: Deploy to Firebase Hosting using `firebase deploy --only hosting`.
+
+---
+
+## 6. Language & Communication Protocol
+- **Conversational Language**: All agents across all roles must conduct communication, analysis, planning, status reports, and handoff prompts strictly in **English**.
+- **Application Context Separation**: Spanish is used exclusively within the application domain itself (e.g., UI labels, error messages, user documentation, and changelogs presented to end users). Agents must never allow Spanish application copy or domain terminology to drift conversational responses away from English.
