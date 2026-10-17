@@ -2,7 +2,7 @@
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: October 2026  
-> **Version**: `v.23.13.1 16/10/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.13.2 16/10/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.13.1` (October 2026 Release).
+- **Internal Version**: `v.23.13.2` (October 2026 Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,7 +234,8 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
-- **v.23.13.1 16/10/26 (Current - Production)**: Acceso dual unificado con Número de Empleado o Correo Electrónico mediante tabla pública de directorio (`employee_directory`) y reglas de seguridad optimizadas. Rediseño moderno y acogedor de la pantalla de acceso con encabezado dinámico, visibilidad de contraseña y botones de acción destacados. Mensajes de error claros y tranquilizadores con diferenciación de contraseña errónea sin riesgo de bloqueo de cuenta. Herramienta interactiva de recuperación de contraseña directamente en pantalla de acceso (`sendPasswordResetEmail`).
+- **v.23.13.2 16/10/26 (Current - Internal Admin Release)**: Consola interna de administración para fusión y migración selectiva de cuentas (`AdminAccountMergeScreen`). Herramienta con acceso restringido para administradores (`minominapro@gmail.com` / UID `RybFq34QonRHbx3m1KitV1Wcft83`) accesible desde la pestaña Ajustes. Búsqueda de cuentas donante y receptora por número de empleado o correo electrónico con validación en tiempo real. Matriz comparativa interactiva campo por campo (turnos con selector de reemplazo exacto para eliminar huérfanos, sueldo diario, jornada, descansos, retención, fomento, cuota sindical, aumentos históricos y perfil) con casillas de verificación independientes para transferencia granular. Sincronización automática del directorio público (`employee_directory`) y marcado de cuenta donante fusionada sin pérdida de registros originales.
+- **v.23.13.1 16/10/26**: Acceso dual unificado con Número de Empleado o Correo Electrónico mediante tabla pública de directorio (`employee_directory`) y reglas de seguridad optimizadas. Rediseño moderno y acogedor de la pantalla de acceso con encabezado dinámico, visibilidad de contraseña y botones de acción destacados. Mensajes de error claros y tranquilizadores con diferenciación de contraseña errónea sin riesgo de bloqueo de cuenta. Herramienta interactiva de recuperación de contraseña directamente en pantalla de acceso (`sendPasswordResetEmail`).
 - **v.23.12.1 15/10/26**: Implementación de Días de Descanso personalizados con historial por rangos de fechas (soporte para descansos entre semana y turnos especiales). Historial de parámetros para Salario Diario, Jornada Ordinaria, Prima Dominical, Prima Vacacional y Aguinaldo con vigencias históricas independientes sin alterar periodos pasados. Cálculo automático de horas extra al 300% (triple) en días de descanso laborados conforme a la LFT con desglose separado de pago base y prima de descanso. Corrección de teclado con punto decimal en sueldo, protección contra eliminación del último periodo base y auto-cierre/apertura continua de líneas de tiempo.
 - **v.23.11.1 13/10/26**: Implementación de Modo Claro / Modo Luz de Día (Daylight Theme) con botón de alternancia en AppBar y persistencia local en SharedPreferences. Accesibilidad visual de alto contraste con textos y números en negro puro (#000000) para lectura bajo luz solar. Rediseño ergonómico de la sección Entrada/Salida en la pestaña Hoy (botones y reloj más grandes, blancos táctiles amplios). Entrada Manual y Salida Manual directa en un paso. Notas integradas a turnos activos antes del cierre. Compatibilidad visual completa en todas las pestañas (Hoy, Quincena, Año, Nómina, Extras, Ajustes). Corrección matemática en el cálculo de nómina para deducciones por faltas (días no laborados) eliminando doble descuento y garantizando pago neto de $0.00 en periodos completos sin asistencia.
 - **v.23.9.2 12/10/26**: Desplazamiento automático al entrar a la pestaña Año enfocado en la semana actual. Flujo de edición y guardado en línea en la pestaña Ajustes con bloqueo por defecto, icono de lápiz, verificación y confirmación previa. Eliminación de los botones redundantes 'Guardar Ajustes' y 'Refrescar datos'.
