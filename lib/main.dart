@@ -359,31 +359,45 @@ class _LoginScreenState extends State<LoginScreen> {
           if (linkedEmpNumber != null && linkedEmpNumber.isNotEmpty) {
             isEmployeeResolved = true;
             userExistsInDb = true;
-
-            // ATTEMPT 1: Attempt signInWithEmailAndPassword with "$empNumber@televisa.com" first
-            // so the user accesses their primary data account
-            try {
-              userCredential =
-                  await FirebaseAuth.instance.signInWithEmailAndPassword(
-                email: "$linkedEmpNumber@televisa.com",
-                password: password,
-              );
-            } on FirebaseAuthException catch (e) {
-              lastAuthException = e;
-            }
           }
 
-          // ATTEMPT 2: If legacy attempt failed or no link exists, sign in directly with the entered email
-          if (userCredential == null) {
+          final bool isRealEmail = !email.endsWith('@televisa.com');
+          final String candidate1 = isRealEmail
+              ? email
+              : (linkedEmpNumber != null && linkedEmpNumber.isNotEmpty
+                  ? "$linkedEmpNumber@televisa.com"
+                  : email);
+          final String? candidate2 = (isRealEmail &&
+                  linkedEmpNumber != null &&
+                  linkedEmpNumber.isNotEmpty)
+              ? "$linkedEmpNumber@televisa.com"
+              : null;
+
+          // ATTEMPT 1: Authenticate directly with Candidate 1 (real email first)
+          try {
+            userCredential =
+                await FirebaseAuth.instance.signInWithEmailAndPassword(
+              email: candidate1,
+              password: password,
+            );
+          } on FirebaseAuthException catch (e) {
+            lastAuthException = e;
+          }
+
+          // ATTEMPT 2: Fallback to Candidate 2 (legacy @televisa.com) if Candidate 1 failed
+          if (userCredential == null && candidate2 != null) {
             try {
               userCredential =
                   await FirebaseAuth.instance.signInWithEmailAndPassword(
-                email: email,
+                email: candidate2,
                 password: password,
               );
-              lastAuthException = null; // Direct email login succeeded!
+              lastAuthException = null; // Success with fallback!
             } on FirebaseAuthException catch (e) {
-              lastAuthException = e;
+              if (lastAuthException == null ||
+                  lastAuthException.code != 'wrong-password') {
+                lastAuthException = e;
+              }
             }
           }
         } else {
@@ -442,31 +456,40 @@ class _LoginScreenState extends State<LoginScreen> {
             userExistsInDb = true;
           }
 
-          // ATTEMPT 1: Attempt legacy "$input@televisa.com" first (for historical data)
+          final bool hasResolvedRealEmail = resolvedEmail != null &&
+              resolvedEmail.isNotEmpty &&
+              !resolvedEmail.endsWith('@televisa.com');
+
+          final String candidate1 =
+              hasResolvedRealEmail ? resolvedEmail : "$input@televisa.com";
+          final String? candidate2 =
+              hasResolvedRealEmail ? "$input@televisa.com" : null;
+
+          // ATTEMPT 1: Try Candidate 1 (mapped directory email first)
           try {
             userCredential =
                 await FirebaseAuth.instance.signInWithEmailAndPassword(
-              email: "$input@televisa.com",
+              email: candidate1,
               password: password,
             );
           } on FirebaseAuthException catch (e) {
             lastAuthException = e;
           }
 
-          // ATTEMPT 2: Falling back to the mapped email (if Candidate 1 failed)
-          if (userCredential == null &&
-              resolvedEmail != null &&
-              resolvedEmail.isNotEmpty &&
-              resolvedEmail != "$input@televisa.com") {
+          // ATTEMPT 2: Try Candidate 2 (legacy @televisa.com) if Candidate 1 failed
+          if (userCredential == null && candidate2 != null) {
             try {
               userCredential =
                   await FirebaseAuth.instance.signInWithEmailAndPassword(
-                email: resolvedEmail,
+                email: candidate2,
                 password: password,
               );
-              lastAuthException = null; // Success with resolved real email!
+              lastAuthException = null; // Success with legacy candidate!
             } on FirebaseAuthException catch (e) {
-              lastAuthException = e;
+              if (lastAuthException == null ||
+                  lastAuthException.code != 'wrong-password') {
+                lastAuthException = e;
+              }
             }
           }
         }
