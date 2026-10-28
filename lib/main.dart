@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'web_reload_stub.dart' if (dart.library.html) 'web_reload.dart';
 
 final Map<String, String> _changelogTitles = {
+  "23.15.0": "⚡ Versión 23.15.0 (28/10/26) — Optimización de Cuentas, Seguridad y Rendimiento",
   "23.14.0": "⏱️ Versión 23.14.0 (27/10/26) — Edición de Turnos Renovada y Mejoras de Rendimiento",
   "23.13.1": "🔑 Versión 23.13.1 (16/10/26) — Acceso con Empleado o Correo y Recuperación",
   "23.12.1": "🎉 Versión 23.12.1 (15/10/26) — Días de Descanso & Historial de Cambios",
@@ -25,6 +26,11 @@ final Map<String, String> _changelogTitles = {
 };
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.15.0": [
+    "⚡ Sincronización y consistencia de cuentas: Mejoras internas en la gestión de credenciales y registros del sistema.",
+    "🔑 Asistencia en restablecimiento de contraseña: Optimizaciones en los flujos de recuperación para cuentas con correo verificado.",
+    "🛡️ Limpieza y rendimiento: Depuración automática de registros obsoletos y mayor fluidez general en la aplicación.",
+  ],
   "23.14.0": [
     "✨ Nueva ventana unificada para editar turnos: Modifica tu hora de entrada, salida, entrada real y notas en una sola pantalla ágil y moderna.",
     "🛡️ Protección contra cierres accidentales: Si modificas algún dato, la app te pedirá confirmación antes de salir para que nunca pierdas tus cambios.",
@@ -4316,7 +4322,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.14.0 27/10/26",
+                "v.23.15.0 28/10/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,
@@ -6495,6 +6501,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   // Construct Spanish date string
                   String dateStringES =
                       "${daysES[day.entrada.weekday - 1]}, ${day.entrada.day} ${monthsES[day.entrada.month - 1]}";
+                  final bool isSharedWithManager = _isUnitShareActive &&
+                      _isDateSharedWithManager(day.entrada, shiftId: day.id);
 
                   if (day.isInProgress) {
                     return Card(
@@ -6520,14 +6528,29 @@ class _TelevisaAppState extends State<TelevisaApp> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    dateStringES,
-                                    style: TextStyle(
-                                        color: _isDarkMode
-                                            ? Colors.white70
-                                            : const Color(0xFF1E293B),
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        dateStringES,
+                                        style: TextStyle(
+                                            color: _isDarkMode
+                                                ? Colors.white70
+                                                : const Color(0xFF1E293B),
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16),
+                                      ),
+                                      if (isSharedWithManager) ...[
+                                        const SizedBox(width: 6),
+                                        Icon(
+                                          Icons.share_rounded,
+                                          size: 14,
+                                          color: _isDarkMode
+                                              ? Colors.cyanAccent
+                                              : const Color(0xFF0284C7),
+                                        ),
+                                      ],
+                                    ],
                                   ),
                                   const SizedBox(height: 6),
                                   Row(
@@ -6611,13 +6634,28 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                 Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(dateStringES,
-                                          style: TextStyle(
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(dateStringES,
+                                              style: TextStyle(
+                                                  color: _isDarkMode
+                                                      ? Colors.redAccent
+                                                      : const Color(0xFF991B1B),
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 18)),
+                                          if (isSharedWithManager) ...[
+                                            const SizedBox(width: 6),
+                                            Icon(
+                                              Icons.share_rounded,
+                                              size: 14,
                                               color: _isDarkMode
-                                                  ? Colors.redAccent
-                                                  : const Color(0xFF991B1B),
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 18)),
+                                                  ? Colors.cyanAccent
+                                                  : const Color(0xFF0284C7),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
                                       const SizedBox(height: 6),
                                       Text("FALTA / NO LABORADO",
                                           style: TextStyle(
@@ -6690,13 +6728,28 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(dateStringES,
-                                        style: TextStyle(
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(dateStringES,
+                                            style: TextStyle(
+                                                color: _isDarkMode
+                                                    ? Colors.lightGreenAccent
+                                                    : const Color(0xFF166534),
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 18)),
+                                        if (isSharedWithManager) ...[
+                                          const SizedBox(width: 6),
+                                          Icon(
+                                            Icons.share_rounded,
+                                            size: 14,
                                             color: _isDarkMode
-                                                ? Colors.lightGreenAccent
-                                                : const Color(0xFF166534),
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18)),
+                                                ? Colors.cyanAccent
+                                                : const Color(0xFF0284C7),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                     const SizedBox(height: 6),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
@@ -6830,13 +6883,28 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(dateStringES,
-                                        style: TextStyle(
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(dateStringES,
+                                            style: TextStyle(
+                                                color: _isDarkMode
+                                                    ? Colors.purpleAccent
+                                                    : const Color(0xFF6B21A8),
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 18)),
+                                        if (isSharedWithManager) ...[
+                                          const SizedBox(width: 6),
+                                          Icon(
+                                            Icons.share_rounded,
+                                            size: 14,
                                             color: _isDarkMode
-                                                ? Colors.purpleAccent
-                                                : const Color(0xFF6B21A8),
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 18)),
+                                                ? Colors.cyanAccent
+                                                : const Color(0xFF0284C7),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
                                     const SizedBox(height: 6),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
@@ -7036,11 +7104,26 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Text(dateStringES,
-                                            style: TextStyle(
-                                                color: headerColor,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 18)),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(dateStringES,
+                                                style: TextStyle(
+                                                    color: headerColor,
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 18)),
+                                            if (isSharedWithManager) ...[
+                                              const SizedBox(width: 6),
+                                              Icon(
+                                                Icons.share_rounded,
+                                                size: 14,
+                                                color: _isDarkMode
+                                                    ? Colors.cyanAccent
+                                                    : const Color(0xFF0284C7),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                         if (day.esMantenimiento)
                                           Container(
                                               margin:
@@ -9375,6 +9458,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
               _activeUnitShareData = sanitizedDoc;
             });
           }
+          // Self-heal: ensure remote manager doc only holds strictly filtered shifts
+          _syncShiftsToUnitManager();
           return;
         } else {
           await prefs.remove(cacheKey);
@@ -9396,87 +9481,33 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
   bool _isDateInUnitShareRange(DateTime date, String mode) {
     if (_activeUnitShareData == null) return false;
-    final now = DateTime.now();
-
-    if (mode == 'Solo Hoy') {
-      final rawUntil = _activeUnitShareData!['active_sharing_until'];
-      DateTime? activeUntil;
-      if (rawUntil is Timestamp) {
-        activeUntil = rawUntil.toDate();
-      } else if (rawUntil is DateTime) {
-        activeUntil = rawUntil;
-      } else if (rawUntil is String) {
-        activeUntil = DateTime.tryParse(rawUntil);
-      }
-      final targetDate = activeUntil ?? now;
-      return date.year == targetDate.year &&
-          date.month == targetDate.month &&
-          date.day == targetDate.day;
-    }
-
-    if (mode == 'Esta Semana' || mode == 'Semanal' || mode == 'current_week') {
-      final monday = now.subtract(Duration(days: now.weekday - 1));
-      final mondayStart = DateTime(monday.year, monday.month, monday.day);
-      final sunday = monday.add(const Duration(days: 6));
-      final sundayEnd =
-          DateTime(sunday.year, sunday.month, sunday.day, 23, 59, 59);
-      return !date.isBefore(mondayStart) && !date.isAfter(sundayEnd);
-    }
-
-    if (mode == 'Esta Semana y la Pasada' ||
-        mode == 'two_weeks' ||
-        mode == 'current_and_previous') {
-      final monday = now.subtract(Duration(days: now.weekday - 1));
-      final mondayLastWeek = monday.subtract(const Duration(days: 7));
-      final mondayLastWeekStart =
-          DateTime(mondayLastWeek.year, mondayLastWeek.month, mondayLastWeek.day);
-      final sunday = monday.add(const Duration(days: 6));
-      final sundayEnd =
-          DateTime(sunday.year, sunday.month, sunday.day, 23, 59, 59);
-      return !date.isBefore(mondayLastWeekStart) && !date.isAfter(sundayEnd);
-    }
-
-    if (mode == 'Este Mes' || mode == 'Mensual') {
-      final monthStart = DateTime(now.year, now.month, 1);
-      final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
-      return !date.isBefore(monthStart) && !date.isAfter(monthEnd);
-    }
-
-    if (mode == 'Este Año' || mode == 'Anual') {
-      final yearStart = DateTime(now.year, 1, 1);
-      final yearEnd = DateTime(now.year, 12, 31, 23, 59, 59);
-      return !date.isBefore(yearStart) && !date.isAfter(yearEnd);
-    }
-
-    if (mode == 'Todos Mis Registros') {
-      return true;
-    }
-
-    return true;
+    final activeUntil = parseUnitShareDate(_activeUnitShareData!['active_sharing_until']);
+    return isDateSharedUnderUnitShare(
+      date: date,
+      mode: mode,
+      activeUntil: activeUntil,
+    );
   }
 
   bool _isDateSharedWithManager(DateTime date, {String? shiftId}) {
     if (!_isUnitShareActive || _activeUnitShareData == null) return false;
-    final dateKey = DateFormat('yyyy-MM-dd').format(date);
-    final rawExcluded =
-        _activeUnitShareData?['excluded_dates'] as List<dynamic>?;
-    if (rawExcluded != null) {
-      if (rawExcluded.contains(dateKey)) return false;
-      if (shiftId != null && rawExcluded.contains(shiftId)) return false;
-    }
-
     final mode = (_activeUnitShareData?['mode'] ??
             _activeUnitShareData?['duration'] ??
             _activeUnitShareData?['timeframe'] ??
             '')
         .toString();
+    final excludedDates = parseUnitShareStringSet(_activeUnitShareData!['excluded_dates']);
+    final dateKey = DateFormat('yyyy-MM-dd').format(date);
+    if (excludedDates.contains(dateKey) ||
+        (shiftId != null && shiftId.isNotEmpty && excludedDates.contains(shiftId))) {
+      return false;
+    }
 
     if (mode == 'Yo Decido') {
-      final rawCustom =
-          _activeUnitShareData?['custom_dates'] as List<dynamic>?;
-      if (rawCustom == null || rawCustom.isEmpty) return false;
-      return rawCustom.contains(dateKey) ||
-          (shiftId != null && rawCustom.contains(shiftId));
+      final customDates = parseUnitShareStringSet(_activeUnitShareData!['custom_dates']);
+      if (customDates.isEmpty) return false;
+      return customDates.contains(dateKey) ||
+          (shiftId != null && shiftId.isNotEmpty && customDates.contains(shiftId));
     }
 
     return _isDateInUnitShareRange(date, mode);
@@ -9887,101 +9918,19 @@ class _TelevisaAppState extends State<TelevisaApp> {
           .toString();
 
       final now = DateTime.now();
+      final excludedDates =
+          parseUnitShareStringSet(_activeUnitShareData!['excluded_dates']);
+      final customDates =
+          parseUnitShareStringSet(_activeUnitShareData!['custom_dates']);
 
-      final DateTime soloHoyDate = activeUntil;
-
-      final mondayThisWeek = now.subtract(Duration(days: now.weekday - 1));
-      final mondayThisWeekStart = DateTime(
-          mondayThisWeek.year, mondayThisWeek.month, mondayThisWeek.day);
-      final sundayThisWeek = mondayThisWeek.add(const Duration(days: 6));
-      final sundayThisWeekEnd = DateTime(sundayThisWeek.year,
-          sundayThisWeek.month, sundayThisWeek.day, 23, 59, 59);
-
-      final mondayLastWeek = mondayThisWeek.subtract(const Duration(days: 7));
-      final mondayLastWeekStart = DateTime(
-          mondayLastWeek.year, mondayLastWeek.month, mondayLastWeek.day);
-
-      final monthStart = DateTime(now.year, now.month, 1);
-      final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
-
-      final yearStart = DateTime(now.year, 1, 1);
-      final yearEnd = DateTime(now.year, 12, 31, 23, 59, 59);
-
-      final List<dynamic>? rawExcluded =
-          _activeUnitShareData!['excluded_dates'] as List<dynamic>?;
-      final Set<String> excludedDates = rawExcluded != null
-          ? rawExcluded.map((e) => e.toString()).toSet()
-          : <String>{};
-
-      List<WorkDay> relevantShifts;
-      switch (mode) {
-        case 'Solo Hoy':
-          relevantShifts = _weeklyHistory.where((d) {
-            return d.entrada.year == soloHoyDate.year &&
-                d.entrada.month == soloHoyDate.month &&
-                d.entrada.day == soloHoyDate.day;
-          }).toList();
-          break;
-        case 'Esta Semana':
-        case 'Semanal':
-        case 'current_week':
-          relevantShifts = _weeklyHistory.where((d) {
-            return !d.entrada.isBefore(mondayThisWeekStart) &&
-                !d.entrada.isAfter(sundayThisWeekEnd);
-          }).toList();
-          break;
-        case 'Esta Semana y la Pasada':
-        case 'two_weeks':
-        case 'current_and_previous':
-          relevantShifts = _weeklyHistory.where((d) {
-            return !d.entrada.isBefore(mondayLastWeekStart) &&
-                !d.entrada.isAfter(sundayThisWeekEnd);
-          }).toList();
-          break;
-        case 'Este Mes':
-        case 'Mensual':
-          relevantShifts = _weeklyHistory.where((d) {
-            return !d.entrada.isBefore(monthStart) &&
-                !d.entrada.isAfter(monthEnd);
-          }).toList();
-          break;
-        case 'Este Año':
-        case 'Anual':
-          relevantShifts = _weeklyHistory.where((d) {
-            return !d.entrada.isBefore(yearStart) &&
-                !d.entrada.isAfter(yearEnd);
-          }).toList();
-          break;
-        case 'Todos Mis Registros':
-          relevantShifts = List<WorkDay>.from(_weeklyHistory);
-          break;
-        case 'Yo Decido':
-          final customDates =
-              _activeUnitShareData!['custom_dates'] as List<dynamic>?;
-          if (customDates != null && customDates.isNotEmpty) {
-            final setOfDates = customDates.map((e) => e.toString()).toSet();
-            relevantShifts = _weeklyHistory.where((d) {
-              final dStr = DateFormat('yyyy-MM-dd').format(d.entrada);
-              return setOfDates.contains(dStr) || setOfDates.contains(d.id);
-            }).toList();
-          } else {
-            relevantShifts = <WorkDay>[];
-          }
-          break;
-        default:
-          relevantShifts = _weeklyHistory.where((d) {
-            return !d.entrada.isBefore(mondayThisWeekStart) &&
-                !d.entrada.isAfter(sundayThisWeekEnd);
-          }).toList();
-      }
-
-      if (excludedDates.isNotEmpty) {
-        relevantShifts = relevantShifts.where((d) {
-          final dStr = DateFormat('yyyy-MM-dd').format(d.entrada);
-          return !excludedDates.contains(dStr) &&
-              !excludedDates.contains(d.id);
-        }).toList();
-      }
+      final List<WorkDay> relevantShifts = filterWorkDaysForUnitShare(
+        _weeklyHistory,
+        mode: mode,
+        activeUntil: activeUntil,
+        customDates: customDates,
+        excludedDates: excludedDates,
+        now: now,
+      );
 
       // Find last clock out
       Timestamp? lastClockOut;
@@ -9993,33 +9942,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
         lastClockOut = Timestamp.fromDate(completed.first.salida);
       }
 
-      final List<Map<String, dynamic>> sanitizedShifts = relevantShifts.map((d) {
-        return {
-          'id': d.id,
-          'date': DateFormat('yyyy-MM-dd').format(d.entrada),
-          'weekday': d.entrada.weekday,
-          'entrada': shareEntry ? Timestamp.fromDate(d.entrada) : null,
-          'entrada_str':
-              shareEntry ? DateFormat('hh:mm a').format(d.entrada) : null,
-          'salida': (shareExit && !d.isInProgress)
-              ? Timestamp.fromDate(d.salida)
-              : null,
-          'salida_str': (shareExit && !d.isInProgress)
-              ? DateFormat('hh:mm a').format(d.salida)
-              : null,
-          'entrada_real': (shareRealEntry && d.entradaReal != null)
-              ? Timestamp.fromDate(d.entradaReal!)
-              : null,
-          'entrada_real_str': (shareRealEntry && d.entradaReal != null)
-              ? DateFormat('hh:mm a').format(d.entradaReal!)
-              : null,
-          'notas': shareNotes ? d.notas : '',
-          'is_in_progress': d.isInProgress,
-          'es_falta': d.esFalta,
-          'es_festivo': d.esFestivo,
-          'es_vacaciones': d.esVacaciones,
-        };
-      }).toList();
+      final List<Map<String, dynamic>> sanitizedShifts =
+          sanitizeWorkDaysForUnitShare(
+        relevantShifts,
+        shareEntry: shareEntry,
+        shareExit: shareExit,
+        shareRealEntry: shareRealEntry,
+        shareNotes: shareNotes,
+      );
 
       final String memberName =
           "${_firstNameController.text.trim()} ${_lastNameController.text.trim()}"
@@ -11317,7 +11247,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     color: _isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.14.0 27/10/26",
+            Text("Versión v.23.15.0 28/10/26",
                 style: TextStyle(
                     color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
                     fontSize: 14)),
@@ -12331,40 +12261,129 @@ class _TelevisaAppState extends State<TelevisaApp> {
               day.totalHours > day.baseHours ? day.baseHours : day.totalHours;
 
           return AlertDialog(
-      scrollable: true,
-            backgroundColor: Colors.grey[900],
-            title: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            scrollable: true,
+            backgroundColor:
+                _isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(dateStringES,
-                    style: TextStyle(
-                        color: startedOnWeekend
-                            ? Colors.yellowAccent
-                            : Colors.orange,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold)),
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // EDIT BUTTON (Modifies existing clock-in, clock-out, and notes)
-                    IconButton(
-                      icon: const Icon(Icons.edit,
-                          color: Colors.blueAccent, size: 24),
-                      onPressed: () {
-                        Navigator.pop(dialogContext);
-                        _editExistingWorkDay(existingIndex);
-                      },
+                    Text(
+                      dateStringES,
+                      style: TextStyle(
+                        color: startedOnWeekend
+                            ? (_isDarkMode
+                                ? Colors.yellowAccent
+                                : const Color(0xFFB45309))
+                            : (_isDarkMode
+                                ? Colors.orange
+                                : const Color(0xFFC2410C)),
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    // DELETE BUTTON
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline,
-                          color: Colors.redAccent, size: 24),
-                      onPressed: () {
-                        Navigator.pop(dialogContext);
-                        _showDeleteDialog(existingIndex);
-                      },
+                    Row(
+                      children: [
+                        // EDIT BUTTON (Modifies existing clock-in, clock-out, and notes)
+                        IconButton(
+                          icon: const Icon(Icons.edit,
+                              color: Colors.blueAccent, size: 24),
+                          onPressed: () {
+                            Navigator.pop(dialogContext);
+                            _editExistingWorkDay(existingIndex);
+                          },
+                        ),
+                        // DELETE BUTTON
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline,
+                              color: Colors.redAccent, size: 24),
+                          onPressed: () {
+                            Navigator.pop(dialogContext);
+                            _showDeleteDialog(existingIndex);
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 ),
+                if (_isUnitShareActive && _activeUnitShareData != null) ...[
+                  const SizedBox(height: 6),
+                  Builder(
+                    builder: (context) {
+                      final bool isShared = _isDateSharedWithManager(
+                        day.entrada,
+                        shiftId: day.id,
+                      );
+                      final String managerName = (_activeUnitShareData!['manager_name'] ??
+                              _activeUnitShareData!['name'] ??
+                              'Ingeniero de Unidad')
+                          .toString()
+                          .trim();
+
+                      final Color badgeColor = isShared
+                          ? (_isDarkMode
+                              ? Colors.cyanAccent
+                              : const Color(0xFF0284C7))
+                          : (_isDarkMode
+                              ? Colors.white60
+                              : const Color(0xFF64748B));
+                      final Color badgeBg = isShared
+                          ? (_isDarkMode
+                              ? Colors.cyanAccent.withAlpha(35)
+                              : const Color(0xFFE0F2FE))
+                          : (_isDarkMode
+                              ? Colors.white10
+                              : const Color(0xFFF1F5F9));
+                      final Color badgeBorder = isShared
+                          ? (_isDarkMode
+                              ? Colors.cyanAccent.withAlpha(90)
+                              : const Color(0xFF7DD3FC))
+                          : (_isDarkMode
+                              ? Colors.white12
+                              : const Color(0xFFCBD5E1));
+
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: badgeBg,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: badgeBorder),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isShared
+                                  ? Icons.share_rounded
+                                  : Icons.visibility_off_rounded,
+                              size: 13,
+                              color: badgeColor,
+                            ),
+                            const SizedBox(width: 5),
+                            Flexible(
+                              child: Text(
+                                isShared
+                                    ? "Compartido con $managerName"
+                                    : "No compartido",
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: badgeColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
               ],
             ),
             content: SingleChildScrollView(
@@ -12706,8 +12725,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(dialogContext),
-                child: const Text("CERRAR",
-                    style: TextStyle(color: Colors.white70)),
+                child: Text("CERRAR",
+                    style: TextStyle(
+                        color: _isDarkMode
+                            ? Colors.white70
+                            : const Color(0xFF475569))),
               ),
             ],
           );
@@ -15120,6 +15142,162 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
   }
 }
 
+/// Parses a unit-share date/timestamp stored as [Timestamp], [DateTime], or ISO string.
+DateTime? parseUnitShareDate(dynamic raw) {
+  if (raw == null) return null;
+  if (raw is Timestamp) return raw.toDate();
+  if (raw is DateTime) return raw;
+  if (raw is String) return DateTime.tryParse(raw);
+  return null;
+}
+
+/// Parses a dynamic list/iterable into a set of non-empty string IDs or date keys.
+Set<String> parseUnitShareStringSet(dynamic raw) {
+  if (raw == null) return <String>{};
+  if (raw is Iterable) {
+    return raw
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty)
+        .toSet();
+  }
+  return <String>{};
+}
+
+/// Checks whether a specific shift date / id is shared under unit share rules.
+bool isDateSharedUnderUnitShare({
+  required DateTime date,
+  String? shiftId,
+  required String mode,
+  DateTime? activeUntil,
+  Set<String> customDates = const <String>{},
+  Set<String> excludedDates = const <String>{},
+  DateTime? now,
+}) {
+  final String dateKey = DateFormat('yyyy-MM-dd').format(date);
+  final bool hasShiftId = shiftId != null && shiftId.isNotEmpty;
+
+  // 1. Excluded dates always take precedence
+  if (excludedDates.contains(dateKey) ||
+      (hasShiftId && excludedDates.contains(shiftId))) {
+    return false;
+  }
+
+  // 2. 'Yo Decido': ONLY dates in custom_dates (minus excluded) are shared.
+  // Empty custom_dates MUST produce false (never all shifts).
+  if (mode == 'Yo Decido') {
+    if (customDates.isEmpty) return false;
+    return customDates.contains(dateKey) ||
+        (hasShiftId && customDates.contains(shiftId));
+  }
+
+  // 3. 'Todos Mis Registros': shares everything (not excluded)
+  if (mode == 'Todos Mis Registros') {
+    return true;
+  }
+
+  final DateTime ref = now ?? DateTime.now();
+
+  // 4. 'Solo Hoy': only the activation date (or target date)
+  if (mode == 'Solo Hoy') {
+    final DateTime targetDate = activeUntil ?? ref;
+    return date.year == targetDate.year &&
+        date.month == targetDate.month &&
+        date.day == targetDate.day;
+  }
+
+  // 5. 'Este Mes' / 'Mensual'
+  if (mode == 'Este Mes' || mode == 'Mensual') {
+    final monthStart = DateTime(ref.year, ref.month, 1);
+    final monthEnd = DateTime(ref.year, ref.month + 1, 0, 23, 59, 59);
+    return !date.isBefore(monthStart) && !date.isAfter(monthEnd);
+  }
+
+  // 6. 'Este Año' / 'Anual'
+  if (mode == 'Este Año' || mode == 'Anual') {
+    final yearStart = DateTime(ref.year, 1, 1);
+    final yearEnd = DateTime(ref.year, 12, 31, 23, 59, 59);
+    return !date.isBefore(yearStart) && !date.isAfter(yearEnd);
+  }
+
+  // 7. Week modes: 'Esta Semana y la Pasada' vs 'Esta Semana' (default)
+  final monday = ref.subtract(Duration(days: ref.weekday - 1));
+  final sunday = monday.add(const Duration(days: 6));
+  final sundayEnd =
+      DateTime(sunday.year, sunday.month, sunday.day, 23, 59, 59);
+
+  if (mode == 'Esta Semana y la Pasada' ||
+      mode == 'two_weeks' ||
+      mode == 'current_and_previous') {
+    final mondayLastWeek = monday.subtract(const Duration(days: 7));
+    final mondayLastWeekStart = DateTime(
+        mondayLastWeek.year, mondayLastWeek.month, mondayLastWeek.day);
+    return !date.isBefore(mondayLastWeekStart) && !date.isAfter(sundayEnd);
+  }
+
+  // Default: Esta Semana / Semanal / current_week
+  final mondayStart = DateTime(monday.year, monday.month, monday.day);
+  return !date.isBefore(mondayStart) && !date.isAfter(sundayEnd);
+}
+
+/// Filters a list of WorkDay shifts according to unit share mode and date bounds.
+List<WorkDay> filterWorkDaysForUnitShare(
+  List<WorkDay> shifts, {
+  required String mode,
+  DateTime? activeUntil,
+  Set<String> customDates = const <String>{},
+  Set<String> excludedDates = const <String>{},
+  DateTime? now,
+}) {
+  return shifts.where((d) {
+    return isDateSharedUnderUnitShare(
+      date: d.entrada,
+      shiftId: d.id,
+      mode: mode,
+      activeUntil: activeUntil,
+      customDates: customDates,
+      excludedDates: excludedDates,
+      now: now,
+    );
+  }).toList();
+}
+
+/// Sanitizes a list of WorkDay shifts for sharing to a Unit Manager.
+List<Map<String, dynamic>> sanitizeWorkDaysForUnitShare(
+  List<WorkDay> shifts, {
+  bool shareEntry = true,
+  bool shareExit = true,
+  bool shareRealEntry = false,
+  bool shareNotes = false,
+}) {
+  return shifts.map((d) {
+    return {
+      'id': d.id,
+      'date': DateFormat('yyyy-MM-dd').format(d.entrada),
+      'weekday': d.entrada.weekday,
+      'entrada': shareEntry ? Timestamp.fromDate(d.entrada) : null,
+      'entrada_str':
+          shareEntry ? DateFormat('hh:mm a').format(d.entrada) : null,
+      'salida': (shareExit && !d.isInProgress)
+          ? Timestamp.fromDate(d.salida)
+          : null,
+      'salida_str': (shareExit && !d.isInProgress)
+          ? DateFormat('hh:mm a').format(d.salida)
+          : null,
+      'entrada_real': (shareRealEntry && d.entradaReal != null)
+          ? Timestamp.fromDate(d.entradaReal!)
+          : null,
+      'entrada_real_str': (shareRealEntry && d.entradaReal != null)
+          ? DateFormat('hh:mm a').format(d.entradaReal!)
+          : null,
+      'notas': shareNotes ? d.notas : '',
+      'is_in_progress': d.isInProgress,
+      'es_falta': d.esFalta,
+      'es_festivo': d.esFestivo,
+      'es_vacaciones': d.esVacaciones,
+    };
+  }).toList();
+}
+
 class UnitShareScreen extends StatefulWidget {
   final bool isDarkMode;
   final List<WorkDay>? weeklyHistory;
@@ -15170,6 +15348,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
   String _userEmp = '';
   List<WorkDay> _userWorkDays = [];
   Set<String> _excludedDates = {};
+  Set<String> _customDates = {};
 
   @override
   void initState() {
@@ -15246,6 +15425,10 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             if (rawExcluded != null) {
               _excludedDates = rawExcluded.map((e) => e.toString()).toSet();
             }
+            final rawCustom = c['custom_dates'] as List<dynamic>?;
+            if (rawCustom != null) {
+              _customDates = rawCustom.map((e) => e.toString()).toSet();
+            }
           }
         } catch (_) {}
       }
@@ -15282,9 +15465,26 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
           if (rawExcluded != null) {
             _excludedDates = rawExcluded.map((e) => e.toString()).toSet();
           }
+          final rawCustom = d['custom_dates'] as List<dynamic>?;
+          if (rawCustom != null) {
+            _customDates = rawCustom.map((e) => e.toString()).toSet();
+          }
 
           final mgrUid = (d['manager_uid'] ?? d['uid'] ?? '').toString();
           if (mgrUid.isNotEmpty) {
+            // Self-heal: ensure remote manager doc only holds strictly filtered shifts
+            _healSharedShifts(
+              managerUid: mgrUid,
+              userUid: user.uid,
+              mode: _selectedMode,
+              activeUntil: activeUntil,
+              customDates: _customDates,
+              excludedDates: _excludedDates,
+              shareEntry: _shareEntry,
+              shareExit: _shareExit,
+              shareRealEntry: _shareRealEntry,
+              shareNotes: _shareNotes,
+            );
             _setupMemberListener(mgrUid, user.uid);
           }
         } else {
@@ -15298,6 +15498,47 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
       if (mounted) {
         setState(() => _isLoading = false);
       }
+    }
+  }
+
+  Future<void> _healSharedShifts({
+    required String managerUid,
+    required String userUid,
+    required String mode,
+    DateTime? activeUntil,
+    required Set<String> customDates,
+    required Set<String> excludedDates,
+    required bool shareEntry,
+    required bool shareExit,
+    required bool shareRealEntry,
+    required bool shareNotes,
+  }) async {
+    try {
+      final relevantShifts = filterWorkDaysForUnitShare(
+        _userWorkDays,
+        mode: mode,
+        activeUntil: activeUntil,
+        customDates: customDates,
+        excludedDates: excludedDates,
+      );
+      final sanitizedShifts = sanitizeWorkDaysForUnitShare(
+        relevantShifts,
+        shareEntry: shareEntry,
+        shareExit: shareExit,
+        shareRealEntry: shareRealEntry,
+        shareNotes: shareNotes,
+      );
+      await FirebaseFirestore.instance
+          .collection('unit_shares')
+          .doc(managerUid)
+          .collection('members')
+          .doc(userUid)
+          .set({
+        'shifts': sanitizedShifts,
+        'last_synced_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint("Error self-healing unit share shifts: $e");
     }
   }
 
@@ -15763,96 +16004,18 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
       final retentionUntil = activeUntil.add(const Duration(days: 14));
 
       // Filter shifts
-      final todayStart = DateTime(now.year, now.month, now.day);
-      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      final customDates = _customDates.isNotEmpty
+          ? _customDates
+          : parseUnitShareStringSet(_shareData?['custom_dates']);
 
-      final mondayThisWeek = now.subtract(Duration(days: now.weekday - 1));
-      final mondayThisWeekStart =
-          DateTime(mondayThisWeek.year, mondayThisWeek.month, mondayThisWeek.day);
-      final sundayThisWeek = mondayThisWeek.add(const Duration(days: 6));
-      final sundayThisWeekEnd = DateTime(
-          sundayThisWeek.year, sundayThisWeek.month, sundayThisWeek.day, 23, 59, 59);
-
-      final mondayLastWeek = mondayThisWeek.subtract(const Duration(days: 7));
-      final mondayLastWeekStart =
-          DateTime(mondayLastWeek.year, mondayLastWeek.month, mondayLastWeek.day);
-
-      final monthStart = DateTime(now.year, now.month, 1);
-      final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
-
-      final yearStart = DateTime(now.year, 1, 1);
-      final yearEnd = DateTime(now.year, 12, 31, 23, 59, 59);
-
-      List<WorkDay> relevantShifts;
-      switch (_selectedMode) {
-        case 'Solo Hoy':
-          relevantShifts = _userWorkDays.where((d) {
-            return d.entrada
-                    .isAfter(todayStart.subtract(const Duration(seconds: 1))) &&
-                d.entrada.isBefore(todayEnd.add(const Duration(seconds: 1)));
-          }).toList();
-          break;
-        case 'Esta Semana':
-        case 'Semanal':
-          relevantShifts = _userWorkDays.where((d) {
-            return d.entrada.isAfter(mondayThisWeekStart
-                    .subtract(const Duration(seconds: 1))) &&
-                d.entrada.isBefore(
-                    sundayThisWeekEnd.add(const Duration(seconds: 1)));
-          }).toList();
-          break;
-        case 'Esta Semana y la Pasada':
-          relevantShifts = _userWorkDays.where((d) {
-            return d.entrada.isAfter(mondayLastWeekStart
-                    .subtract(const Duration(seconds: 1))) &&
-                d.entrada.isBefore(
-                    sundayThisWeekEnd.add(const Duration(seconds: 1)));
-          }).toList();
-          break;
-        case 'Este Mes':
-        case 'Mensual':
-          relevantShifts = _userWorkDays.where((d) {
-            return d.entrada.isAfter(
-                    monthStart.subtract(const Duration(seconds: 1))) &&
-                d.entrada.isBefore(monthEnd.add(const Duration(seconds: 1)));
-          }).toList();
-          break;
-        case 'Este Año':
-        case 'Anual':
-          relevantShifts = _userWorkDays.where((d) {
-            return d.entrada.isAfter(
-                    yearStart.subtract(const Duration(seconds: 1))) &&
-                d.entrada.isBefore(yearEnd.add(const Duration(seconds: 1)));
-          }).toList();
-          break;
-        case 'Yo Decido':
-          final customDates = _shareData?['custom_dates'] as List<dynamic>?;
-          if (customDates != null && customDates.isNotEmpty) {
-            final setOfDates = customDates.map((e) => e.toString()).toSet();
-            relevantShifts = _userWorkDays.where((d) {
-              final dStr = DateFormat('yyyy-MM-dd').format(d.entrada);
-              return setOfDates.contains(dStr) || setOfDates.contains(d.id);
-            }).toList();
-          } else {
-            relevantShifts = List<WorkDay>.from(_userWorkDays);
-          }
-          break;
-        default:
-          relevantShifts = _userWorkDays.where((d) {
-            return d.entrada.isAfter(mondayThisWeekStart
-                    .subtract(const Duration(seconds: 1))) &&
-                d.entrada.isBefore(
-                    sundayThisWeekEnd.add(const Duration(seconds: 1)));
-          }).toList();
-      }
-
-      if (_excludedDates.isNotEmpty) {
-        relevantShifts = relevantShifts.where((d) {
-          final dStr = DateFormat('yyyy-MM-dd').format(d.entrada);
-          return !_excludedDates.contains(dStr) &&
-              !_excludedDates.contains(d.id);
-        }).toList();
-      }
+      final List<WorkDay> relevantShifts = filterWorkDaysForUnitShare(
+        _userWorkDays,
+        mode: _selectedMode,
+        activeUntil: activeUntil,
+        customDates: customDates,
+        excludedDates: _excludedDates,
+        now: now,
+      );
 
       Timestamp? lastClockOut;
       final completed =
@@ -15863,33 +16026,13 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
       }
 
       final List<Map<String, dynamic>> sanitizedShifts =
-          relevantShifts.map((d) {
-        return {
-          'id': d.id,
-          'date': DateFormat('yyyy-MM-dd').format(d.entrada),
-          'weekday': d.entrada.weekday,
-          'entrada': _shareEntry ? Timestamp.fromDate(d.entrada) : null,
-          'entrada_str':
-              _shareEntry ? DateFormat('hh:mm a').format(d.entrada) : null,
-          'salida': (_shareExit && !d.isInProgress)
-              ? Timestamp.fromDate(d.salida)
-              : null,
-          'salida_str': (_shareExit && !d.isInProgress)
-              ? DateFormat('hh:mm a').format(d.salida)
-              : null,
-          'entrada_real': (_shareRealEntry && d.entradaReal != null)
-              ? Timestamp.fromDate(d.entradaReal!)
-              : null,
-          'entrada_real_str': (_shareRealEntry && d.entradaReal != null)
-              ? DateFormat('hh:mm a').format(d.entradaReal!)
-              : null,
-          'notas': _shareNotes ? d.notas : '',
-          'is_in_progress': d.isInProgress,
-          'es_falta': d.esFalta,
-          'es_festivo': d.esFestivo,
-          'es_vacaciones': d.esVacaciones,
-        };
-      }).toList();
+          sanitizeWorkDaysForUnitShare(
+        relevantShifts,
+        shareEntry: _shareEntry,
+        shareExit: _shareExit,
+        shareRealEntry: _shareRealEntry,
+        shareNotes: _shareNotes,
+      );
 
       final sharePayload = {
         'manager_uid': managerUid,
@@ -15907,6 +16050,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
         'share_exit': _shareExit,
         'share_notes': _shareNotes,
         'excluded_dates': _excludedDates.toList(),
+        'custom_dates': customDates.toList(),
         'updated_at': FieldValue.serverTimestamp(),
       };
 
@@ -15927,6 +16071,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
         'share_entry': _shareEntry,
         'share_exit': _shareExit,
         'share_notes': _shareNotes,
+        'custom_dates': customDates.toList(),
         'shifts': sanitizedShifts,
         'last_clock_out': lastClockOut,
         'last_synced_at': FieldValue.serverTimestamp(),
@@ -19935,6 +20080,7 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
     'no_empleado': true,
   };
   bool _exactReplacement = true;
+  bool _sendPasswordResetPostMerge = true;
 
   // Real-time debounced auto-search
   Timer? _sourceDebounceTimer;
@@ -20519,6 +20665,7 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
       _selectedFields[c.key] = c.hasSourceData || c.isDifferent;
     }
     _exactReplacement = true;
+    _sendPasswordResetPostMerge = true;
   }
 
   Future<void> _confirmAndExecuteMerge() async {
@@ -20640,10 +20787,19 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
                   ),
                 );
               }),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               _buildBulletItem(
-                "🔒 Respaldo:",
-                "La cuenta origen conservará todos sus registros intactos y solo quedará marcada como archivada.",
+                "⚠️ Eliminación Definitiva:",
+                "La cuenta origen (${_sourceUser!.fullName}, UID: ${_sourceUser!.uid}) y todos sus registros (historial y configuración) serán ELIMINADOS POR COMPLETO de Firestore sin dejar cuentas fantasma.",
+                highlightColor: Colors.redAccent,
+              ),
+              const SizedBox(height: 6),
+              _buildBulletItem(
+                "🔑 Acceso Post-Fusión:",
+                _sendPasswordResetPostMerge
+                    ? "Se enviará un correo de restablecimiento de contraseña a ${_targetUser!.email} para ingresar a la cuenta receptora."
+                    : "Se conservará la contraseña actual de la cuenta destino sin enviar correos.",
+                highlightColor: Colors.amber,
               ),
             ],
           ),
@@ -20953,10 +21109,63 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
         appliedFieldsSummary.add("Directorio: No. $empNo vinculado a $realEmail");
       }
 
-      // 4. Mark source as merged
+      // 4. Overhaul donor handling: recursively delete all docs in users/{source.uid}/history, settings, and delete users/{source.uid} (hard purge, no ghost accounts)
       if (mounted) {
         setState(() {
-          _mergeStatus = "Marcando cuenta origen como archivada/fusionada...";
+          _mergeStatus = "Eliminando historial de cuenta origen...";
+          _mergeProgress = 0.94;
+        });
+      }
+
+      final sourceHistoryDocs = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(source.uid)
+          .collection('history')
+          .get();
+
+      if (sourceHistoryDocs.docs.isNotEmpty) {
+        for (int i = 0; i < sourceHistoryDocs.docs.length; i += 400) {
+          final end = math.min(i + 400, sourceHistoryDocs.docs.length);
+          final chunk = sourceHistoryDocs.docs.sublist(i, end);
+          final batch = FirebaseFirestore.instance.batch();
+          for (final doc in chunk) {
+            batch.delete(doc.reference);
+          }
+          await batch.commit();
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _mergeStatus = "Eliminando configuración de cuenta origen...";
+          _mergeProgress = 0.96;
+        });
+      }
+
+      final sourceSettingsDocs = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(source.uid)
+          .collection('settings')
+          .get();
+
+      if (sourceSettingsDocs.docs.isNotEmpty) {
+        final batch = FirebaseFirestore.instance.batch();
+        for (final doc in sourceSettingsDocs.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+
+      // Also clean up unit_managers if source was registered
+      await FirebaseFirestore.instance
+          .collection('unit_managers')
+          .doc(source.uid)
+          .delete()
+          .catchError((_) {});
+
+      if (mounted) {
+        setState(() {
+          _mergeStatus = "Eliminando cuenta origen de Firestore...";
           _mergeProgress = 0.98;
         });
       }
@@ -20964,11 +21173,45 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
       await FirebaseFirestore.instance
           .collection('users')
           .doc(source.uid)
-          .set({
-        'is_merged': true,
-        'merged_into': target.uid,
-        'merged_at': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+          .delete();
+      appliedFieldsSummary.add(
+          "Cuenta origen (${source.uid}): Eliminada por completo de Firestore (hard purge, sin cuentas fantasma)");
+
+      // 5. Post-merge password handling
+      if (_sendPasswordResetPostMerge) {
+        final targetRecipientEmail = (target.email.isNotEmpty &&
+                !target.email.endsWith('@televisa.com'))
+            ? target.email
+            : (target.recoveryEmail.isNotEmpty
+                ? target.recoveryEmail
+                : target.email);
+
+        if (targetRecipientEmail.isNotEmpty &&
+            !targetRecipientEmail.endsWith('@televisa.com')) {
+          if (mounted) {
+            setState(() {
+              _mergeStatus =
+                  "Enviando restablecimiento de contraseña a $targetRecipientEmail...";
+              _mergeProgress = 0.99;
+            });
+          }
+          try {
+            await FirebaseAuth.instance
+                .sendPasswordResetEmail(email: targetRecipientEmail.trim());
+            appliedFieldsSummary.add(
+                "Contraseña: Enlace de restablecimiento enviado a $targetRecipientEmail");
+          } catch (e) {
+            appliedFieldsSummary.add(
+                "Contraseña: No se pudo enviar el correo de restablecimiento ($e)");
+          }
+        } else {
+          appliedFieldsSummary.add(
+              "Contraseña: No se envió correo (la cuenta destino no cuenta con un correo externo válido)");
+        }
+      } else {
+        appliedFieldsSummary.add(
+            "Contraseña: Se conservó la contraseña actual de la cuenta destino");
+      }
 
       if (mounted) {
         setState(() {
@@ -20984,6 +21227,9 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
         setState(() {
           _sourceUser = refreshedSource;
           _targetUser = refreshedTarget;
+          if (_sourceUser == null) {
+            _sourceController.clear();
+          }
           _initFieldSelections();
         });
       }
@@ -21042,8 +21288,13 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
                           highlightColor: Colors.greenAccent),
                     )),
                 const SizedBox(height: 8),
-                _buildBulletItem("🔒 Respaldo:",
-                    "Cuenta origen archivada y protegida contra pérdidas."),
+                _buildBulletItem("🗑️ Depuración de Origen:",
+                    "Cuenta origen eliminada por completo de Firestore (sin cuentas fantasma).",
+                    highlightColor: Colors.orangeAccent),
+                _buildBulletItem("🔑 Acceso Post-Fusión:",
+                    _sendPasswordResetPostMerge
+                        ? "Enlace de restablecimiento enviado a la cuenta destino."
+                        : "Contraseña actual de la cuenta destino conservada."),
               ],
             ),
           ),
@@ -21535,6 +21786,186 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostMergePasswordSelection() {
+    final targetEmail = _targetUser != null
+        ? ((_targetUser!.email.isNotEmpty &&
+                !_targetUser!.email.endsWith('@televisa.com'))
+            ? _targetUser!.email
+            : (_targetUser!.recoveryEmail.isNotEmpty
+                ? _targetUser!.recoveryEmail
+                : _targetUser!.email))
+        : '';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withAlpha(widget.isDarkMode ? 40 : 25),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.password_rounded,
+                    color: Colors.amber, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Acceso y Contraseña Post-Fusión",
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      "Selecciona cómo accederá el usuario a la cuenta receptora al terminar.",
+                      style: TextStyle(color: _textSecondary, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          // Option 1: Send Password Reset
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: _isMerging
+                ? null
+                : () => setState(() => _sendPasswordResetPostMerge = true),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: _sendPasswordResetPostMerge
+                    ? Colors.amber.withAlpha(widget.isDarkMode ? 25 : 20)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: _sendPasswordResetPostMerge
+                      ? Colors.amber.withAlpha(120)
+                      : _border,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Radio<bool>(
+                    value: true,
+                    groupValue: _sendPasswordResetPostMerge,
+                    onChanged: _isMerging
+                        ? null
+                        : (val) =>
+                            setState(() => _sendPasswordResetPostMerge = val!),
+                    activeColor: Colors.amber,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Enviar restablecimiento de contraseña",
+                          style: TextStyle(
+                            color: _sendPasswordResetPostMerge
+                                ? Colors.amber
+                                : _textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          targetEmail.isNotEmpty
+                              ? "Enviará un correo de restablecimiento a $targetEmail."
+                              : "Enviará un correo a la dirección de la cuenta destino para configurar contraseña nueva.",
+                          style: TextStyle(
+                            color: _textSecondary,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // Option 2: Keep current password
+          InkWell(
+            borderRadius: BorderRadius.circular(10),
+            onTap: _isMerging
+                ? null
+                : () => setState(() => _sendPasswordResetPostMerge = false),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: !_sendPasswordResetPostMerge
+                    ? Colors.amber.withAlpha(widget.isDarkMode ? 25 : 20)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: !_sendPasswordResetPostMerge
+                      ? Colors.amber.withAlpha(120)
+                      : _border,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Radio<bool>(
+                    value: false,
+                    groupValue: _sendPasswordResetPostMerge,
+                    onChanged: _isMerging
+                        ? null
+                        : (val) =>
+                            setState(() => _sendPasswordResetPostMerge = val!),
+                    activeColor: Colors.amber,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Conservar contraseña actual de la cuenta destino",
+                          style: TextStyle(
+                            color: !_sendPasswordResetPostMerge
+                                ? Colors.amber
+                                : _textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          "No se enviará ningún correo. El usuario mantendrá la contraseña que ya tiene configurada.",
+                          style: TextStyle(
+                            color: _textSecondary,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -22150,6 +22581,13 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
                 // Selective Copy Matrix Card
                 _buildSelectiveCopyMatrix(),
 
+                const SizedBox(height: 20),
+
+                // Post-merge Password Selection Card
+                _buildPostMergePasswordSelection(),
+
+                const SizedBox(height: 20),
+
                 // Transfer Progress
                 if (_isMerging) ...[
                   Container(
@@ -22651,6 +23089,465 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
         );
       }
     }
+  }
+
+  Future<void> _promptSendPasswordReset({
+    required String userName,
+    required String displayEmail,
+    required String employeeNumber,
+  }) async {
+    final cleanEmail = displayEmail.trim();
+    if (cleanEmail.isEmpty || !cleanEmail.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              "Este usuario no cuenta con un correo electrónico válido registrado."),
+          backgroundColor: Colors.orangeAccent,
+        ),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: _border),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.cyan.withAlpha(_isDarkMode ? 40 : 25),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.lock_reset_rounded,
+                color: Colors.cyanAccent,
+                size: 26,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "Restablecer Contraseña",
+                style: TextStyle(
+                  color: _textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "¿Deseas enviar un enlace de restablecimiento de contraseña para este usuario?",
+              style: TextStyle(color: _textSecondary, fontSize: 13.5),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _cardBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: _border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    userName,
+                    style: TextStyle(
+                      color: _textPrimary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (employeeNumber.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      "No. Empleado: $employeeNumber",
+                      style: TextStyle(color: _textSecondary, fontSize: 12),
+                    ),
+                  ],
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.email_outlined,
+                        color: _isDarkMode
+                            ? Colors.cyanAccent
+                            : const Color(0xFF0284C7),
+                        size: 14,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          cleanEmail,
+                          style: TextStyle(
+                            color: _isDarkMode
+                                ? Colors.cyanAccent
+                                : const Color(0xFF0284C7),
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12.5,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              "CANCELAR",
+              style: TextStyle(
+                color: _textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _isDarkMode
+                  ? Colors.cyanAccent
+                  : const Color(0xFF0284C7),
+              foregroundColor: _isDarkMode ? Colors.black : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              "SÍ, ENVIAR CORREO",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: cleanEmail);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Correo de restablecimiento enviado exitosamente a $cleanEmail",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            backgroundColor: Colors.green.shade700,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al enviar correo: $e"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showChangeEmailDialog({
+    required String uid,
+    required String userName,
+    required String currentEmail,
+    required String employeeNumber,
+  }) async {
+    final emailController = TextEditingController(text: currentEmail);
+    final formKey = GlobalKey<FormState>();
+    bool isUpdating = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: _surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: _border),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.teal.withAlpha(_isDarkMode ? 40 : 25),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.alternate_email_rounded,
+                  color: _isDarkMode
+                      ? Colors.tealAccent
+                      : const Color(0xFF0D9488),
+                  size: 26,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "Cambiar Correo",
+                  style: TextStyle(
+                    color: _textPrimary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Actualiza el correo principal y de recuperación de la cuenta.",
+                    style: TextStyle(color: _textSecondary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _cardBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          userName,
+                          style: TextStyle(
+                            color: _textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13.5,
+                          ),
+                        ),
+                        if (employeeNumber.isNotEmpty)
+                          Text(
+                            "No. Empleado: $employeeNumber",
+                            style:
+                                TextStyle(color: _textSecondary, fontSize: 12),
+                          ),
+                        Text(
+                          "UID: $uid",
+                          style: TextStyle(
+                            color: _textSecondary.withAlpha(180),
+                            fontSize: 11,
+                            fontFamily: 'monospace',
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    "Nuevo correo electrónico:",
+                    style: TextStyle(
+                      color: _textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  TextFormField(
+                    controller: emailController,
+                    enabled: !isUpdating,
+                    keyboardType: TextInputType.emailAddress,
+                    style: TextStyle(color: _textPrimary),
+                    decoration: InputDecoration(
+                      hintText: "ejemplo@correo.com",
+                      hintStyle: TextStyle(color: _textSecondary),
+                      prefixIcon: Icon(Icons.email_outlined,
+                          color: _textSecondary, size: 20),
+                      filled: true,
+                      fillColor: _cardBg,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: _border),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(color: _border),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: _isDarkMode
+                              ? Colors.tealAccent
+                              : const Color(0xFF0D9488),
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                    validator: (val) {
+                      final str = val?.trim() ?? '';
+                      if (str.isEmpty) {
+                        return "Por favor ingresa un correo.";
+                      }
+                      if (!str.contains('@') || !str.contains('.')) {
+                        return "Ingresa un formato de correo válido.";
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "Se actualizarán los campos email y recovery_email en users/$uid, y se sincronizará con employee_directory${employeeNumber.isNotEmpty ? '/$employeeNumber' : ''}.",
+                    style: TextStyle(color: _textSecondary, fontSize: 11.5),
+                  ),
+                  if (isUpdating) ...[
+                    const SizedBox(height: 14),
+                    const Center(
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isUpdating ? null : () => Navigator.pop(dialogCtx),
+              child: Text(
+                "CANCELAR",
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _isDarkMode
+                    ? Colors.tealAccent
+                    : const Color(0xFF0D9488),
+                foregroundColor: _isDarkMode ? Colors.black : Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              onPressed: isUpdating
+                  ? null
+                  : () async {
+                      if (!formKey.currentState!.validate()) return;
+                      final newEmail = emailController.text.trim();
+                      final nav = Navigator.of(dialogCtx);
+                      final messenger = ScaffoldMessenger.of(this.context);
+                      setDialogState(() => isUpdating = true);
+
+                      try {
+                        final batch = FirebaseFirestore.instance.batch();
+                        final userRef = FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(uid);
+
+                        batch.set(
+                          userRef,
+                          {
+                            'email': newEmail,
+                            'recovery_email': newEmail,
+                            'updated_at': FieldValue.serverTimestamp(),
+                          },
+                          SetOptions(merge: true),
+                        );
+
+                        if (employeeNumber.isNotEmpty) {
+                          final dirRef = FirebaseFirestore.instance
+                              .collection('employee_directory')
+                              .doc(employeeNumber);
+                          batch.set(
+                            dirRef,
+                            {
+                              'email': newEmail,
+                              'uid': uid,
+                              'employee_number': employeeNumber,
+                              'updated_at': FieldValue.serverTimestamp(),
+                            },
+                            SetOptions(merge: true),
+                          );
+                        }
+
+                        await batch.commit();
+
+                        if (mounted) {
+                          setState(() {
+                            // Update locally in user lists
+                            for (var userMap in _userList) {
+                              if (userMap['uid'] == uid) {
+                                userMap['email'] = newEmail;
+                                userMap['recEmail'] = newEmail;
+                                userMap['isRealEmail'] =
+                                    !newEmail.endsWith('@televisa.com');
+                              }
+                            }
+                            _onSearchChanged();
+                          });
+
+                          nav.pop();
+
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                "Correo actualizado correctamente a $newEmail",
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              backgroundColor: Colors.teal.shade700,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => isUpdating = false);
+                        if (mounted) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text("Error al actualizar correo: $e"),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              child: const Text(
+                "GUARDAR CORREO",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmSignOut() async {
@@ -23349,6 +24246,19 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
                                 employeeNumber: emp,
                                 currentIsUnitManager: isUnitManager,
                               );
+                            } else if (val == 'send_reset') {
+                              _promptSendPasswordReset(
+                                userName: name,
+                                displayEmail: displayEmail,
+                                employeeNumber: emp,
+                              );
+                            } else if (val == 'change_email') {
+                              _showChangeEmailDialog(
+                                uid: uid,
+                                userName: name,
+                                currentEmail: displayEmail,
+                                employeeNumber: emp,
+                              );
                             } else if (val == 'copy_uid') {
                               _copyToClipboard(uid, "UID");
                             } else if (val == 'migrate') {
@@ -23382,6 +24292,42 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600,
                                     ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'send_reset',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.lock_reset_rounded,
+                                      color: _isDarkMode
+                                          ? Colors.cyanAccent
+                                          : const Color(0xFF0284C7),
+                                      size: 18),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    "Enviar Restablecimiento",
+                                    style: TextStyle(
+                                        color: _textPrimary, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'change_email',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.alternate_email_rounded,
+                                      color: _isDarkMode
+                                          ? Colors.tealAccent
+                                          : const Color(0xFF0D9488),
+                                      size: 18),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    "Cambiar Correo",
+                                    style: TextStyle(
+                                        color: _textPrimary, fontSize: 13),
                                   ),
                                 ],
                               ),
@@ -23600,7 +24546,7 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildInfoRow("Versión Aplicación", "v.23.14.0 27/10/26"),
+                _buildInfoRow("Versión Aplicación", "v.23.15.0 28/10/26"),
                 const Divider(height: 20),
                 _buildInfoRow("Entorno", "Firebase Production (Hosting & Firestore)"),
                 const Divider(height: 20),
