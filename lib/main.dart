@@ -18,12 +18,18 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'web_reload_stub.dart' if (dart.library.html) 'web_reload.dart';
 
 final Map<String, String> _changelogTitles = {
+  "23.14.0": "⏱️ Versión 23.14.0 (27/10/26) — Edición de Turnos Renovada y Mejoras de Rendimiento",
   "23.13.1": "🔑 Versión 23.13.1 (16/10/26) — Acceso con Empleado o Correo y Recuperación",
   "23.12.1": "🎉 Versión 23.12.1 (15/10/26) — Días de Descanso & Historial de Cambios",
   "23.11.1": "☀️ Versión 23.11.1 (13/10/26) — Modo Luz y Pantalla más Clara",
 };
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.14.0": [
+    "✨ Nueva ventana unificada para editar turnos: Modifica tu hora de entrada, salida, entrada real y notas en una sola pantalla ágil y moderna.",
+    "🛡️ Protección contra cierres accidentales: Si modificas algún dato, la app te pedirá confirmación antes de salir para que nunca pierdas tus cambios.",
+    "⚡ Sincronización y rendimiento optimizados: Mejoras en la velocidad de guardado y carga de registros de asistencia.",
+  ],
   "23.13.1": [
     "🆔 Inicia con tu número o tu correo: Ahora puedes entrar a tu cuenta usando tu número de empleado o tu correo indistintamente.",
     "✨ Pantalla de acceso renovada: Nuevo diseño de bienvenida, botones más claros y opción para mostrar u ocultar tu contraseña.",
@@ -144,6 +150,10 @@ class AuthWrapper extends StatelessWidget {
               body: Center(child: CircularProgressIndicator()));
         }
         if (snapshot.hasData) {
+          final user = snapshot.data;
+          if (isAppAdminUser(user)) {
+            return const AdminPortalScaffold();
+          }
           return const TelevisaApp();
         }
         return const LoginScreen();
@@ -1738,6 +1748,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
   final TextEditingController _recoveryEmailController =
       TextEditingController(text: ""); // For password recovery
 
+  // Unit Share ("Compartir Con") State
+  bool _isUnitManager = false;
+  bool _isUnitShareActive = false;
+  Map<String, dynamic>? _activeUnitShareData;
+
+  StreamSubscription? _userRoleSubscription;
+  StreamSubscription? _unitShareMembersSubscription;
+  StreamSubscription? _unitShareEmpSubscription;
+  Stream<List<DocumentSnapshot>>? _unitMembersStream;
+  String? _unitMembersStreamUid;
+  String? _unitMembersStreamEmp;
+
   final ScrollController _nominaScrollController = ScrollController();
   final ScrollController _anoScrollController = ScrollController();
 
@@ -2699,6 +2721,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         }
 
         await batch.commit();
+        _syncShiftsToUnitManager();
       }
 
       if (mounted) {
@@ -2743,6 +2766,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
     setState(() {
       _isDarkMode = prefs.getBool('app_is_dark_mode') ?? true;
+      _isUnitManager = prefs.getBool('is_unit_manager') ?? false;
       _salaryController.text = prefs.getString('salary') ?? "";
 
       // Load history lists
@@ -2883,7 +2907,24 @@ class _TelevisaAppState extends State<TelevisaApp> {
           .get();
       if (userDoc.exists) {
         final data = userDoc.data() as Map<String, dynamic>;
+        final String userEmp = (data['user_emp'] ??
+                data['employee_number'] ??
+                _userEmpNoController.text)
+            .toString()
+            .trim();
+        bool isMgr = data['is_unit_manager'] == true ||
+            data['role'] == 'ingeniero_de_unidad';
+
+        if (!isMgr) {
+          isMgr = await _resolveIsUnitManager(user, userEmp);
+        } else {
+          await prefs.setBool('is_unit_manager', true);
+        }
+
+        _setupUnitManagerRealtimeListener(user, userEmp);
+
         setState(() {
+          _isUnitManager = isMgr;
           _salaryController.text = data['salary'] ?? _salaryController.text;
 
           // Load history lists from cloud
@@ -2936,6 +2977,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
           _recoveryEmailController.text =
               (data['recovery_email'] as String?)?.toLowerCase() ?? "";
         });
+      } else {
+        final String fallbackEmp = _userEmpNoController.text.trim();
+        final bool isMgr = await _resolveIsUnitManager(user, fallbackEmp);
+        if (isMgr) {
+          await prefs.setBool('is_unit_manager', true);
+          if (mounted) {
+            setState(() {
+              _isUnitManager = true;
+            });
+          }
+        }
+        _setupUnitManagerRealtimeListener(user, fallbackEmp);
       }
 
       // 2. Load History from Cloud
@@ -2950,6 +3003,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
           _syncTodayStateFromHistory();
         });
       }
+
+      // 3. Load Unit Share Settings
+      await _loadUnitShareSettings();
     }
   }
 
@@ -3018,10 +3074,257 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
 
 
+  Future<bool> _resolveIsUnitManager(User user, String userEmp) async {
+    // 1. Check unit_managers by UID
+    try {
+      final mgrDocByUid = await FirebaseFirestore.instance
+          .collection('unit_managers')
+          .doc(user.uid)
+          .get();
+      if (mgrDocByUid.exists && mgrDocByUid.data()?['is_unit_manager'] == true) {
+        _selfHealUnitManagerStatus(user.uid, userEmp);
+        return true;
+      }
+    } catch (e) {
+      debugPrint("Notice: could not check unit_managers by UID: $e");
+    }
+
+    // 2. Check unit_managers by employee number
+    final cleanEmp = userEmp.trim();
+    if (cleanEmp.isNotEmpty) {
+      try {
+        final mgrDocByEmp = await FirebaseFirestore.instance
+            .collection('unit_managers')
+            .doc(cleanEmp)
+            .get();
+        if (mgrDocByEmp.exists && mgrDocByEmp.data()?['is_unit_manager'] == true) {
+          _selfHealUnitManagerStatus(user.uid, cleanEmp);
+          return true;
+        }
+
+        final empQuery = await FirebaseFirestore.instance
+            .collection('unit_managers')
+            .where('employee_number', isEqualTo: cleanEmp)
+            .limit(1)
+            .get();
+        if (empQuery.docs.isNotEmpty) {
+          _selfHealUnitManagerStatus(user.uid, cleanEmp);
+          return true;
+        }
+      } catch (e) {
+        debugPrint("Notice: could not check unit_managers by emp: $e");
+      }
+    }
+
+    // 3. Query unit_managers where uid == user.uid
+    try {
+      final uidQuery = await FirebaseFirestore.instance
+          .collection('unit_managers')
+          .where('uid', isEqualTo: user.uid)
+          .limit(1)
+          .get();
+      if (uidQuery.docs.isNotEmpty) {
+        _selfHealUnitManagerStatus(user.uid, cleanEmp);
+        return true;
+      }
+    } catch (e) {
+      debugPrint("Notice: could not query unit_managers by uid: $e");
+    }
+
+    // 4. Check if any members exist under unit_shares/{user.uid}/members
+    try {
+      final sharesByUid = await FirebaseFirestore.instance
+          .collection('unit_shares')
+          .doc(user.uid)
+          .collection('members')
+          .limit(1)
+          .get();
+      if (sharesByUid.docs.isNotEmpty) {
+        _selfHealUnitManagerStatus(user.uid, cleanEmp);
+        return true;
+      }
+    } catch (e) {
+      debugPrint("Notice: could not check unit_shares by UID: $e");
+    }
+
+    // 5. Check if any members exist under unit_shares/{cleanEmp}/members
+    if (cleanEmp.isNotEmpty) {
+      try {
+        final sharesByEmp = await FirebaseFirestore.instance
+            .collection('unit_shares')
+            .doc(cleanEmp)
+            .collection('members')
+            .limit(1)
+            .get();
+        if (sharesByEmp.docs.isNotEmpty) {
+          _selfHealUnitManagerStatus(user.uid, cleanEmp);
+          return true;
+        }
+      } catch (e) {
+        debugPrint("Notice: could not check unit_shares by emp: $e");
+      }
+    }
+
+    return false;
+  }
+
+  Future<void> _selfHealUnitManagerStatus(String uid, String emp) async {
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'is_unit_manager': true,
+        'role': 'ingeniero_de_unidad',
+      }, SetOptions(merge: true));
+    } catch (e) {
+      debugPrint("Notice: could not self-heal users doc: $e");
+    }
+  }
+
+  void _setupUnitManagerRealtimeListener(User user, String userEmp) {
+    _userRoleSubscription?.cancel();
+    _unitShareMembersSubscription?.cancel();
+    _unitShareEmpSubscription?.cancel();
+
+    _userRoleSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .snapshots()
+        .listen((snap) {
+      if (snap.exists && mounted) {
+        final d = snap.data();
+        final bool isMgr = d?['is_unit_manager'] == true ||
+            d?['role'] == 'ingeniero_de_unidad';
+        if (_isUnitManager != isMgr) {
+          setState(() {
+            _isUnitManager = isMgr;
+          });
+          SharedPreferences.getInstance()
+              .then((p) => p.setBool('is_unit_manager', isMgr));
+        }
+      }
+    }, onError: (e) => debugPrint("user role listener notice: $e"));
+
+    _unitShareMembersSubscription = FirebaseFirestore.instance
+        .collection('unit_shares')
+        .doc(user.uid)
+        .collection('members')
+        .snapshots()
+        .listen((snap) {
+      if (snap.docs.isNotEmpty && !_isUnitManager && mounted) {
+        setState(() {
+          _isUnitManager = true;
+        });
+        SharedPreferences.getInstance().then((p) => p.setBool('is_unit_manager', true));
+      }
+    }, onError: (e) => debugPrint("unit_shares member listener notice: $e"));
+
+    final cleanEmp = userEmp.trim();
+    if (cleanEmp.isNotEmpty && cleanEmp != user.uid) {
+      _unitShareEmpSubscription = FirebaseFirestore.instance
+          .collection('unit_shares')
+          .doc(cleanEmp)
+          .collection('members')
+          .snapshots()
+          .listen((snap) {
+        if (snap.docs.isNotEmpty && !_isUnitManager && mounted) {
+          setState(() {
+            _isUnitManager = true;
+          });
+          SharedPreferences.getInstance().then((p) => p.setBool('is_unit_manager', true));
+        }
+      }, onError: (e) => debugPrint("unit_shares emp listener notice: $e"));
+    }
+  }
+
+  Stream<List<DocumentSnapshot>> _getOrCreateUnitMembersStream(
+      String uid, String emp) {
+    if (_unitMembersStream != null &&
+        _unitMembersStreamUid == uid &&
+        _unitMembersStreamEmp == emp) {
+      return _unitMembersStream!;
+    }
+    _unitMembersStreamUid = uid;
+    _unitMembersStreamEmp = emp;
+    _unitMembersStream = _createUnitMembersStream(uid, emp).asBroadcastStream();
+    return _unitMembersStream!;
+  }
+
+  Stream<List<DocumentSnapshot>> _createUnitMembersStream(
+      String uid, String emp) {
+    late StreamController<List<DocumentSnapshot>> controller;
+    StreamSubscription? subUid;
+    StreamSubscription? subEmp;
+    final Map<String, DocumentSnapshot> uidDocs = {};
+    final Map<String, DocumentSnapshot> empDocs = {};
+
+    void emitMerged() {
+      if (controller.isClosed) return;
+      final Map<String, DocumentSnapshot> merged = {};
+      for (final e in empDocs.entries) {
+        merged[e.key] = e.value;
+      }
+      for (final e in uidDocs.entries) {
+        merged[e.key] = e.value;
+      }
+      controller.add(merged.values.toList());
+    }
+
+    controller = StreamController<List<DocumentSnapshot>>(
+      onListen: () {
+        subUid = FirebaseFirestore.instance
+            .collection('unit_shares')
+            .doc(uid)
+            .collection('members')
+            .snapshots()
+            .listen(
+          (snap) {
+            uidDocs.clear();
+            for (final doc in snap.docs) {
+              uidDocs[doc.id] = doc;
+            }
+            emitMerged();
+          },
+          onError: (err) {
+            if (!controller.isClosed) controller.addError(err);
+          },
+        );
+
+        final cleanEmp = emp.trim();
+        if (cleanEmp.isNotEmpty && cleanEmp != uid) {
+          subEmp = FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(cleanEmp)
+              .collection('members')
+              .snapshots()
+              .listen(
+            (snap) {
+              empDocs.clear();
+              for (final doc in snap.docs) {
+                empDocs[doc.id] = doc;
+              }
+              emitMerged();
+            },
+            onError: (err) {
+              // Ignore if emp subcollection does not exist
+            },
+          );
+        }
+      },
+      onCancel: () {
+        subUid?.cancel();
+        subEmp?.cancel();
+      },
+    );
+
+    return controller.stream;
+  }
+
   @override
   void dispose() {
     _timer.cancel();
     _countdownTimer?.cancel();
+    _userRoleSubscription?.cancel();
+    _unitShareMembersSubscription?.cancel();
+    _unitShareEmpSubscription?.cancel();
     _salaryController.dispose();
     _baseHoursController.dispose();
     _retentionController.dispose();
@@ -3532,6 +3835,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     await prefs.setBool('pending_clocked_in', false);
 
     await _saveData();
+    _syncShiftsToUnitManager();
 
     if (mounted) {
       setState(() => _isProcessing = false);
@@ -4012,7 +4316,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.13.2 16/10/26",
+                "v.23.14.0 27/10/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,
@@ -4039,7 +4343,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
     }
 
     return DefaultTabController(
-      length: 6,
+      key: ValueKey('main_tabs_$_isUnitManager'),
+      length: _isUnitManager ? 7 : 6,
       child: Scaffold(
         backgroundColor:
             _isDarkMode ? const Color(0xFF121212) : const Color(0xFFDDE3EA),
@@ -4109,13 +4414,15 @@ class _TelevisaAppState extends State<TelevisaApp> {
             labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             unselectedLabelStyle: const TextStyle(fontSize: 12),
             isScrollable: true,
-            tabs: const [
-              Tab(text: "HOY", icon: Icon(Icons.access_time, size: 28)),
-              Tab(text: "QUINCENA", icon: Icon(Icons.calendar_month, size: 28)),
-              Tab(text: "AÑO", icon: Icon(Icons.calendar_today, size: 28)),
-              Tab(text: "NÓMINA", icon: Icon(Icons.payments, size: 28)),
-              Tab(text: "EXTRAS", icon: Icon(Icons.star, size: 28)),
-              Tab(text: "AJUSTES", icon: Icon(Icons.settings, size: 28)),
+            tabs: [
+              const Tab(text: "HOY", icon: Icon(Icons.access_time, size: 28)),
+              const Tab(text: "QUINCENA", icon: Icon(Icons.calendar_month, size: 28)),
+              const Tab(text: "AÑO", icon: Icon(Icons.calendar_today, size: 28)),
+              const Tab(text: "NÓMINA", icon: Icon(Icons.payments, size: 28)),
+              const Tab(text: "EXTRAS", icon: Icon(Icons.star, size: 28)),
+              if (_isUnitManager)
+                const Tab(text: "UNIDAD", icon: Icon(Icons.shield_rounded, size: 28)),
+              const Tab(text: "AJUSTES", icon: Icon(Icons.settings, size: 28)),
             ],
           ),
         ),
@@ -4140,6 +4447,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
           _buildAnoTab(),
           _buildNominaTab(),
           _buildExtrasTab(),
+          if (_isUnitManager) _buildUnitManagerTab(),
           _buildSettingsTab()
         ]),
       ),
@@ -5034,6 +5342,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
             _buildTodaySummaryCard(todayRecord),
+            if (_isUnitShareActive)
+              _buildHoyManagerShareTile(DateTime.now(),
+                  shiftId: todayRecord.id),
             const SizedBox(height: 30),
           ],
         ),
@@ -5327,8 +5638,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
                                             picked.hour,
                                             picked.minute,
                                           );
-                                          await _executeEntrada(manualTime,
-                                              actualTime: manualTime);
+                                          _processRecord(
+                                              "ENTRADA", manualTime);
                                         }
                                       },
                                 icon: Icon(Icons.edit,
@@ -5628,6 +5939,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
             ),
           ),
+          if (_isUnitShareActive)
+            _buildHoyManagerShareTile(DateTime.now(),
+                shiftId: currentShift?.id),
           // Midnight & Recovery prompt if shift's entrada was from previous day
           if (_isShiftFromPreviousDay()) ...[
             const SizedBox(height: 16),
@@ -8723,6 +9037,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
           Divider(
               color: _isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1)),
           const SizedBox(height: 25),
+          _buildUnitShareNavigationCard(),
+          const SizedBox(height: 25),
+          Divider(
+              color: _isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1)),
+          const SizedBox(height: 25),
           Text("MIGRACIÓN DE DATOS",
               style: TextStyle(
                   color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
@@ -8934,6 +9253,1055 @@ class _TelevisaAppState extends State<TelevisaApp> {
           ],
         );
       },
+    );
+  }
+  // =========================================================================
+  // UNIT SHARE ("COMPARTIR CON") SETTINGS & NAVIGATION
+  // =========================================================================
+
+
+  Future<void> _loadUnitShareSettings() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'active_unit_share_cache_${user.uid}';
+    final cached = prefs.getString(cacheKey);
+    if (cached != null) {
+      try {
+        final Map<String, dynamic> c = jsonDecode(cached);
+        final untilStr = c['active_sharing_until']?.toString();
+        final activeUntil =
+            untilStr != null ? DateTime.tryParse(untilStr) : null;
+        if (c['is_active'] == true &&
+            activeUntil != null &&
+            !DateTime.now().isAfter(activeUntil)) {
+          if (mounted) {
+            setState(() {
+              _isUnitShareActive = true;
+              _activeUnitShareData = c;
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint("Error reading cached unit share: $e");
+      }
+    }
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('settings')
+          .doc('unit_share')
+          .get();
+
+      if (doc.exists && doc.data() != null) {
+        final d = doc.data()!;
+        final bool isActive = d['is_active'] == true;
+        DateTime? activeUntil;
+        if (d['active_sharing_until'] is Timestamp) {
+          activeUntil = (d['active_sharing_until'] as Timestamp).toDate();
+        } else if (d['active_sharing_until'] is String) {
+          activeUntil = DateTime.tryParse(d['active_sharing_until']);
+        }
+
+        final bool isExpired =
+            activeUntil != null && DateTime.now().isAfter(activeUntil);
+
+        if (isActive && !isExpired) {
+          await prefs.setString(
+            cacheKey,
+            jsonEncode({
+              ...d,
+              'active_sharing_until': activeUntil?.toIso8601String(),
+              'data_retention_until': (d['data_retention_until'] is Timestamp)
+                  ? (d['data_retention_until'] as Timestamp)
+                      .toDate()
+                      .toIso8601String()
+                  : null,
+            }),
+          );
+
+          if (mounted) {
+            setState(() {
+              _isUnitShareActive = true;
+              _activeUnitShareData = d;
+            });
+          }
+          return;
+        } else {
+          await prefs.remove(cacheKey);
+        }
+      } else {
+        await prefs.remove(cacheKey);
+      }
+
+      if (mounted) {
+        setState(() {
+          _isUnitShareActive = false;
+          _activeUnitShareData = null;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading unit share settings: $e");
+    }
+  }
+
+  bool _isDateInUnitShareRange(DateTime date, String mode) {
+    if (_activeUnitShareData == null) return false;
+    final now = DateTime.now();
+
+    if (mode == 'Solo Hoy') {
+      final rawUntil = _activeUnitShareData!['active_sharing_until'];
+      DateTime? activeUntil;
+      if (rawUntil is Timestamp) {
+        activeUntil = rawUntil.toDate();
+      } else if (rawUntil is String) {
+        activeUntil = DateTime.tryParse(rawUntil);
+      }
+      final targetDate = activeUntil ?? now;
+      return date.year == targetDate.year &&
+          date.month == targetDate.month &&
+          date.day == targetDate.day;
+    }
+
+    if (mode == 'Esta Semana' || mode == 'Semanal' || mode == 'current_week') {
+      final monday = now.subtract(Duration(days: now.weekday - 1));
+      final mondayStart = DateTime(monday.year, monday.month, monday.day);
+      final sunday = monday.add(const Duration(days: 6));
+      final sundayEnd =
+          DateTime(sunday.year, sunday.month, sunday.day, 23, 59, 59);
+      return !date.isBefore(mondayStart) && !date.isAfter(sundayEnd);
+    }
+
+    if (mode == 'Esta Semana y la Pasada' ||
+        mode == 'two_weeks' ||
+        mode == 'current_and_previous') {
+      final monday = now.subtract(Duration(days: now.weekday - 1));
+      final mondayLastWeek = monday.subtract(const Duration(days: 7));
+      final mondayLastWeekStart =
+          DateTime(mondayLastWeek.year, mondayLastWeek.month, mondayLastWeek.day);
+      final sunday = monday.add(const Duration(days: 6));
+      final sundayEnd =
+          DateTime(sunday.year, sunday.month, sunday.day, 23, 59, 59);
+      return !date.isBefore(mondayLastWeekStart) && !date.isAfter(sundayEnd);
+    }
+
+    if (mode == 'Este Mes' || mode == 'Mensual') {
+      final monthStart = DateTime(now.year, now.month, 1);
+      final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+      return !date.isBefore(monthStart) && !date.isAfter(monthEnd);
+    }
+
+    if (mode == 'Este Año' || mode == 'Anual') {
+      final yearStart = DateTime(now.year, 1, 1);
+      final yearEnd = DateTime(now.year, 12, 31, 23, 59, 59);
+      return !date.isBefore(yearStart) && !date.isAfter(yearEnd);
+    }
+
+    if (mode == 'Todos Mis Registros') {
+      return true;
+    }
+
+    return true;
+  }
+
+  bool _isDateSharedWithManager(DateTime date, {String? shiftId}) {
+    if (!_isUnitShareActive || _activeUnitShareData == null) return false;
+    final dateKey = DateFormat('yyyy-MM-dd').format(date);
+    final rawExcluded =
+        _activeUnitShareData?['excluded_dates'] as List<dynamic>?;
+    if (rawExcluded != null) {
+      if (rawExcluded.contains(dateKey)) return false;
+      if (shiftId != null && rawExcluded.contains(shiftId)) return false;
+    }
+
+    final mode = (_activeUnitShareData?['mode'] ??
+            _activeUnitShareData?['duration'] ??
+            _activeUnitShareData?['timeframe'] ??
+            '')
+        .toString();
+
+    if (mode == 'Yo Decido') {
+      final rawCustom =
+          _activeUnitShareData?['custom_dates'] as List<dynamic>?;
+      if (rawCustom == null || rawCustom.isEmpty) return false;
+      return rawCustom.contains(dateKey) ||
+          (shiftId != null && rawCustom.contains(shiftId));
+    }
+
+    return _isDateInUnitShareRange(date, mode);
+  }
+
+  Future<void> _toggleUnitShareForDate({
+    required DateTime date,
+    String? shiftId,
+    required bool share,
+  }) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _activeUnitShareData == null) return;
+    final dateKey = DateFormat('yyyy-MM-dd').format(date);
+    final mode = (_activeUnitShareData?['mode'] ??
+            _activeUnitShareData?['duration'] ??
+            _activeUnitShareData?['timeframe'] ??
+            '')
+        .toString();
+
+    List<dynamic> currentExcluded = List<dynamic>.from(
+        (_activeUnitShareData!['excluded_dates'] as List<dynamic>?) ?? []);
+    List<dynamic> currentCustom = List<dynamic>.from(
+        (_activeUnitShareData!['custom_dates'] as List<dynamic>?) ?? []);
+
+    if (mode == 'Yo Decido') {
+      if (share) {
+        if (!currentCustom.contains(dateKey)) currentCustom.add(dateKey);
+        if (shiftId != null && !currentCustom.contains(shiftId)) {
+          currentCustom.add(shiftId);
+        }
+        currentExcluded.removeWhere((e) =>
+            e.toString() == dateKey ||
+            (shiftId != null && e.toString() == shiftId));
+      } else {
+        currentCustom.removeWhere((e) =>
+            e.toString() == dateKey ||
+            (shiftId != null && e.toString() == shiftId));
+        if (!currentExcluded.contains(dateKey)) currentExcluded.add(dateKey);
+        if (shiftId != null && !currentExcluded.contains(shiftId)) {
+          currentExcluded.add(shiftId);
+        }
+      }
+    } else {
+      if (share) {
+        currentExcluded.removeWhere((e) =>
+            e.toString() == dateKey ||
+            (shiftId != null && e.toString() == shiftId));
+      } else {
+        if (!currentExcluded.contains(dateKey)) currentExcluded.add(dateKey);
+        if (shiftId != null && !currentExcluded.contains(shiftId)) {
+          currentExcluded.add(shiftId);
+        }
+      }
+    }
+
+    final updatedData = {
+      ..._activeUnitShareData!,
+      'excluded_dates': currentExcluded,
+      'custom_dates': currentCustom,
+    };
+
+    if (mounted) {
+      setState(() {
+        _activeUnitShareData = updatedData;
+      });
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final cacheKey = 'active_unit_share_cache_${user.uid}';
+    await prefs.setString(cacheKey, jsonEncode(updatedData));
+
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('settings')
+          .doc('unit_share')
+          .set({
+        'excluded_dates': currentExcluded,
+        'custom_dates': currentCustom,
+      }, SetOptions(merge: true));
+
+      await _syncShiftsToUnitManager();
+    } catch (e) {
+      debugPrint("Error updating unit share preferences: $e");
+    }
+  }
+
+  Widget _buildHoyManagerShareTile(DateTime date, {String? shiftId}) {
+    if (!_isUnitShareActive || _activeUnitShareData == null) {
+      return const SizedBox.shrink();
+    }
+
+    final bool isShared = _isDateSharedWithManager(date, shiftId: shiftId);
+    final String managerName =
+        (_activeUnitShareData?['manager_name'] ?? 'Ingeniero de Unidad')
+            .toString();
+    final String mode = (_activeUnitShareData?['mode'] ??
+            _activeUnitShareData?['duration'] ??
+            '')
+        .toString();
+
+    final Color primaryColor =
+        _isDarkMode ? Colors.cyanAccent : const Color(0xFF0284C7);
+    final Color cardBg = _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+    final Color borderColor = isShared
+        ? (_isDarkMode
+            ? Colors.cyanAccent.withAlpha(90)
+            : const Color(0xFF0284C7).withAlpha(120))
+        : (_isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0));
+
+    final String statusSubtitle = isShared
+        ? "Visible para $managerName"
+        : (mode == 'Yo Decido'
+            ? "Oculto para $managerName (Modo Yo Decido)"
+            : "Excluido para $managerName");
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 14, bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: isShared ? 1.4 : 1.0),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(_isDarkMode ? 30 : 8),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: isShared
+                  ? primaryColor.withAlpha(_isDarkMode ? 40 : 25)
+                  : (_isDarkMode
+                      ? Colors.white.withAlpha(12)
+                      : const Color(0xFFF1F5F9)),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isShared ? Icons.share_rounded : Icons.visibility_off_outlined,
+              color: isShared
+                  ? primaryColor
+                  : (_isDarkMode ? Colors.white38 : const Color(0xFF94A3B8)),
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      "Compartir turno de hoy",
+                      style: TextStyle(
+                        color: _isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13.5,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 1.5),
+                      decoration: BoxDecoration(
+                        color: isShared
+                            ? Colors.green.withAlpha(_isDarkMode ? 40 : 30)
+                            : Colors.grey.withAlpha(_isDarkMode ? 40 : 30),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isShared ? "COMPARTIDO" : "NO COMPARTIDO",
+                        style: TextStyle(
+                          color: isShared
+                              ? (_isDarkMode
+                                  ? Colors.greenAccent
+                                  : const Color(0xFF16A34A))
+                              : (_isDarkMode
+                                  ? Colors.white60
+                                  : const Color(0xFF64748B)),
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  statusSubtitle,
+                  style: TextStyle(
+                    color:
+                        _isDarkMode ? Colors.white60 : const Color(0xFF64748B),
+                    fontSize: 11.5,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: isShared,
+            activeColor: primaryColor,
+            onChanged: (val) async {
+              await _toggleUnitShareForDate(
+                date: date,
+                shiftId: shiftId,
+                share: val,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnitShareNavigationCard() {
+    final Color unitColor =
+        _isDarkMode ? Colors.cyanAccent : const Color(0xFF0284C7);
+    final Color cardBg = _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+    final Color borderColor =
+        _isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
+    final Color textColor = _isDarkMode ? Colors.white : Colors.black87;
+    final Color subtextColor =
+        _isDarkMode ? Colors.white54 : const Color(0xFF64748B);
+
+    final bool isActive = _isUnitShareActive && _activeUnitShareData != null;
+    final String managerName =
+        (_activeUnitShareData?['manager_name'] ?? '').toString();
+    final String mode = (_activeUnitShareData?['mode'] ??
+            _activeUnitShareData?['duration'] ??
+            'Esta Semana')
+        .toString();
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isActive
+              ? unitColor.withAlpha(_isDarkMode ? 120 : 140)
+              : borderColor,
+          width: isActive ? 1.5 : 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(_isDarkMode ? 30 : 10),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () async {
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => UnitShareScreen(
+                  isDarkMode: _isDarkMode,
+                  weeklyHistory: _weeklyHistory,
+                ),
+              ),
+            );
+            _loadUnitShareSettings();
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: unitColor.withAlpha(_isDarkMode ? 35 : 25),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.supervisor_account_rounded,
+                    color: unitColor,
+                    size: 28,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            "COMPARTIR CON",
+                            style: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          if (isActive)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.green
+                                    .withAlpha(_isDarkMode ? 40 : 25),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: Colors.green.withAlpha(90)),
+                              ),
+                              child: const Text(
+                                "ACTIVO",
+                                style: TextStyle(
+                                  color: Colors.greenAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isActive
+                            ? "Compartiendo con $managerName ($mode)"
+                            : "Concede acceso temporal a tu Ingeniero de Unidad",
+                        style: TextStyle(
+                          color: subtextColor,
+                          fontSize: 13,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: subtextColor,
+                  size: 26,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+
+
+
+
+
+
+
+  Future<void> _syncShiftsToUnitManager() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    if (!_isUnitShareActive || _activeUnitShareData == null) return;
+
+    final rawUntil = _activeUnitShareData!['active_sharing_until'];
+    DateTime? activeUntil;
+    if (rawUntil is Timestamp) {
+      activeUntil = rawUntil.toDate();
+    } else if (rawUntil is String) {
+      activeUntil = DateTime.tryParse(rawUntil);
+    }
+
+    if (activeUntil == null || DateTime.now().isAfter(activeUntil)) {
+      return;
+    }
+
+    final String managerUid =
+        (_activeUnitShareData!['manager_uid'] ?? _activeUnitShareData!['uid'] ?? '')
+            .toString()
+            .trim();
+    final String managerDocId =
+        (_activeUnitShareData!['manager_doc_id'] ?? '').toString().trim();
+    final String managerEmp =
+        (_activeUnitShareData!['manager_emp'] ?? '').toString().trim();
+    if (managerUid.isEmpty && managerDocId.isEmpty) return;
+
+    try {
+      final bool shareEntry = _activeUnitShareData!['share_entry'] ?? true;
+      final bool shareExit = _activeUnitShareData!['share_exit'] ?? true;
+      final bool shareRealEntry =
+          _activeUnitShareData!['share_real_entry'] == true;
+      final bool shareNotes = _activeUnitShareData!['share_notes'] == true;
+      final String mode = (_activeUnitShareData!['mode'] ??
+              _activeUnitShareData!['duration'] ??
+              _activeUnitShareData!['timeframe'] ??
+              'Esta Semana')
+          .toString();
+
+      final now = DateTime.now();
+
+      final DateTime soloHoyDate = activeUntil;
+
+      final mondayThisWeek = now.subtract(Duration(days: now.weekday - 1));
+      final mondayThisWeekStart = DateTime(
+          mondayThisWeek.year, mondayThisWeek.month, mondayThisWeek.day);
+      final sundayThisWeek = mondayThisWeek.add(const Duration(days: 6));
+      final sundayThisWeekEnd = DateTime(sundayThisWeek.year,
+          sundayThisWeek.month, sundayThisWeek.day, 23, 59, 59);
+
+      final mondayLastWeek = mondayThisWeek.subtract(const Duration(days: 7));
+      final mondayLastWeekStart = DateTime(
+          mondayLastWeek.year, mondayLastWeek.month, mondayLastWeek.day);
+
+      final monthStart = DateTime(now.year, now.month, 1);
+      final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+
+      final yearStart = DateTime(now.year, 1, 1);
+      final yearEnd = DateTime(now.year, 12, 31, 23, 59, 59);
+
+      final List<dynamic>? rawExcluded =
+          _activeUnitShareData!['excluded_dates'] as List<dynamic>?;
+      final Set<String> excludedDates = rawExcluded != null
+          ? rawExcluded.map((e) => e.toString()).toSet()
+          : <String>{};
+
+      List<WorkDay> relevantShifts;
+      switch (mode) {
+        case 'Solo Hoy':
+          relevantShifts = _weeklyHistory.where((d) {
+            return d.entrada.year == soloHoyDate.year &&
+                d.entrada.month == soloHoyDate.month &&
+                d.entrada.day == soloHoyDate.day;
+          }).toList();
+          break;
+        case 'Esta Semana':
+        case 'Semanal':
+        case 'current_week':
+          relevantShifts = _weeklyHistory.where((d) {
+            return !d.entrada.isBefore(mondayThisWeekStart) &&
+                !d.entrada.isAfter(sundayThisWeekEnd);
+          }).toList();
+          break;
+        case 'Esta Semana y la Pasada':
+        case 'two_weeks':
+        case 'current_and_previous':
+          relevantShifts = _weeklyHistory.where((d) {
+            return !d.entrada.isBefore(mondayLastWeekStart) &&
+                !d.entrada.isAfter(sundayThisWeekEnd);
+          }).toList();
+          break;
+        case 'Este Mes':
+        case 'Mensual':
+          relevantShifts = _weeklyHistory.where((d) {
+            return !d.entrada.isBefore(monthStart) &&
+                !d.entrada.isAfter(monthEnd);
+          }).toList();
+          break;
+        case 'Este Año':
+        case 'Anual':
+          relevantShifts = _weeklyHistory.where((d) {
+            return !d.entrada.isBefore(yearStart) &&
+                !d.entrada.isAfter(yearEnd);
+          }).toList();
+          break;
+        case 'Todos Mis Registros':
+          relevantShifts = List<WorkDay>.from(_weeklyHistory);
+          break;
+        case 'Yo Decido':
+          final customDates =
+              _activeUnitShareData!['custom_dates'] as List<dynamic>?;
+          if (customDates != null && customDates.isNotEmpty) {
+            final setOfDates = customDates.map((e) => e.toString()).toSet();
+            relevantShifts = _weeklyHistory.where((d) {
+              final dStr = DateFormat('yyyy-MM-dd').format(d.entrada);
+              return setOfDates.contains(dStr) || setOfDates.contains(d.id);
+            }).toList();
+          } else {
+            relevantShifts = <WorkDay>[];
+          }
+          break;
+        default:
+          relevantShifts = _weeklyHistory.where((d) {
+            return !d.entrada.isBefore(mondayThisWeekStart) &&
+                !d.entrada.isAfter(sundayThisWeekEnd);
+          }).toList();
+      }
+
+      if (excludedDates.isNotEmpty) {
+        relevantShifts = relevantShifts.where((d) {
+          final dStr = DateFormat('yyyy-MM-dd').format(d.entrada);
+          return !excludedDates.contains(dStr) &&
+              !excludedDates.contains(d.id);
+        }).toList();
+      }
+
+      // Find last clock out
+      Timestamp? lastClockOut;
+      final completed = _weeklyHistory
+          .where((d) => !d.isInProgress && !d.esFalta)
+          .toList();
+      if (completed.isNotEmpty) {
+        completed.sort((a, b) => b.salida.compareTo(a.salida));
+        lastClockOut = Timestamp.fromDate(completed.first.salida);
+      }
+
+      final List<Map<String, dynamic>> sanitizedShifts = relevantShifts.map((d) {
+        return {
+          'id': d.id,
+          'date': DateFormat('yyyy-MM-dd').format(d.entrada),
+          'weekday': d.entrada.weekday,
+          'entrada': shareEntry ? Timestamp.fromDate(d.entrada) : null,
+          'entrada_str':
+              shareEntry ? DateFormat('hh:mm a').format(d.entrada) : null,
+          'salida': (shareExit && !d.isInProgress)
+              ? Timestamp.fromDate(d.salida)
+              : null,
+          'salida_str': (shareExit && !d.isInProgress)
+              ? DateFormat('hh:mm a').format(d.salida)
+              : null,
+          'entrada_real': (shareRealEntry && d.entradaReal != null)
+              ? Timestamp.fromDate(d.entradaReal!)
+              : null,
+          'entrada_real_str': (shareRealEntry && d.entradaReal != null)
+              ? DateFormat('hh:mm a').format(d.entradaReal!)
+              : null,
+          'notas': shareNotes ? d.notas : '',
+          'is_in_progress': d.isInProgress,
+          'es_falta': d.esFalta,
+          'es_festivo': d.esFestivo,
+          'es_vacaciones': d.esVacaciones,
+        };
+      }).toList();
+
+      final String memberName =
+          "${_firstNameController.text.trim()} ${_lastNameController.text.trim()}"
+              .trim();
+      final String memberEmp = _userEmpNoController.text.trim();
+
+      if (managerUid.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('unit_shares')
+            .doc(managerUid)
+            .collection('members')
+            .doc(user.uid)
+            .set({
+          'member_name': memberName.isNotEmpty
+              ? memberName
+              : (user.displayName ?? 'Sin nombre'),
+          'member_emp': memberEmp,
+          'shifts': sanitizedShifts,
+          'last_clock_out': lastClockOut,
+          'last_synced_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      if (managerDocId.isNotEmpty && managerDocId != managerUid) {
+        await FirebaseFirestore.instance
+            .collection('unit_shares')
+            .doc(managerDocId)
+            .collection('members')
+            .doc(user.uid)
+            .set({
+          'member_name': memberName.isNotEmpty
+              ? memberName
+              : (user.displayName ?? 'Sin nombre'),
+          'member_emp': memberEmp,
+          'shifts': sanitizedShifts,
+          'last_clock_out': lastClockOut,
+          'last_synced_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+
+      if (managerEmp.isNotEmpty &&
+          managerEmp != managerUid &&
+          managerEmp != managerDocId) {
+        await FirebaseFirestore.instance
+            .collection('unit_shares')
+            .doc(managerEmp)
+            .collection('members')
+            .doc(user.uid)
+            .set({
+          'member_name': memberName.isNotEmpty
+              ? memberName
+              : (user.displayName ?? 'Sin nombre'),
+          'member_emp': memberEmp,
+          'shifts': sanitizedShifts,
+          'last_clock_out': lastClockOut,
+          'last_synced_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      debugPrint("Error in _syncShiftsToUnitManager: $e");
+    }
+  }
+
+  Widget _buildUnitManagerTab() {
+    final user = FirebaseAuth.instance.currentUser;
+    final Color unitColor =
+        _isDarkMode ? Colors.cyanAccent : const Color(0xFF0284C7);
+    final Color cardBg = _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+    final Color borderColor =
+        _isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
+    final Color textColor = _isDarkMode ? Colors.white : Colors.black87;
+    final Color subtextColor =
+        _isDarkMode ? Colors.white54 : const Color(0xFF64748B);
+
+    if (user == null) {
+      return Center(
+        child: Text(
+          "Inicia sesión para ver la asistencia de tu unidad.",
+          style: TextStyle(color: subtextColor),
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      children: [
+        // Header Card
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(_isDarkMode ? 40 : 10),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: unitColor.withAlpha(_isDarkMode ? 35 : 20),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.shield_rounded,
+                        color: unitColor, size: 28),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              "ASISTENCIA DE UNIDAD",
+                              style: TextStyle(
+                                color: unitColor,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withAlpha(35),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: Colors.green.withAlpha(120)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 7,
+                                    height: 7,
+                                    decoration: const BoxDecoration(
+                                      color: Colors.greenAccent,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  const Text(
+                                    "EN VIVO",
+                                    style: TextStyle(
+                                      color: Colors.greenAccent,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Supervisión y control de asistencia de los colaboradores asignados a tu unidad.",
+                          style: TextStyle(color: subtextColor, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Stream of unit members
+        StreamBuilder<List<DocumentSnapshot>>(
+          stream: _getOrCreateUnitMembersStream(
+              user.uid, _userEmpNoController.text.trim()),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 40),
+                child: Center(
+                  child: CircularProgressIndicator(color: unitColor),
+                ),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withAlpha(25),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.redAccent.withAlpha(80)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline,
+                        color: Colors.redAccent, size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        "Error al cargar colaboradores: ${snapshot.error}",
+                        style: TextStyle(color: textColor, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            final now = DateTime.now();
+            final allDocs = snapshot.data ?? [];
+            final validMembers = allDocs.where((doc) {
+              final d = doc.data() as Map<String, dynamic>?;
+              if (d == null) return false;
+              final rawRetention = d['data_retention_until'];
+              DateTime? retentionUntil;
+              if (rawRetention is Timestamp) {
+                retentionUntil = rawRetention.toDate();
+              } else if (rawRetention is String) {
+                retentionUntil = DateTime.tryParse(rawRetention);
+              }
+              if (retentionUntil != null && now.isAfter(retentionUntil)) {
+                return false;
+              }
+              return true;
+            }).toList();
+
+            if (validMembers.isEmpty) {
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                    vertical: 40, horizontal: 24),
+                decoration: BoxDecoration(
+                  color: cardBg,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: unitColor.withAlpha(20),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.shield_outlined,
+                          color: unitColor, size: 40),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      "Sin colaboradores compartiendo asistencia",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "Actualmente no tienes colaboradores compartiendo sus registros contigo. Cuando un colaborador ingrese tu No. de Empleado en su sección 'Compartir Con', sus horarios aparecerán aquí automáticamente.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: subtextColor, fontSize: 13),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(left: 4, bottom: 12),
+                  child: Row(
+                    children: [
+                      Text(
+                        "COLABORADORES ACTIVOS",
+                        style: TextStyle(
+                          color: subtextColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: unitColor.withAlpha(25),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: unitColor.withAlpha(90)),
+                        ),
+                        child: Text(
+                          "${validMembers.length}",
+                          style: TextStyle(
+                            color: unitColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ...validMembers.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: _UnitMemberAttendanceCard(
+                      data: data,
+                      isDarkMode: _isDarkMode,
+                    ),
+                  );
+                }),
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -9899,7 +11267,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     color: _isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.13.2 16/10/26",
+            Text("Versión v.23.14.0 27/10/26",
                 style: TextStyle(
                     color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
                     fontSize: 14)),
@@ -10656,109 +12024,203 @@ class _TelevisaAppState extends State<TelevisaApp> {
     }
   }
 
-  Future<String?> _promptForNotes(BuildContext context,
-      {String initialNotes = ""}) async {
+  Future<String?> _promptForNotes(
+    BuildContext context, {
+    String initialNotes = "",
+    bool showShareToggle = false,
+    bool initialShareValue = true,
+    String managerName = "",
+    void Function(bool)? onShareToggleChanged,
+  }) async {
     TextEditingController notesController =
         TextEditingController(text: initialNotes);
+    bool shareValue = initialShareValue;
+
     return await showDialog<String>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          scrollable: true,
-          backgroundColor:
-              _isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Icon(Icons.note_alt_outlined,
-                  color: _isDarkMode
-                      ? Colors.orangeAccent
-                      : const Color(0xFFD9531E)),
-              const SizedBox(width: 8),
-              Text("Notas del registro",
-                  style: TextStyle(
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              scrollable: true,
+              backgroundColor:
+                  _isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Icon(Icons.note_alt_outlined,
                       color: _isDarkMode
-                          ? Colors.white
-                          : const Color(0xFF111827),
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "¿Deseas agregar notas a este registro?",
-                style: TextStyle(
-                    color: _isDarkMode
-                        ? Colors.white70
-                        : const Color(0xFF4B5563),
-                    fontSize: 14),
+                          ? Colors.orangeAccent
+                          : const Color(0xFFD9531E)),
+                  const SizedBox(width: 8),
+                  Text("Notas del registro",
+                      style: TextStyle(
+                          color: _isDarkMode
+                              ? Colors.white
+                              : const Color(0xFF111827),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
+                ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: notesController,
-                maxLines: 3,
-                style: TextStyle(
-                    color: _isDarkMode
-                        ? Colors.white
-                        : const Color(0xFF111827)),
-                decoration: InputDecoration(
-                  hintText:
-                      "Escribe tus notas aquí (ej. Guardia, Turno especial, etc.)...",
-                  hintStyle: TextStyle(
-                      color: _isDarkMode
-                          ? Colors.white38
-                          : const Color(0xFF9CA3AF),
-                      fontSize: 13),
-                  filled: true,
-                  fillColor: _isDarkMode
-                      ? const Color(0xFF2C2C2C)
-                      : const Color(0xFFF3F4F6),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "¿Deseas agregar notas a este registro?",
+                    style: TextStyle(
                         color: _isDarkMode
-                            ? Colors.transparent
-                            : const Color(0xFFD1D5DB)),
+                            ? Colors.white70
+                            : const Color(0xFF4B5563),
+                        fontSize: 14),
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notesController,
+                    maxLines: 3,
+                    style: TextStyle(
                         color: _isDarkMode
-                            ? Colors.transparent
-                            : const Color(0xFFD1D5DB)),
+                            ? Colors.white
+                            : const Color(0xFF111827)),
+                    decoration: InputDecoration(
+                      hintText:
+                          "Escribe tus notas aquí (ej. Guardia, Turno especial, etc.)...",
+                      hintStyle: TextStyle(
+                          color: _isDarkMode
+                              ? Colors.white38
+                              : const Color(0xFF9CA3AF),
+                          fontSize: 13),
+                      filled: true,
+                      fillColor: _isDarkMode
+                          ? const Color(0xFF2C2C2C)
+                          : const Color(0xFFF3F4F6),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                            color: _isDarkMode
+                                ? Colors.transparent
+                                : const Color(0xFFD1D5DB)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                            color: _isDarkMode
+                                ? Colors.transparent
+                                : const Color(0xFFD1D5DB)),
+                      ),
+                    ),
                   ),
+                  if (showShareToggle) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _isDarkMode
+                            ? (shareValue
+                                ? Colors.cyanAccent.withAlpha(20)
+                                : Colors.white.withAlpha(10))
+                            : (shareValue
+                                ? const Color(0xFFF0F9FF)
+                                : const Color(0xFFF8FAFC)),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: shareValue
+                              ? (_isDarkMode
+                                  ? Colors.cyanAccent.withAlpha(60)
+                                  : const Color(0xFFBAE6FD))
+                              : (_isDarkMode
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0)),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            shareValue
+                                ? Icons.share_rounded
+                                : Icons.visibility_off_outlined,
+                            color: shareValue
+                                ? (_isDarkMode
+                                    ? Colors.cyanAccent
+                                    : const Color(0xFF0284C7))
+                                : (_isDarkMode
+                                    ? Colors.white38
+                                    : const Color(0xFF94A3B8)),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Compartir con $managerName",
+                                  style: TextStyle(
+                                    color: _isDarkMode
+                                        ? Colors.white
+                                        : const Color(0xFF0F172A),
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                                Text(
+                                  shareValue
+                                      ? "Visible para el Ingeniero"
+                                      : "Oculto para el Ingeniero",
+                                  style: TextStyle(
+                                    color: _isDarkMode
+                                        ? Colors.white54
+                                        : const Color(0xFF64748B),
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch.adaptive(
+                            value: shareValue,
+                            activeColor: _isDarkMode
+                                ? Colors.cyanAccent
+                                : const Color(0xFF0284C7),
+                            onChanged: (val) {
+                              setDialogState(() => shareValue = val);
+                              onShareToggleChanged?.call(val);
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, initialNotes),
+                  child: Text("OMITIR",
+                      style: TextStyle(
+                          color: _isDarkMode
+                              ? Colors.white54
+                              : const Color(0xFF6B7280),
+                          fontWeight: FontWeight.bold)),
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, initialNotes),
-              child: Text("OMITIR",
-                  style: TextStyle(
-                      color: _isDarkMode
-                          ? Colors.white54
-                          : const Color(0xFF6B7280),
-                      fontWeight: FontWeight.bold)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    _isDarkMode ? Colors.orange : const Color(0xFFD9531E),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8)),
-              ),
-              onPressed: () =>
-                  Navigator.pop(context, notesController.text.trim()),
-              child: const Text("GUARDAR NOTAS",
-                  style: TextStyle(fontWeight: FontWeight.bold)),
-            ),
-          ],
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        _isDarkMode ? Colors.orange : const Color(0xFFD9531E),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () =>
+                      Navigator.pop(context, notesController.text.trim()),
+                  child: const Text("GUARDAR NOTAS",
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -11346,95 +12808,55 @@ class _TelevisaAppState extends State<TelevisaApp> {
     if (existingIndex < 0 || existingIndex >= _weeklyHistory.length) return;
     WorkDay day = _weeklyHistory[existingIndex];
 
-    if (day.esVacaciones || day.esFalta || (day.esFestivo && !day.festivoTrabajado)) {
-      final String? updatedNotes =
-          await _promptForNotes(context, initialNotes: day.notas);
-      if (!mounted) return;
-      setState(() {
-        day.notas = updatedNotes ?? day.notas;
-      });
-      await _userHistory.doc(day.id).set(day.toJson());
-      await _saveData();
-      _syncTodayStateFromHistory();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Notas actualizadas exitosamente"),
-          backgroundColor: Colors.green,
-        ));
-      }
-      return;
-    }
+    final bool canShare = _isUnitShareActive && _activeUnitShareData != null;
+    final String managerName =
+        (_activeUnitShareData?['manager_name'] ?? 'Ingeniero de Unidad')
+            .toString();
+    final bool initialShare =
+        canShare ? _isDateSharedWithManager(day.entrada, shiftId: day.id) : true;
 
-    if (day.isInProgress) {
-      final TimeOfDay? inTime = await _showScrollTimePicker(
-        context,
-        initialTime: TimeOfDay.fromDateTime(day.entrada),
-        title: "EDITAR HORA ENTRADA",
-      );
-      if (!mounted || inTime == null) return;
-      final String? updatedNotes =
-          await _promptForNotes(context, initialNotes: day.notas);
-      if (!mounted) return;
-      DateTime date = day.entrada;
-      DateTime fEntrada =
-          DateTime(date.year, date.month, date.day, inTime.hour, inTime.minute);
-      setState(() {
-        day.entrada = fEntrada;
-        day.entradaReal = fEntrada;
-        day.notas = updatedNotes ?? day.notas;
-      });
-      await _userHistory.doc(day.id).set(day.toJson());
-      await _saveData();
-      _syncTodayStateFromHistory();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text("Turno en progreso actualizado"),
-          backgroundColor: Colors.green,
-        ));
-      }
-      return;
-    }
-
-    // Step 1: Pick updated entrance time (pre-filled)
-    final TimeOfDay? inTime = await _showScrollTimePicker(
-      context,
-      initialTime: TimeOfDay.fromDateTime(day.entrada),
-      title: "EDITAR HORA ENTRADA",
+    final _EditWorkDayResult? result = await showDialog<_EditWorkDayResult>(
+      context: context,
+      barrierDismissible: false,
+      builder: (modalCtx) => _EditWorkDayDialog(
+        day: day,
+        isDarkMode: _isDarkMode,
+        canShare: canShare,
+        initialShare: initialShare,
+        managerName: managerName,
+        onPickTime: (ctx, {required initialTime, title}) =>
+            _showScrollTimePicker(ctx, initialTime: initialTime, title: title),
+      ),
     );
-    if (!mounted || inTime == null) return;
 
-    // Step 2: Pick updated exit time (pre-filled)
-    final TimeOfDay? outTime = await _showScrollTimePicker(
-      context,
-      initialTime: TimeOfDay.fromDateTime(day.salida),
-      title: "EDITAR HORA SALIDA",
-    );
-    if (!mounted || outTime == null) return;
-
-    // Step 3: Prompt for notes (pre-filled with existing notes)
-    final String? updatedNotes =
-        await _promptForNotes(context, initialNotes: day.notas);
-
-    DateTime date = day.entrada;
-    DateTime fEntrada =
-        DateTime(date.year, date.month, date.day, inTime.hour, inTime.minute);
-    DateTime fSalida =
-        DateTime(date.year, date.month, date.day, outTime.hour, outTime.minute);
-    if (fSalida.isBefore(fEntrada)) {
-      fSalida = fSalida.add(const Duration(days: 1));
-    }
+    if (result == null || !mounted) return;
 
     setState(() {
-      day.entrada = fEntrada;
-      day.salida = fSalida;
-      day.entradaReal = fEntrada;
-      day.notas = updatedNotes ?? day.notas;
-      day.esFalta = false;
+      day.entrada = result.entrada;
+      if (!result.isInProgress) {
+        day.salida = result.salida;
+      }
+      day.entradaReal = result.entradaReal;
+      day.notas = result.notas;
+      day.isInProgress = result.isInProgress;
+      if (result.timesModified && !result.isInProgress) {
+        day.esFalta = false;
+      }
     });
 
     await _userHistory.doc(day.id).set(day.toJson());
     await _saveData();
     _syncTodayStateFromHistory();
+
+    if (canShare && result.share != initialShare) {
+      await _toggleUnitShareForDate(
+        date: day.entrada,
+        shiftId: day.id,
+        share: result.share,
+      );
+    } else if (canShare) {
+      await _syncShiftsToUnitManager();
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -11591,6 +13013,4490 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     fontSize: isCompact ? 14 : 24,
                     fontWeight: FontWeight.w900,
                     color: Colors.white)));
+  }
+}
+
+class _EditWorkDayResult {
+  final DateTime entrada;
+  final DateTime salida;
+  final DateTime? entradaReal;
+  final String notas;
+  final bool share;
+  final bool isInProgress;
+  final bool timesModified;
+
+  const _EditWorkDayResult({
+    required this.entrada,
+    required this.salida,
+    this.entradaReal,
+    required this.notas,
+    required this.share,
+    required this.isInProgress,
+    required this.timesModified,
+  });
+}
+
+class _EditWorkDayDialog extends StatefulWidget {
+  final WorkDay day;
+  final bool isDarkMode;
+  final bool canShare;
+  final bool initialShare;
+  final String managerName;
+  final Future<TimeOfDay?> Function(
+    BuildContext context, {
+    required TimeOfDay initialTime,
+    String? title,
+  }) onPickTime;
+
+  const _EditWorkDayDialog({
+    required this.day,
+    required this.isDarkMode,
+    required this.canShare,
+    required this.initialShare,
+    required this.managerName,
+    required this.onPickTime,
+  });
+
+  @override
+  State<_EditWorkDayDialog> createState() => _EditWorkDayDialogState();
+}
+
+class _EditWorkDayDialogState extends State<_EditWorkDayDialog> {
+  late DateTime _entrada;
+  late DateTime _salida;
+  DateTime? _entradaReal;
+  late TextEditingController _notesController;
+  late bool _share;
+  late bool _isInProgress;
+
+  @override
+  void initState() {
+    super.initState();
+    _entrada = widget.day.entrada;
+    _salida = widget.day.salida;
+    _entradaReal = widget.day.entradaReal;
+    _notesController = TextEditingController(text: widget.day.notas);
+    _share = widget.initialShare;
+    _isInProgress = widget.day.isInProgress;
+  }
+
+  @override
+  void dispose() {
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  bool get _hasChanges {
+    if (_entrada != widget.day.entrada) return true;
+    if (!_isInProgress && _salida != widget.day.salida) return true;
+    if (_entradaReal != widget.day.entradaReal) return true;
+    if (_notesController.text.trim() != widget.day.notas.trim()) return true;
+    if (widget.canShare && _share != widget.initialShare) return true;
+    if (_isInProgress != widget.day.isInProgress) return true;
+    return false;
+  }
+
+  bool get _timesModified =>
+      _entrada != widget.day.entrada ||
+      (!_isInProgress && _salida != widget.day.salida) ||
+      _entradaReal != widget.day.entradaReal;
+
+  Future<void> _handleCancel() async {
+    if (!_hasChanges) {
+      Navigator.of(context).pop();
+      return;
+    }
+    final shouldDiscard = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (confirmCtx) => AlertDialog(
+        backgroundColor:
+            widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded,
+                color: Colors.amber, size: 24),
+            const SizedBox(width: 8),
+            Text(
+              "¿Descartar cambios?",
+              style: TextStyle(
+                color: widget.isDarkMode ? Colors.white : Colors.black87,
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          "Tienes modificaciones sin guardar. ¿Deseas descartar los cambios realizados?",
+          style: TextStyle(
+            color: widget.isDarkMode ? Colors.white70 : Colors.black54,
+            fontSize: 14,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(confirmCtx).pop(false),
+            child: Text(
+              "Seguir editando",
+              style: TextStyle(
+                color: widget.isDarkMode
+                    ? Colors.cyanAccent
+                    : const Color(0xFF0284C7),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.of(confirmCtx).pop(true),
+            child: const Text("Descartar"),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDiscard == true && mounted) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _handleSave() {
+    DateTime fEntrada = _entrada;
+    DateTime fSalida = _salida;
+    if (!_isInProgress && fSalida.isBefore(fEntrada)) {
+      fSalida = fSalida.add(const Duration(days: 1));
+    }
+    Navigator.of(context).pop(_EditWorkDayResult(
+      entrada: fEntrada,
+      salida: fSalida,
+      entradaReal: _entradaReal,
+      notas: _notesController.text.trim(),
+      share: _share,
+      isInProgress: _isInProgress,
+      timesModified: _timesModified,
+    ));
+  }
+
+  Future<void> _pickEntradaTime() async {
+    final picked = await widget.onPickTime(
+      context,
+      initialTime: TimeOfDay.fromDateTime(_entrada),
+      title: "EDITAR HORA ENTRADA",
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _entrada = DateTime(
+          _entrada.year,
+          _entrada.month,
+          _entrada.day,
+          picked.hour,
+          picked.minute,
+        );
+      });
+    }
+  }
+
+  Future<void> _pickSalidaTime() async {
+    final picked = await widget.onPickTime(
+      context,
+      initialTime: TimeOfDay.fromDateTime(_salida),
+      title: "EDITAR HORA SALIDA",
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _salida = DateTime(
+          _entrada.year,
+          _entrada.month,
+          _entrada.day,
+          picked.hour,
+          picked.minute,
+        );
+        _isInProgress = false;
+      });
+    }
+  }
+
+  Future<void> _pickEntradaRealTime() async {
+    final initial = _entradaReal ?? _entrada;
+    final picked = await widget.onPickTime(
+      context,
+      initialTime: TimeOfDay.fromDateTime(initial),
+      title: "EDITAR ENTRADA REAL",
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        _entradaReal = DateTime(
+          _entrada.year,
+          _entrada.month,
+          _entrada.day,
+          picked.hour,
+          picked.minute,
+        );
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDarkMode;
+    final primaryColor = isDark ? Colors.cyanAccent : const Color(0xFF0284C7);
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final fieldBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final borderColor = isDark ? Colors.white12 : const Color(0xFFE2E8F0);
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subtextColor = isDark ? Colors.white60 : const Color(0xFF64748B);
+
+    final String dayTitle =
+        DateFormat('EEEE, d \'de\' MMMM', 'es').format(_entrada);
+    final String capitalizedDayTitle = dayTitle.isNotEmpty
+        ? '${dayTitle[0].toUpperCase()}${dayTitle.substring(1)}'
+        : dayTitle;
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _handleCancel();
+      },
+      child: Dialog(
+        backgroundColor: cardBg,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: borderColor),
+        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: primaryColor.withAlpha(isDark ? 35 : 25),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.edit_calendar_rounded,
+                        color: primaryColor,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Editar Turno",
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            capitalizedDayTitle,
+                            style: TextStyle(
+                              color: subtextColor,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (_isInProgress)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withAlpha(isDark ? 40 : 30),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.amber.withAlpha(isDark ? 100 : 70),
+                          ),
+                        ),
+                        child: Text(
+                          "EN CURSO",
+                          style: TextStyle(
+                            color: isDark
+                                ? Colors.amberAccent
+                                : const Color(0xFFD97706),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+
+                // Special day banner if applicable
+                if (widget.day.esVacaciones ||
+                    widget.day.esFalta ||
+                    (widget.day.esFestivo && !widget.day.festivoTrabajado))
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    margin: const EdgeInsets.only(bottom: 14),
+                    decoration: BoxDecoration(
+                      color: widget.day.esFalta
+                          ? Colors.red.withAlpha(25)
+                          : (widget.day.esVacaciones
+                              ? Colors.teal.withAlpha(25)
+                              : Colors.amber.withAlpha(25)),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: widget.day.esFalta
+                            ? Colors.red.withAlpha(70)
+                            : (widget.day.esVacaciones
+                                ? Colors.teal.withAlpha(70)
+                                : Colors.amber.withAlpha(70)),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          widget.day.esFalta
+                              ? Icons.cancel_outlined
+                              : (widget.day.esVacaciones
+                                  ? Icons.beach_access
+                                  : Icons.celebration),
+                          color: widget.day.esFalta
+                              ? Colors.redAccent
+                              : (widget.day.esVacaciones
+                                  ? Colors.tealAccent
+                                  : Colors.amberAccent),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          widget.day.esFalta
+                              ? "Día registrado como FALTA"
+                              : (widget.day.esVacaciones
+                                  ? "Día registrado como VACACIONES"
+                                  : "FESTIVO NO LABORADO"),
+                          style: TextStyle(
+                            color: textColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Entrance Field Tile (Tappable)
+                _buildFieldCard(
+                  isDark: isDark,
+                  fieldBg: fieldBg,
+                  borderColor: borderColor,
+                  textColor: textColor,
+                  subtextColor: subtextColor,
+                  icon: Icons.login_rounded,
+                  iconColor:
+                      isDark ? Colors.tealAccent : const Color(0xFF0D9488),
+                  label: "HORA ENTRADA",
+                  value: DateFormat('hh:mm a').format(_entrada),
+                  onTap: _pickEntradaTime,
+                ),
+                const SizedBox(height: 10),
+
+                // Exit Field Tile (Tappable)
+                _buildFieldCard(
+                  isDark: isDark,
+                  fieldBg: fieldBg,
+                  borderColor: borderColor,
+                  textColor: textColor,
+                  subtextColor: subtextColor,
+                  icon: Icons.logout_rounded,
+                  iconColor:
+                      isDark ? Colors.orangeAccent : const Color(0xFFEA580C),
+                  label: "HORA SALIDA",
+                  value: _isInProgress
+                      ? "En curso (Toca para marcar salida)"
+                      : DateFormat('hh:mm a').format(_salida),
+                  isSpecialValue: _isInProgress,
+                  onTap: _pickSalidaTime,
+                ),
+                const SizedBox(height: 10),
+
+                // Entrada Real Field Tile (Tappable + Optional Clear)
+                _buildFieldCard(
+                  isDark: isDark,
+                  fieldBg: fieldBg,
+                  borderColor: borderColor,
+                  textColor: textColor,
+                  subtextColor: subtextColor,
+                  icon: Icons.access_time_filled_rounded,
+                  iconColor:
+                      isDark ? Colors.indigoAccent : const Color(0xFF4F46E5),
+                  label: "ENTRADA REAL",
+                  value: _entradaReal != null
+                      ? DateFormat('hh:mm a').format(_entradaReal!)
+                      : "Sin registrar (Opcional)",
+                  isSpecialValue: _entradaReal == null,
+                  onTap: _pickEntradaRealTime,
+                  trailingAction: _entradaReal != null
+                      ? IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 18),
+                          color: subtextColor,
+                          tooltip: "Eliminar entrada real",
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () {
+                            setState(() {
+                              _entradaReal = null;
+                            });
+                          },
+                        )
+                      : null,
+                ),
+                const SizedBox(height: 12),
+
+                // Notes Field
+                Text(
+                  "NOTAS",
+                  style: TextStyle(
+                    color: subtextColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _notesController,
+                  maxLines: 2,
+                  style: TextStyle(color: textColor, fontSize: 13.5),
+                  decoration: InputDecoration(
+                    hintText: "Escribe notas u observaciones...",
+                    hintStyle: TextStyle(
+                      color: isDark ? Colors.white38 : const Color(0xFF94A3B8),
+                      fontSize: 13,
+                    ),
+                    filled: true,
+                    fillColor: fieldBg,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: borderColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: borderColor),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: primaryColor, width: 1.4),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                // Manager Share Toggle (if canShare is true)
+                if (widget.canShare) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: fieldBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: _share
+                            ? (isDark
+                                ? Colors.cyanAccent.withAlpha(90)
+                                : const Color(0xFF0284C7).withAlpha(120))
+                            : borderColor,
+                        width: _share ? 1.4 : 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            color: _share
+                                ? primaryColor.withAlpha(isDark ? 40 : 25)
+                                : (isDark ? Colors.white12 : Colors.white),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            _share
+                                ? Icons.share_rounded
+                                : Icons.visibility_off_outlined,
+                            color: _share ? primaryColor : subtextColor,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    "Compartir con ${widget.managerName}",
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12.5,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: _share
+                                          ? Colors.green
+                                              .withAlpha(isDark ? 40 : 30)
+                                          : Colors.grey
+                                              .withAlpha(isDark ? 40 : 30),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    child: Text(
+                                      _share ? "COMPARTIDO" : "NO COMPARTIDO",
+                                      style: TextStyle(
+                                        color: _share
+                                            ? (isDark
+                                                ? Colors.greenAccent
+                                                : const Color(0xFF16A34A))
+                                            : subtextColor,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _share
+                                    ? "Visible en reporte de unidad"
+                                    : "Oculto para el reporte",
+                                style: TextStyle(
+                                  color: subtextColor,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch.adaptive(
+                          value: _share,
+                          activeColor: primaryColor,
+                          onChanged: (val) {
+                            setState(() {
+                              _share = val;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                ],
+
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: BorderSide(
+                            color: isDark
+                                ? Colors.white24
+                                : const Color(0xFFCBD5E1),
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: _handleCancel,
+                        child: Text(
+                          "CANCELAR",
+                          style: TextStyle(
+                            color: isDark
+                                ? Colors.white70
+                                : const Color(0xFF475569),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          backgroundColor: primaryColor,
+                          foregroundColor: isDark ? Colors.black : Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          elevation: 1,
+                        ),
+                        onPressed: _handleSave,
+                        child: const Text(
+                          "GUARDAR",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldCard({
+    required bool isDark,
+    required Color fieldBg,
+    required Color borderColor,
+    required Color textColor,
+    required Color subtextColor,
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required String value,
+    bool isSpecialValue = false,
+    required VoidCallback onTap,
+    Widget? trailingAction,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: fieldBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: iconColor.withAlpha(isDark ? 35 : 20),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: iconColor, size: 18),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: subtextColor,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      color: isSpecialValue
+                          ? (isDark
+                              ? Colors.amberAccent
+                              : const Color(0xFFD97706))
+                          : textColor,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (trailingAction != null) ...[
+              trailingAction,
+              const SizedBox(width: 6),
+            ],
+            Icon(
+              Icons.chevron_right_rounded,
+              color: subtextColor,
+              size: 20,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UnitMemberAttendanceCard extends StatefulWidget {
+  final Map<String, dynamic> data;
+  final bool isDarkMode;
+
+  const _UnitMemberAttendanceCard({
+    required this.data,
+    required this.isDarkMode,
+  });
+
+  @override
+  State<_UnitMemberAttendanceCard> createState() =>
+      _UnitMemberAttendanceCardState();
+}
+
+class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
+  bool _isExpanded = true;
+
+  String _getShortDayName(int weekday) {
+    switch (weekday) {
+      case 1:
+        return "Lun";
+      case 2:
+        return "Mar";
+      case 3:
+        return "Mié";
+      case 4:
+        return "Jue";
+      case 5:
+        return "Vie";
+      case 6:
+        return "Sáb";
+      case 7:
+        return "Dom";
+      default:
+        return "";
+    }
+  }
+
+  Widget _buildDailyAttendanceCard(
+      Map<String, dynamic> shift, bool isDarkMode) {
+    final String dateStr = (shift['date'] ?? '').toString();
+    DateTime? date;
+    if (shift['entrada'] is Timestamp) {
+      date = (shift['entrada'] as Timestamp).toDate();
+    } else if (dateStr.isNotEmpty) {
+      date = DateTime.tryParse(dateStr);
+    }
+
+    final String dayName = date != null
+        ? "${_getShortDayName(date.weekday)} ${DateFormat('dd/MM').format(date)}"
+        : dateStr;
+
+    final bool isInProgress = shift['is_in_progress'] == true;
+    final bool isFalta = shift['es_falta'] == true;
+    final bool isFestivo = shift['es_festivo'] == true;
+    final bool isVacaciones = shift['es_vacaciones'] == true;
+
+    final String? entradaStr = shift['entrada_str'] as String?;
+    final String? salidaStr = shift['salida_str'] as String?;
+    final String? entradaRealStr = shift['entrada_real_str'] as String?;
+    final String notes = (shift['notas'] ?? '').toString().trim();
+
+    Color badgeColor;
+    String badgeText;
+    if (isFalta) {
+      badgeColor = Colors.redAccent;
+      badgeText = "FALTA";
+    } else if (isInProgress) {
+      badgeColor = Colors.amber;
+      badgeText = "EN CURSO";
+    } else if (isFestivo) {
+      badgeColor = Colors.purpleAccent;
+      badgeText = "FESTIVO";
+    } else if (isVacaciones) {
+      badgeColor = Colors.blueAccent;
+      badgeText = "VACACIONES";
+    } else {
+      badgeColor = Colors.teal;
+      badgeText = "COMPLETO";
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF131822) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isDarkMode ? Colors.white10 : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                dayName,
+                style: TextStyle(
+                  color: isDarkMode ? Colors.white : Colors.black87,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: badgeColor.withAlpha(isDarkMode ? 40 : 25),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: badgeColor.withAlpha(100)),
+                ),
+                child: Text(
+                  badgeText,
+                  style: TextStyle(
+                    color: badgeColor,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (!isFalta) ...[
+            Row(
+              children: [
+                Icon(Icons.login_rounded,
+                    size: 11, color: Colors.greenAccent.shade400),
+                const SizedBox(width: 4),
+                Text(
+                  "Ent: ",
+                  style: TextStyle(
+                      color: isDarkMode ? Colors.white60 : Colors.black54,
+                      fontSize: 10),
+                ),
+                Expanded(
+                  child: Text(
+                    entradaStr ?? "---",
+                    style: TextStyle(
+                      color: isDarkMode ? Colors.white : Colors.black87,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                Icon(Icons.logout_rounded,
+                    size: 11, color: Colors.redAccent.shade200),
+                const SizedBox(width: 4),
+                Text(
+                  "Sal: ",
+                  style: TextStyle(
+                      color: isDarkMode ? Colors.white60 : Colors.black54,
+                      fontSize: 10),
+                ),
+                Expanded(
+                  child: Text(
+                    isInProgress ? "En turno" : (salidaStr ?? "---"),
+                    style: TextStyle(
+                      color: isInProgress
+                          ? Colors.amber
+                          : (isDarkMode ? Colors.white : Colors.black87),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            if (entradaRealStr != null && entradaRealStr.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  const Icon(Icons.timer_outlined,
+                      size: 11, color: Colors.cyanAccent),
+                  const SizedBox(width: 4),
+                  Text(
+                    "Real: ",
+                    style: TextStyle(
+                        color: isDarkMode ? Colors.white60 : Colors.black54,
+                        fontSize: 10),
+                  ),
+                  Expanded(
+                    child: Text(
+                      entradaRealStr,
+                      style: TextStyle(
+                        color: isDarkMode
+                            ? Colors.cyanAccent
+                            : const Color(0xFF0284C7),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+          if (notes.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                color: isDarkMode ? Colors.black26 : const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.chat_bubble_outline_rounded,
+                      size: 10,
+                      color: isDarkMode ? Colors.white54 : Colors.black45),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      notes,
+                      style: TextStyle(
+                        color: isDarkMode ? Colors.white70 : Colors.black87,
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttendanceColumn({
+    required String title,
+    required String subtitle,
+    required List<Map<String, dynamic>> shifts,
+    required Color accentColor,
+    required bool isThisWeek,
+    required bool isDarkMode,
+    String? timeframe,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: isDarkMode
+            ? const Color(0xFF1E293B).withAlpha(150)
+            : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDarkMode ? Colors.white10 : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title.toUpperCase(),
+                      style: TextStyle(
+                        color: accentColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: isDarkMode
+                            ? Colors.white54
+                            : const Color(0xFF64748B),
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: accentColor.withAlpha(isDarkMode ? 35 : 20),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: accentColor.withAlpha(80)),
+                ),
+                child: Text(
+                  "${shifts.length} ${shifts.length == 1 ? 'd' : 'd'}",
+                  style: TextStyle(
+                    color: accentColor,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (shifts.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+              decoration: BoxDecoration(
+                color: isDarkMode ? Colors.black26 : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                (!isThisWeek &&
+                        (timeframe == 'current_week' ||
+                            timeframe == 'Esta semana'))
+                    ? "No compartido por colaborador\n(Solo semana en curso)"
+                    : "Sin registros para este período",
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isDarkMode ? Colors.white38 : Colors.black38,
+                  fontSize: 10,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          else
+            Column(
+              children: shifts
+                  .map((s) => _buildDailyAttendanceCard(s, isDarkMode))
+                  .toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDarkMode = widget.isDarkMode;
+    final data = widget.data;
+    final Color unitColor =
+        isDarkMode ? Colors.cyanAccent : const Color(0xFF0284C7);
+    final Color cardBg =
+        isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+    final Color borderColor =
+        isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
+    final Color textColor = isDarkMode ? Colors.white : Colors.black87;
+    final Color subtextColor =
+        isDarkMode ? Colors.white54 : const Color(0xFF64748B);
+
+    final String memberName =
+        (data['member_name'] ?? 'Sin nombre').toString();
+    final String memberEmp =
+        (data['member_emp'] ?? '---').toString();
+
+    // Active status / retention check
+    final now = DateTime.now();
+    final rawUntil = data['active_sharing_until'];
+    DateTime? activeUntil;
+    if (rawUntil is Timestamp) {
+      activeUntil = rawUntil.toDate();
+    } else if (rawUntil is String) {
+      activeUntil = DateTime.tryParse(rawUntil);
+    }
+
+    final bool isCurrentlyActive =
+        activeUntil != null && activeUntil.isAfter(now);
+
+    // Format last clock out
+    final rawLastClockOut = data['last_clock_out'];
+    DateTime? lastClockOut;
+    if (rawLastClockOut is Timestamp) {
+      lastClockOut = rawLastClockOut.toDate();
+    } else if (rawLastClockOut is String) {
+      lastClockOut = DateTime.tryParse(rawLastClockOut);
+    }
+
+    final String lastClockOutStr = lastClockOut != null
+        ? DateFormat('dd/MM/yyyy - hh:mm a').format(lastClockOut)
+        : "Sin salida registrada";
+
+    // Split shifts into This Week vs Last Week
+    final rawShifts = (data['shifts'] as List?) ?? [];
+    final List<Map<String, dynamic>> shifts = rawShifts
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+
+    final mondayThisWeek = now.subtract(Duration(days: now.weekday - 1));
+    final startThisWeek =
+        DateTime(mondayThisWeek.year, mondayThisWeek.month, mondayThisWeek.day);
+    final endThisWeek = startThisWeek
+        .add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
+
+    final mondayLastWeek = startThisWeek.subtract(const Duration(days: 7));
+    final endLastWeek = startThisWeek.subtract(const Duration(seconds: 1));
+
+    final thisWeekShifts = shifts.where((s) {
+      final String dateStr = (s['date'] ?? '').toString();
+      DateTime? d;
+      if (s['entrada'] is Timestamp) {
+        d = (s['entrada'] as Timestamp).toDate();
+      } else if (dateStr.isNotEmpty) {
+        d = DateTime.tryParse(dateStr);
+      }
+      if (d == null) return false;
+      return d.isAfter(startThisWeek.subtract(const Duration(seconds: 1))) &&
+          d.isBefore(endThisWeek.add(const Duration(seconds: 1)));
+    }).toList()
+      ..sort((a, b) =>
+          (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString()));
+
+    final lastWeekShifts = shifts.where((s) {
+      final String dateStr = (s['date'] ?? '').toString();
+      DateTime? d;
+      if (s['entrada'] is Timestamp) {
+        d = (s['entrada'] as Timestamp).toDate();
+      } else if (dateStr.isNotEmpty) {
+        d = DateTime.tryParse(dateStr);
+      }
+      if (d == null) return false;
+      return d.isAfter(mondayLastWeek.subtract(const Duration(seconds: 1))) &&
+          d.isBefore(endLastWeek.add(const Duration(seconds: 1)));
+    }).toList()
+      ..sort((a, b) =>
+          (a['date'] ?? '').toString().compareTo((b['date'] ?? '').toString()));
+
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(isDarkMode ? 35 : 10),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header Row
+          InkWell(
+            onTap: () => setState(() => _isExpanded = !_isExpanded),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: unitColor.withAlpha(isDarkMode ? 35 : 20),
+                    child: Text(
+                      memberName.isNotEmpty ? memberName[0].toUpperCase() : '?',
+                      style: TextStyle(
+                        color: unitColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          memberName,
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: isDarkMode
+                                    ? Colors.white10
+                                    : const Color(0xFFE2E8F0),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                "No. $memberEmp",
+                                style: TextStyle(
+                                  color: subtextColor,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            if (isCurrentlyActive)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withAlpha(30),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                      color: Colors.green.withAlpha(100)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.check_circle_rounded,
+                                        size: 10, color: Colors.greenAccent),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "Activo",
+                                      style: TextStyle(
+                                        color: isDarkMode
+                                            ? Colors.greenAccent
+                                            : Colors.green.shade800,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.amber.withAlpha(30),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                      color: Colors.amber.withAlpha(100)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.history_rounded,
+                                        size: 10, color: Colors.amber),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "En consulta (14d)",
+                                      style: TextStyle(
+                                        color: isDarkMode
+                                            ? Colors.amber
+                                            : Colors.amber.shade900,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.calendar_month_rounded,
+                      color: unitColor,
+                      size: 22,
+                    ),
+                    tooltip: "Ver calendario de asistencias",
+                    onPressed: () => _showMemberCalendarDialog(
+                      context,
+                      shifts,
+                      memberName,
+                      isDarkMode,
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      _isExpanded
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      color: subtextColor,
+                    ),
+                    onPressed: () =>
+                        setState(() => _isExpanded = !_isExpanded),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Quick Glance: Last clock-out
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: isDarkMode
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isDarkMode
+                      ? Colors.white10
+                      : const Color(0xFFCBD5E1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.logout_rounded,
+                      size: 14,
+                      color: isDarkMode
+                          ? Colors.cyanAccent
+                          : const Color(0xFF0284C7)),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Última Salida: ",
+                    style: TextStyle(
+                      color: isDarkMode
+                          ? Colors.white70
+                          : const Color(0xFF475569),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      lastClockOutStr,
+                      style: TextStyle(
+                        color: isDarkMode ? Colors.white : Colors.black87,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Expandable 2 Parallel Columns
+          if (_isExpanded) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _buildAttendanceColumn(
+                      title: "Esta Semana",
+                      subtitle:
+                          "${DateFormat('dd/MM').format(startThisWeek)} - ${DateFormat('dd/MM').format(endThisWeek)}",
+                      shifts: thisWeekShifts,
+                      accentColor: unitColor,
+                      isThisWeek: true,
+                      isDarkMode: isDarkMode,
+                      timeframe: data['timeframe'],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildAttendanceColumn(
+                      title: "Semana Pasada",
+                      subtitle:
+                          "${DateFormat('dd/MM').format(mondayLastWeek)} - ${DateFormat('dd/MM').format(endLastWeek)}",
+                      shifts: lastWeekShifts,
+                      accentColor: isDarkMode
+                          ? Colors.orangeAccent
+                          : const Color(0xFFEA580C),
+                      isThisWeek: false,
+                      isDarkMode: isDarkMode,
+                      timeframe: data['timeframe'],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static const List<String> _calendarMonthsES = [
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre"
+  ];
+
+  static const List<String> _calendarDaysES = [
+    "Lunes",
+    "Martes",
+    "Miércoles",
+    "Jueves",
+    "Viernes",
+    "Sábado",
+    "Domingo"
+  ];
+
+  void _showMemberCalendarDialog(
+    BuildContext context,
+    List<Map<String, dynamic>> shifts,
+    String memberName,
+    bool isDarkMode,
+  ) {
+    final Map<String, Map<String, dynamic>> shiftByDate = {};
+    for (var s in shifts) {
+      final String d = (s['date'] ?? '').toString();
+      if (d.isNotEmpty) {
+        shiftByDate[d] = s;
+      }
+    }
+
+    final now = DateTime.now();
+    DateTime displayMonth = DateTime(now.year, now.month, 1);
+    DateTime? selectedDate = now;
+
+    if (!shiftByDate.containsKey(DateFormat('yyyy-MM-dd').format(now)) &&
+        shifts.isNotEmpty) {
+      final sortedShifts = List<Map<String, dynamic>>.from(shifts)
+        ..sort((a, b) => (b['date'] ?? '')
+            .toString()
+            .compareTo((a['date'] ?? '').toString()));
+      final latestDateStr = (sortedShifts.first['date'] ?? '').toString();
+      final parsed = DateTime.tryParse(latestDateStr);
+      if (parsed != null) {
+        selectedDate = parsed;
+        displayMonth = DateTime(parsed.year, parsed.month, 1);
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final daysInMonth =
+                DateTime(displayMonth.year, displayMonth.month + 1, 0).day;
+            final int firstWeekday = displayMonth.weekday; // 1 = Monday
+            final int leadingBlanks = firstWeekday - 1;
+
+            final selectedDateStr = selectedDate != null
+                ? DateFormat('yyyy-MM-dd').format(selectedDate!)
+                : '';
+            final selectedShift = selectedDateStr.isNotEmpty
+                ? shiftByDate[selectedDateStr]
+                : null;
+
+            final Color dialogBg =
+                isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+            final Color textColor = isDarkMode ? Colors.white : Colors.black87;
+            final Color subtextColor =
+                isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+            final Color primaryColor =
+                isDarkMode ? Colors.cyanAccent : const Color(0xFF0284C7);
+
+            final String monthYearStr =
+                "${_calendarMonthsES[displayMonth.month - 1]} ${displayMonth.year}";
+
+            return Dialog(
+              backgroundColor: dialogBg,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 420),
+                padding: const EdgeInsets.all(18),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: primaryColor
+                                      .withAlpha(isDarkMode ? 35 : 20),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  Icons.calendar_month_rounded,
+                                  color: primaryColor,
+                                  size: 22,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "Calendario de Turnos",
+                                    style: TextStyle(
+                                      color: textColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  Text(
+                                    memberName,
+                                    style: TextStyle(
+                                      color: primaryColor,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close_rounded,
+                                color: subtextColor, size: 22),
+                            onPressed: () => Navigator.pop(ctx),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Month Navigation Row
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          IconButton(
+                            icon: Icon(Icons.chevron_left_rounded,
+                                color: textColor),
+                            onPressed: () {
+                              setDialogState(() {
+                                displayMonth = DateTime(displayMonth.year,
+                                    displayMonth.month - 1, 1);
+                              });
+                            },
+                          ),
+                          Text(
+                            monthYearStr,
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.chevron_right_rounded,
+                                color: textColor),
+                            onPressed: () {
+                              setDialogState(() {
+                                displayMonth = DateTime(displayMonth.year,
+                                    displayMonth.month + 1, 1);
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Weekday Headers
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: ["L", "M", "M", "J", "V", "S", "D"]
+                            .map(
+                              (d) => SizedBox(
+                                width: 36,
+                                child: Text(
+                                  d,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: subtextColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Calendar Grid
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 7,
+                          mainAxisSpacing: 6,
+                          crossAxisSpacing: 6,
+                          childAspectRatio: 1.0,
+                        ),
+                        itemCount: leadingBlanks + daysInMonth,
+                        itemBuilder: (ctx, index) {
+                          if (index < leadingBlanks) {
+                            return const SizedBox.shrink();
+                          }
+                          final dayNum = index - leadingBlanks + 1;
+                          final cellDate = DateTime(
+                              displayMonth.year, displayMonth.month, dayNum);
+                          final cellDateStr =
+                              DateFormat('yyyy-MM-dd').format(cellDate);
+                          final bool isMarked =
+                              shiftByDate.containsKey(cellDateStr);
+                          final bool isSelected = selectedDate != null &&
+                              selectedDate!.year == cellDate.year &&
+                              selectedDate!.month == cellDate.month &&
+                              selectedDate!.day == cellDate.day;
+
+                          final shift = shiftByDate[cellDateStr];
+                          Color dotColor = Colors.transparent;
+                          if (shift != null) {
+                            if (shift['es_falta'] == true) {
+                              dotColor = Colors.redAccent;
+                            } else if (shift['is_in_progress'] == true) {
+                              dotColor = Colors.amber;
+                            } else if (shift['es_festivo'] == true) {
+                              dotColor = Colors.purpleAccent;
+                            } else if (shift['es_vacaciones'] == true) {
+                              dotColor = Colors.blueAccent;
+                            } else {
+                              dotColor = isDarkMode
+                                  ? Colors.tealAccent
+                                  : Colors.teal;
+                            }
+                          }
+
+                          return InkWell(
+                            onTap: () {
+                              setDialogState(() {
+                                selectedDate = cellDate;
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? primaryColor
+                                        .withAlpha(isDarkMode ? 60 : 35)
+                                    : (isMarked
+                                        ? (isDarkMode
+                                            ? Colors.white.withAlpha(12)
+                                            : const Color(0xFFF1F5F9))
+                                        : Colors.transparent),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? primaryColor
+                                      : (isMarked
+                                          ? dotColor.withAlpha(
+                                              isDarkMode ? 120 : 160)
+                                          : Colors.transparent),
+                                  width: isSelected ? 1.8 : 1.0,
+                                ),
+                              ),
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    "$dayNum",
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? (isDarkMode
+                                              ? Colors.white
+                                              : primaryColor)
+                                          : (isMarked
+                                              ? textColor
+                                              : subtextColor.withAlpha(120)),
+                                      fontWeight: isSelected || isMarked
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  if (isMarked) ...[
+                                    const SizedBox(height: 2),
+                                    Container(
+                                      width: 5,
+                                      height: 5,
+                                      decoration: BoxDecoration(
+                                        color: dotColor,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                      const SizedBox(height: 18),
+                      const Divider(height: 1),
+                      const SizedBox(height: 14),
+
+                      // Selected Date Detail Card
+                      if (selectedShift != null)
+                        _buildCalendarShiftDetailCard(
+                            selectedShift, isDarkMode, textColor, subtextColor)
+                      else
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 16),
+                          decoration: BoxDecoration(
+                            color: isDarkMode
+                                ? Colors.white.withAlpha(6)
+                                : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDarkMode
+                                  ? Colors.white10
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.event_busy_rounded,
+                                color: subtextColor,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      selectedDate != null
+                                          ? "${_calendarDaysES[selectedDate!.weekday - 1]}, ${selectedDate!.day} de ${_calendarMonthsES[selectedDate!.month - 1]} ${selectedDate!.year}"
+                                          : "Fecha seleccionada",
+                                      style: TextStyle(
+                                        color: textColor,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      "Sin registros compartidos para esta fecha.",
+                                      style: TextStyle(
+                                        color: subtextColor,
+                                        fontSize: 11.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      const SizedBox(height: 14),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: Text(
+                            "CERRAR",
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildCalendarShiftDetailCard(
+    Map<String, dynamic> shift,
+    bool isDarkMode,
+    Color textColor,
+    Color subtextColor,
+  ) {
+    final String dateStr = (shift['date'] ?? '').toString();
+    DateTime? date;
+    if (shift['entrada'] is Timestamp) {
+      date = (shift['entrada'] as Timestamp).toDate();
+    } else if (dateStr.isNotEmpty) {
+      date = DateTime.tryParse(dateStr);
+    }
+
+    final String formattedDate = date != null
+        ? "${_calendarDaysES[date.weekday - 1]}, ${date.day} de ${_calendarMonthsES[date.month - 1]} ${date.year}"
+        : dateStr;
+
+    final bool isInProgress = shift['is_in_progress'] == true;
+    final bool isFalta = shift['es_falta'] == true;
+    final bool isFestivo = shift['es_festivo'] == true;
+    final bool isVacaciones = shift['es_vacaciones'] == true;
+
+    final String? entradaStr = shift['entrada_str'] as String?;
+    final String? salidaStr = shift['salida_str'] as String?;
+    final String? entradaRealStr = shift['entrada_real_str'] as String?;
+    final String notes = (shift['notas'] ?? '').toString().trim();
+
+    Color badgeColor;
+    String badgeText;
+    if (isFalta) {
+      badgeColor = Colors.redAccent;
+      badgeText = "FALTA";
+    } else if (isInProgress) {
+      badgeColor = Colors.amber;
+      badgeText = "EN CURSO";
+    } else if (isFestivo) {
+      badgeColor = Colors.purpleAccent;
+      badgeText = "FESTIVO";
+    } else if (isVacaciones) {
+      badgeColor = Colors.blueAccent;
+      badgeText = "VACACIONES";
+    } else {
+      badgeColor = isDarkMode ? Colors.tealAccent : Colors.teal;
+      badgeText = "COMPLETADO";
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  formattedDate,
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13.5,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: badgeColor.withAlpha(isDarkMode ? 40 : 25),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: badgeColor.withAlpha(120)),
+                ),
+                child: Text(
+                  badgeText,
+                  style: TextStyle(
+                    color: badgeColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.login_rounded,
+                        size: 15,
+                        color: isDarkMode
+                            ? Colors.greenAccent
+                            : const Color(0xFF16A34A)),
+                    const SizedBox(width: 6),
+                    Text(
+                      "Entrada: ",
+                      style: TextStyle(color: subtextColor, fontSize: 12),
+                    ),
+                    Text(
+                      entradaStr ?? "---",
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Row(
+                  children: [
+                    Icon(Icons.logout_rounded,
+                        size: 15,
+                        color: isInProgress
+                            ? Colors.amber
+                            : (isDarkMode
+                                ? Colors.redAccent
+                                : const Color(0xFFDC2626))),
+                    const SizedBox(width: 6),
+                    Text(
+                      "Salida: ",
+                      style: TextStyle(color: subtextColor, fontSize: 12),
+                    ),
+                    Text(
+                      isInProgress ? "En turno" : (salidaStr ?? "---"),
+                      style: TextStyle(
+                        color: isInProgress ? Colors.amber : textColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (entradaRealStr != null && entradaRealStr.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Icon(Icons.timer_outlined,
+                    size: 15,
+                    color: isDarkMode
+                        ? Colors.cyanAccent
+                        : const Color(0xFF0284C7)),
+                const SizedBox(width: 6),
+                Text(
+                  "Entrada Real: ",
+                  style: TextStyle(color: subtextColor, fontSize: 12),
+                ),
+                Text(
+                  entradaRealStr,
+                  style: TextStyle(
+                    color: isDarkMode
+                        ? Colors.cyanAccent
+                        : const Color(0xFF0284C7),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (notes.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: isDarkMode
+                    ? Colors.white.withAlpha(8)
+                    : const Color(0xFFE2E8F0),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.notes_rounded, size: 14, color: subtextColor),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      notes,
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 11.5,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class UnitShareScreen extends StatefulWidget {
+  final bool isDarkMode;
+  final List<WorkDay>? weeklyHistory;
+
+  const UnitShareScreen({
+    super.key,
+    required this.isDarkMode,
+    this.weeklyHistory,
+  });
+
+  @override
+  State<UnitShareScreen> createState() => _UnitShareScreenState();
+}
+
+class _UnitShareScreenState extends State<UnitShareScreen> {
+  bool _isLoading = true;
+  bool _isSaving = false;
+  bool _isUnitShareActive = false;
+  bool _isEditing = false;
+  Map<String, dynamic>? _shareData;
+
+  List<Map<String, dynamic>> _sharedShifts = [];
+  StreamSubscription? _memberSubscription;
+
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _searchDebounceTimer;
+  bool _isSearching = false;
+  String? _searchError;
+  Map<String, dynamic>? _selectedManager;
+
+  String _selectedMode = 'Esta Semana';
+  static const List<String> _unifiedModes = [
+    'Solo Hoy',
+    'Esta Semana',
+    'Esta Semana y la Pasada',
+    'Este Mes',
+    'Este Año',
+    'Todos Mis Registros',
+    'Yo Decido',
+  ];
+
+  bool _shareEntry = true;
+  bool _shareExit = true;
+  bool _shareRealEntry = false;
+  bool _shareNotes = false;
+
+  String _userName = '';
+  String _userEmp = '';
+  List<WorkDay> _userWorkDays = [];
+  Set<String> _excludedDates = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _memberSubscription?.cancel();
+    _searchDebounceTimer?.cancel();
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadInitialData() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      // 1. Load User Profile
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (userDoc.exists && userDoc.data() != null) {
+        final ud = userDoc.data()!;
+        _userName = "${ud['first_name'] ?? ''} ${ud['last_name'] ?? ''}".trim();
+        if (_userName.isEmpty) _userName = user.displayName ?? '';
+        _userEmp = (ud['employee_number'] ?? ud['user_emp'] ?? '').toString();
+      }
+
+      // 2. Load WorkDays History
+      if (widget.weeklyHistory != null && widget.weeklyHistory!.isNotEmpty) {
+        _userWorkDays = List.from(widget.weeklyHistory!);
+      } else {
+        final daysSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('days')
+            .get();
+        if (daysSnap.docs.isNotEmpty) {
+          _userWorkDays = daysSnap.docs
+              .map((d) => WorkDay.fromJson(d.data()))
+              .toList();
+          _userWorkDays.sort((a, b) => b.entrada.compareTo(a.entrada));
+        }
+      }
+
+      // 3. Load Unit Share Settings
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'active_unit_share_cache_${user.uid}';
+      final cached = prefs.getString(cacheKey);
+      if (cached != null) {
+        try {
+          final Map<String, dynamic> c = jsonDecode(cached);
+          final untilStr = c['active_sharing_until']?.toString();
+          final activeUntil =
+              untilStr != null ? DateTime.tryParse(untilStr) : null;
+          if (c['is_active'] == true &&
+              activeUntil != null &&
+              !DateTime.now().isAfter(activeUntil)) {
+            _isUnitShareActive = true;
+            _shareData = c;
+            _selectedMode = c['mode'] ?? c['duration'] ?? 'Esta Semana';
+            _shareEntry = c['share_entry'] ?? true;
+            _shareExit = c['share_exit'] ?? true;
+            _shareRealEntry = c['share_real_entry'] == true;
+            _shareNotes = c['share_notes'] == true;
+            final rawExcluded = c['excluded_dates'] as List<dynamic>?;
+            if (rawExcluded != null) {
+              _excludedDates = rawExcluded.map((e) => e.toString()).toSet();
+            }
+          }
+        } catch (_) {}
+      }
+
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('settings')
+          .doc('unit_share')
+          .get();
+
+      if (doc.exists && doc.data() != null) {
+        final d = doc.data()!;
+        final bool isActive = d['is_active'] == true;
+        DateTime? activeUntil;
+        if (d['active_sharing_until'] is Timestamp) {
+          activeUntil = (d['active_sharing_until'] as Timestamp).toDate();
+        } else if (d['active_sharing_until'] is String) {
+          activeUntil = DateTime.tryParse(d['active_sharing_until']);
+        }
+
+        final bool isExpired =
+            activeUntil != null && DateTime.now().isAfter(activeUntil);
+
+        if (isActive && !isExpired) {
+          _isUnitShareActive = true;
+          _shareData = d;
+          _selectedMode = d['mode'] ?? d['duration'] ?? 'Esta Semana';
+          _shareEntry = d['share_entry'] ?? true;
+          _shareExit = d['share_exit'] ?? true;
+          _shareRealEntry = d['share_real_entry'] == true;
+          _shareNotes = d['share_notes'] == true;
+          final rawExcluded = d['excluded_dates'] as List<dynamic>?;
+          if (rawExcluded != null) {
+            _excludedDates = rawExcluded.map((e) => e.toString()).toSet();
+          }
+
+          final mgrUid = (d['manager_uid'] ?? d['uid'] ?? '').toString();
+          if (mgrUid.isNotEmpty) {
+            _setupMemberListener(mgrUid, user.uid);
+          }
+        } else {
+          _isUnitShareActive = false;
+          _shareData = null;
+        }
+      }
+    } catch (e) {
+      debugPrint("Error loading unit share in UnitShareScreen: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _setupMemberListener(String managerUid, String userUid) {
+    _memberSubscription?.cancel();
+    _memberSubscription = FirebaseFirestore.instance
+        .collection('unit_shares')
+        .doc(managerUid)
+        .collection('members')
+        .doc(userUid)
+        .snapshots()
+        .listen((snap) {
+      if (snap.exists && snap.data() != null) {
+        final data = snap.data()!;
+        final rawShifts = data['shifts'] as List<dynamic>? ?? [];
+        final parsedShifts =
+            rawShifts.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        parsedShifts.sort((a, b) {
+          final aDate = a['date']?.toString() ?? '';
+          final bDate = b['date']?.toString() ?? '';
+          return bDate.compareTo(aDate);
+        });
+        if (mounted) {
+          setState(() {
+            _sharedShifts = parsedShifts;
+          });
+        }
+      }
+    }, onError: (e) => debugPrint("Error listening to shared shifts: $e"));
+  }
+
+  void _onSearchChanged(String text) {
+    _searchDebounceTimer?.cancel();
+    _searchDebounceTimer = Timer(const Duration(milliseconds: 350), () {
+      _searchUnitManager(text);
+    });
+  }
+
+  Future<void> _searchUnitManager(String queryInput) async {
+    final query = queryInput.trim();
+    if (query.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+          _selectedManager = null;
+          _searchError = null;
+        });
+      }
+      return;
+    }
+
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (mounted) {
+      setState(() {
+        _isSearching = true;
+        _searchError = null;
+      });
+    }
+
+    try {
+      final querySnap = await FirebaseFirestore.instance
+          .collection('unit_managers')
+          .get();
+
+      if (querySnap.docs.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _isSearching = false;
+            _selectedManager = null;
+            _searchError =
+                "No hay Ingenieros de Unidad registrados en el sistema.";
+          });
+        }
+        return;
+      }
+
+      final normalizedQuery = query.toLowerCase();
+
+      final matchingDocs = querySnap.docs.where((doc) {
+        final d = doc.data();
+        final emp = (d['employee_number'] ?? d['user_emp'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        final name = (d['name'] ?? '').toString().trim().toLowerCase();
+        return emp.contains(normalizedQuery) || name.contains(normalizedQuery);
+      }).toList();
+
+      if (matchingDocs.isEmpty) {
+        if (mounted) {
+          setState(() {
+            _isSearching = false;
+            _selectedManager = null;
+            _searchError =
+                "No se encontró ningún Ingeniero de Unidad con '$query'.";
+          });
+        }
+        return;
+      }
+
+      var matchDoc = matchingDocs.first;
+      for (final doc in matchingDocs) {
+        final d = doc.data();
+        final emp = (d['employee_number'] ?? d['user_emp'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+        final name = (d['name'] ?? '').toString().trim().toLowerCase();
+        if (emp == normalizedQuery || name == normalizedQuery) {
+          matchDoc = doc;
+          break;
+        }
+      }
+
+      final managerDocId = matchDoc.id;
+      final data = matchDoc.data();
+      final managerUid = (data['uid'] ?? managerDocId).toString().trim();
+
+      if (currentUser != null &&
+          (managerUid == currentUser.uid || managerDocId == currentUser.uid)) {
+        if (mounted) {
+          setState(() {
+            _isSearching = false;
+            _selectedManager = null;
+            _searchError = "No puedes compartir datos con tu propia cuenta.";
+          });
+        }
+        return;
+      }
+
+      final fullName = (data['name'] ?? 'Sin nombre').toString().trim();
+      final emp = (data['employee_number'] ?? data['user_emp'] ?? query)
+          .toString()
+          .trim();
+
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+          _searchError = null;
+          _selectedManager = {
+            'uid': managerUid,
+            'doc_id': managerDocId,
+            'name': fullName.isEmpty ? 'Sin nombre' : fullName,
+            'emp': emp,
+            'employee_number': emp,
+            'role': data['role'] ?? 'ingeniero_de_unidad',
+          };
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+          _selectedManager = null;
+          _searchError = "Error al buscar: $e";
+        });
+      }
+    }
+  }
+
+  DateTime _calculateActiveUntil(String mode, [DateTime? fromDate]) {
+    final now = fromDate ?? DateTime.now();
+    switch (mode) {
+      case 'Solo Hoy':
+        return DateTime(now.year, now.month, now.day, 23, 59, 59);
+      case 'Esta Semana':
+        final sunday = now.add(Duration(days: 7 - now.weekday));
+        return DateTime(sunday.year, sunday.month, sunday.day, 23, 59, 59);
+      case 'Esta Semana y la Pasada':
+        final sunday = now.add(Duration(days: 7 - now.weekday));
+        return DateTime(sunday.year, sunday.month, sunday.day, 23, 59, 59);
+      case 'Este Mes':
+        final lastDay = DateTime(now.year, now.month + 1, 0);
+        return DateTime(lastDay.year, lastDay.month, lastDay.day, 23, 59, 59);
+      case 'Este Año':
+        return DateTime(now.year, 12, 31, 23, 59, 59);
+      case 'Todos Mis Registros':
+      case 'Yo Decido':
+      default:
+        return now.add(const Duration(days: 365));
+    }
+  }
+
+  String _formatCountdown(DateTime activeUntil) {
+    final now = DateTime.now();
+    final diff = activeUntil.difference(now);
+    if (diff.isNegative) return "Expirado";
+    if (diff.inDays > 0) {
+      final hours = diff.inHours % 24;
+      return "${diff.inDays}d ${hours}h restantes";
+    } else if (diff.inHours > 0) {
+      final mins = diff.inMinutes % 60;
+      return "${diff.inHours}h ${mins}m restantes";
+    } else {
+      return "${diff.inMinutes} min restantes";
+    }
+  }
+
+  String _formatDayNameAndDate(String dateStr) {
+    try {
+      final parsed = DateTime.parse(dateStr);
+      const dayNames = [
+        'Lunes',
+        'Martes',
+        'Miércoles',
+        'Jueves',
+        'Viernes',
+        'Sábado',
+        'Domingo'
+      ];
+      const monthNames = [
+        'Ene',
+        'Feb',
+        'Mar',
+        'Abr',
+        'May',
+        'Jun',
+        'Jul',
+        'Ago',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dic'
+      ];
+      final dayName = dayNames[parsed.weekday - 1];
+      final monthName = monthNames[parsed.month - 1];
+      return "$dayName, ${parsed.day} $monthName ${parsed.year}";
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
+  String _getModeDescription(String mode) {
+    switch (mode) {
+      case 'Solo Hoy':
+        return "Se compartirán exclusivamente los registros de hoy. Vigencia: 24 horas.";
+      case 'Esta Semana':
+        return "Se compartirán los turnos de lunes a domingo de la semana en curso. (Recomendado)";
+      case 'Esta Semana y la Pasada':
+        return "Se compartirán los registros de los últimos 14 días (semana en curso y anterior).";
+      case 'Este Mes':
+        return "Se compartirán todos los registros del mes actual completo.";
+      case 'Este Año':
+        return "Se compartirán los registros del año calendario en curso.";
+      case 'Todos Mis Registros':
+        return "Se compartirán todos tus registros históricos acumulados en la app.";
+      case 'Yo Decido':
+        return "Tú decides qué turnos compartir o excluir individualmente en la lista activa.";
+      default:
+        return "";
+    }
+  }
+
+  Future<bool> _showConfirmUnitManagerDialog({
+    required String managerName,
+    required String managerEmp,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor:
+            widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(
+              Icons.shield_rounded,
+              color: widget.isDarkMode
+                  ? Colors.cyanAccent
+                  : const Color(0xFF0284C7),
+              size: 26,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "¿Confirmar Ingeniero de Unidad?",
+                style: TextStyle(
+                  color: widget.isDarkMode
+                      ? Colors.white
+                      : const Color(0xFF0F172A),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Estás a punto de conceder acceso a tus horarios y registros de asistencia al siguiente supervisor:",
+              style: TextStyle(
+                color: widget.isDarkMode
+                    ? const Color(0xFF94A3B8)
+                    : const Color(0xFF64748B),
+                fontSize: 13,
+                height: 1.3,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: widget.isDarkMode
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: widget.isDarkMode
+                      ? Colors.cyanAccent.withAlpha(60)
+                      : const Color(0xFFBAE6FD),
+                ),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: widget.isDarkMode
+                        ? Colors.cyanAccent.withAlpha(40)
+                        : const Color(0xFF0284C7).withAlpha(30),
+                    child: Text(
+                      managerName.isNotEmpty
+                          ? managerName.substring(0, 1).toUpperCase()
+                          : 'I',
+                      style: TextStyle(
+                        color: widget.isDarkMode
+                            ? Colors.cyanAccent
+                            : const Color(0xFF0284C7),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          managerName,
+                          style: TextStyle(
+                            color: widget.isDarkMode
+                                ? Colors.white
+                                : const Color(0xFF0F172A),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        if (managerEmp.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            "No. Empleado: $managerEmp",
+                            style: TextStyle(
+                              color: widget.isDarkMode
+                                  ? const Color(0xFF94A3B8)
+                                  : const Color(0xFF64748B),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              "Tus datos de sueldo, costo por hora y totales de nómina NUNCA se comparten.",
+              style: TextStyle(
+                color: widget.isDarkMode
+                    ? const Color(0xFF64748B)
+                    : const Color(0xFF94A3B8),
+                fontSize: 11,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              "CANCELAR",
+              style: TextStyle(
+                color: widget.isDarkMode ? Colors.white60 : Colors.black54,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: widget.isDarkMode
+                  ? Colors.orangeAccent
+                  : const Color(0xFFEA580C),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              "CONFIRMAR Y COMPARTIR",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  Future<void> _saveSettings({bool isUpdating = false}) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Debes iniciar sesión para compartir datos."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final manager = isUpdating ? _shareData : _selectedManager;
+    if (manager == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Por favor selecciona un Ingeniero de Unidad válido."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
+    final String managerUid =
+        (manager['uid'] ?? manager['manager_uid'] ?? '').toString().trim();
+    final String managerDocId =
+        (manager['doc_id'] ?? manager['manager_doc_id'] ?? '').toString().trim();
+    final String managerName =
+        (manager['name'] ?? manager['manager_name'] ?? 'Ingeniero de Unidad')
+            .toString()
+            .trim();
+    final String managerEmp =
+        (manager['emp'] ?? manager['employee_number'] ?? manager['manager_emp'] ?? '')
+            .toString()
+            .trim();
+
+    if (!isUpdating) {
+      final confirmed = await _showConfirmUnitManagerDialog(
+        managerName: managerName,
+        managerEmp: managerEmp,
+      );
+      if (!confirmed) return;
+    }
+
+    setState(() => _isSaving = true);
+
+    try {
+      final now = DateTime.now();
+      final activeUntil = _calculateActiveUntil(_selectedMode, now);
+      final retentionUntil = activeUntil.add(const Duration(days: 14));
+
+      // Filter shifts
+      final todayStart = DateTime(now.year, now.month, now.day);
+      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59);
+
+      final mondayThisWeek = now.subtract(Duration(days: now.weekday - 1));
+      final mondayThisWeekStart =
+          DateTime(mondayThisWeek.year, mondayThisWeek.month, mondayThisWeek.day);
+      final sundayThisWeek = mondayThisWeek.add(const Duration(days: 6));
+      final sundayThisWeekEnd = DateTime(
+          sundayThisWeek.year, sundayThisWeek.month, sundayThisWeek.day, 23, 59, 59);
+
+      final mondayLastWeek = mondayThisWeek.subtract(const Duration(days: 7));
+      final mondayLastWeekStart =
+          DateTime(mondayLastWeek.year, mondayLastWeek.month, mondayLastWeek.day);
+
+      final monthStart = DateTime(now.year, now.month, 1);
+      final monthEnd = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
+
+      final yearStart = DateTime(now.year, 1, 1);
+      final yearEnd = DateTime(now.year, 12, 31, 23, 59, 59);
+
+      List<WorkDay> relevantShifts;
+      switch (_selectedMode) {
+        case 'Solo Hoy':
+          relevantShifts = _userWorkDays.where((d) {
+            return d.entrada
+                    .isAfter(todayStart.subtract(const Duration(seconds: 1))) &&
+                d.entrada.isBefore(todayEnd.add(const Duration(seconds: 1)));
+          }).toList();
+          break;
+        case 'Esta Semana':
+        case 'Semanal':
+          relevantShifts = _userWorkDays.where((d) {
+            return d.entrada.isAfter(mondayThisWeekStart
+                    .subtract(const Duration(seconds: 1))) &&
+                d.entrada.isBefore(
+                    sundayThisWeekEnd.add(const Duration(seconds: 1)));
+          }).toList();
+          break;
+        case 'Esta Semana y la Pasada':
+          relevantShifts = _userWorkDays.where((d) {
+            return d.entrada.isAfter(mondayLastWeekStart
+                    .subtract(const Duration(seconds: 1))) &&
+                d.entrada.isBefore(
+                    sundayThisWeekEnd.add(const Duration(seconds: 1)));
+          }).toList();
+          break;
+        case 'Este Mes':
+        case 'Mensual':
+          relevantShifts = _userWorkDays.where((d) {
+            return d.entrada.isAfter(
+                    monthStart.subtract(const Duration(seconds: 1))) &&
+                d.entrada.isBefore(monthEnd.add(const Duration(seconds: 1)));
+          }).toList();
+          break;
+        case 'Este Año':
+        case 'Anual':
+          relevantShifts = _userWorkDays.where((d) {
+            return d.entrada.isAfter(
+                    yearStart.subtract(const Duration(seconds: 1))) &&
+                d.entrada.isBefore(yearEnd.add(const Duration(seconds: 1)));
+          }).toList();
+          break;
+        case 'Yo Decido':
+          final customDates = _shareData?['custom_dates'] as List<dynamic>?;
+          if (customDates != null && customDates.isNotEmpty) {
+            final setOfDates = customDates.map((e) => e.toString()).toSet();
+            relevantShifts = _userWorkDays.where((d) {
+              final dStr = DateFormat('yyyy-MM-dd').format(d.entrada);
+              return setOfDates.contains(dStr) || setOfDates.contains(d.id);
+            }).toList();
+          } else {
+            relevantShifts = List<WorkDay>.from(_userWorkDays);
+          }
+          break;
+        default:
+          relevantShifts = _userWorkDays.where((d) {
+            return d.entrada.isAfter(mondayThisWeekStart
+                    .subtract(const Duration(seconds: 1))) &&
+                d.entrada.isBefore(
+                    sundayThisWeekEnd.add(const Duration(seconds: 1)));
+          }).toList();
+      }
+
+      if (_excludedDates.isNotEmpty) {
+        relevantShifts = relevantShifts.where((d) {
+          final dStr = DateFormat('yyyy-MM-dd').format(d.entrada);
+          return !_excludedDates.contains(dStr) &&
+              !_excludedDates.contains(d.id);
+        }).toList();
+      }
+
+      Timestamp? lastClockOut;
+      final completed =
+          _userWorkDays.where((d) => !d.isInProgress && !d.esFalta).toList();
+      if (completed.isNotEmpty) {
+        completed.sort((a, b) => b.salida.compareTo(a.salida));
+        lastClockOut = Timestamp.fromDate(completed.first.salida);
+      }
+
+      final List<Map<String, dynamic>> sanitizedShifts =
+          relevantShifts.map((d) {
+        return {
+          'id': d.id,
+          'date': DateFormat('yyyy-MM-dd').format(d.entrada),
+          'weekday': d.entrada.weekday,
+          'entrada': _shareEntry ? Timestamp.fromDate(d.entrada) : null,
+          'entrada_str':
+              _shareEntry ? DateFormat('hh:mm a').format(d.entrada) : null,
+          'salida': (_shareExit && !d.isInProgress)
+              ? Timestamp.fromDate(d.salida)
+              : null,
+          'salida_str': (_shareExit && !d.isInProgress)
+              ? DateFormat('hh:mm a').format(d.salida)
+              : null,
+          'entrada_real': (_shareRealEntry && d.entradaReal != null)
+              ? Timestamp.fromDate(d.entradaReal!)
+              : null,
+          'entrada_real_str': (_shareRealEntry && d.entradaReal != null)
+              ? DateFormat('hh:mm a').format(d.entradaReal!)
+              : null,
+          'notas': _shareNotes ? d.notas : '',
+          'is_in_progress': d.isInProgress,
+          'es_falta': d.esFalta,
+          'es_festivo': d.esFestivo,
+          'es_vacaciones': d.esVacaciones,
+        };
+      }).toList();
+
+      final sharePayload = {
+        'manager_uid': managerUid,
+        'manager_doc_id': managerDocId,
+        'manager_name': managerName,
+        'manager_emp': managerEmp,
+        'is_active': true,
+        'mode': _selectedMode,
+        'duration': _selectedMode,
+        'timeframe': _selectedMode,
+        'active_sharing_until': Timestamp.fromDate(activeUntil),
+        'data_retention_until': Timestamp.fromDate(retentionUntil),
+        'share_real_entry': _shareRealEntry,
+        'share_entry': _shareEntry,
+        'share_exit': _shareExit,
+        'share_notes': _shareNotes,
+        'excluded_dates': _excludedDates.toList(),
+        'updated_at': FieldValue.serverTimestamp(),
+      };
+
+      final memberPayload = {
+        'member_uid': user.uid,
+        'member_name': _userName.isNotEmpty
+            ? _userName
+            : (user.displayName ?? 'Sin nombre'),
+        'member_emp': _userEmp,
+        'member_email': user.email ?? '',
+        'is_active': true,
+        'mode': _selectedMode,
+        'duration': _selectedMode,
+        'timeframe': _selectedMode,
+        'active_sharing_until': Timestamp.fromDate(activeUntil),
+        'data_retention_until': Timestamp.fromDate(retentionUntil),
+        'share_real_entry': _shareRealEntry,
+        'share_entry': _shareEntry,
+        'share_exit': _shareExit,
+        'share_notes': _shareNotes,
+        'shifts': sanitizedShifts,
+        'last_clock_out': lastClockOut,
+        'last_synced_at': FieldValue.serverTimestamp(),
+        'updated_at': FieldValue.serverTimestamp(),
+      };
+
+      final batch = FirebaseFirestore.instance.batch();
+      batch.set(
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('settings')
+            .doc('unit_share'),
+        sharePayload,
+        SetOptions(merge: true),
+      );
+
+      if (managerUid.isNotEmpty) {
+        batch.set(
+          FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(managerUid)
+              .collection('members')
+              .doc(user.uid),
+          memberPayload,
+          SetOptions(merge: true),
+        );
+      }
+      if (managerDocId.isNotEmpty && managerDocId != managerUid) {
+        batch.set(
+          FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(managerDocId)
+              .collection('members')
+              .doc(user.uid),
+          memberPayload,
+          SetOptions(merge: true),
+        );
+      }
+      if (managerEmp.isNotEmpty &&
+          managerEmp != managerUid &&
+          managerEmp != managerDocId) {
+        batch.set(
+          FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(managerEmp)
+              .collection('members')
+              .doc(user.uid),
+          memberPayload,
+          SetOptions(merge: true),
+        );
+      }
+
+      await batch.commit();
+
+      final prefs = await SharedPreferences.getInstance();
+      final cachePayload = Map<String, dynamic>.from(sharePayload);
+      cachePayload['updated_at'] = now.toIso8601String();
+      cachePayload['active_sharing_until'] = activeUntil.toIso8601String();
+      cachePayload['data_retention_until'] = retentionUntil.toIso8601String();
+      await prefs.setString(
+        'active_unit_share_cache_${user.uid}',
+        jsonEncode(cachePayload),
+      );
+
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+          _isUnitShareActive = true;
+          _isEditing = false;
+          _shareData = {
+            ...sharePayload,
+            'active_sharing_until': Timestamp.fromDate(activeUntil),
+            'data_retention_until': Timestamp.fromDate(retentionUntil),
+          };
+          _sharedShifts = sanitizedShifts;
+        });
+
+        if (managerUid.isNotEmpty) {
+          _setupMemberListener(managerUid, user.uid);
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              isUpdating
+                  ? "Permisos actualizados con éxito con $managerName"
+                  : "Compartiendo asistencia con $managerName",
+            ),
+            backgroundColor: Colors.teal,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al guardar configuración: $e"),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeSharedDate(Map<String, dynamic> shift) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _shareData == null) return;
+
+    final String targetDate = (shift['date'] ?? '').toString();
+    final String targetId = (shift['id'] ?? '').toString();
+    if (targetDate.isEmpty && targetId.isEmpty) return;
+
+    final String managerUid =
+        (_shareData!['manager_uid'] ?? _shareData!['uid'] ?? '')
+            .toString()
+            .trim();
+    final String managerDocId =
+        (_shareData!['manager_doc_id'] ?? '').toString().trim();
+    final String managerEmp =
+        (_shareData!['manager_emp'] ?? '').toString().trim();
+
+    try {
+      final updatedShifts = _sharedShifts.where((s) {
+        final sDate = (s['date'] ?? '').toString();
+        final sId = (s['id'] ?? '').toString();
+        if (targetId.isNotEmpty && sId == targetId) return false;
+        if (targetDate.isNotEmpty && sDate == targetDate) return false;
+        return true;
+      }).toList();
+
+      final batch = FirebaseFirestore.instance.batch();
+
+      final dateKey = targetDate.isNotEmpty ? targetDate : targetId;
+      _excludedDates.add(dateKey);
+
+      final userSettingsRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('settings')
+          .doc('unit_share');
+
+      batch.set(userSettingsRef, {
+        'excluded_dates': FieldValue.arrayUnion([dateKey]),
+      }, SetOptions(merge: true));
+
+      if (managerUid.isNotEmpty) {
+        final ref = FirebaseFirestore.instance
+            .collection('unit_shares')
+            .doc(managerUid)
+            .collection('members')
+            .doc(user.uid);
+        batch.update(ref, {'shifts': updatedShifts});
+      }
+      if (managerDocId.isNotEmpty && managerDocId != managerUid) {
+        final ref = FirebaseFirestore.instance
+            .collection('unit_shares')
+            .doc(managerDocId)
+            .collection('members')
+            .doc(user.uid);
+        batch.update(ref, {'shifts': updatedShifts});
+      }
+      if (managerEmp.isNotEmpty &&
+          managerEmp != managerUid &&
+          managerEmp != managerDocId) {
+        final ref = FirebaseFirestore.instance
+            .collection('unit_shares')
+            .doc(managerEmp)
+            .collection('members')
+            .doc(user.uid);
+        batch.update(ref, {'shifts': updatedShifts});
+      }
+
+      await batch.commit();
+
+      if (mounted) {
+        setState(() {
+          _sharedShifts = updatedShifts;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                "Fecha ${_formatDayNameAndDate(targetDate)} eliminada de los registros compartidos."),
+            backgroundColor: Colors.teal,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al eliminar fecha: $e"),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmRevokeAll() async {
+    final managerName =
+        _shareData?['manager_name'] ?? 'el Ingeniero de Unidad';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor:
+            widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.link_off_rounded, color: Colors.redAccent, size: 26),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "¿Dejar de compartir todos los registros?",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          "¿Estás seguro de que deseas revocar el acceso de $managerName a todos tus registros de asistencia? Dejará de ver tus horarios inmediatamente.",
+          style: TextStyle(
+            color: widget.isDarkMode
+                ? Colors.white70
+                : const Color(0xFF475569),
+            fontSize: 14,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              "CANCELAR",
+              style: TextStyle(
+                color: widget.isDarkMode ? Colors.white60 : Colors.black54,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              "DEJAR DE COMPARTIR",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final String managerUid =
+        (_shareData?['manager_uid'] ?? _shareData?['uid'] ?? '')
+            .toString()
+            .trim();
+    final String managerDocId =
+        (_shareData?['manager_doc_id'] ?? '').toString().trim();
+    final String managerEmp =
+        (_shareData?['manager_emp'] ?? '').toString().trim();
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      batch.delete(
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('settings')
+            .doc('unit_share'),
+      );
+
+      if (managerUid.isNotEmpty) {
+        batch.delete(
+          FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(managerUid)
+              .collection('members')
+              .doc(user.uid),
+        );
+      }
+      if (managerDocId.isNotEmpty && managerDocId != managerUid) {
+        batch.delete(
+          FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(managerDocId)
+              .collection('members')
+              .doc(user.uid),
+        );
+      }
+      if (managerEmp.isNotEmpty &&
+          managerEmp != managerUid &&
+          managerEmp != managerDocId) {
+        batch.delete(
+          FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(managerEmp)
+              .collection('members')
+              .doc(user.uid),
+        );
+      }
+
+      await batch.commit();
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('active_unit_share_cache_${user.uid}');
+
+      _memberSubscription?.cancel();
+
+      if (mounted) {
+        setState(() {
+          _isUnitShareActive = false;
+          _shareData = null;
+          _isEditing = false;
+          _selectedManager = null;
+          _sharedShifts = [];
+          _searchController.clear();
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Se ha dejado de compartir datos con $managerName"),
+            backgroundColor: Colors.amber.shade800,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al revocar compartición: $e"),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDarkMode;
+    final Color unitColor =
+        isDark ? Colors.cyanAccent : const Color(0xFF0284C7);
+    final Color accentColor =
+        isDark ? Colors.orange : const Color(0xFFC2410C);
+    final Color cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final Color borderColor =
+        isDark ? Colors.white12 : const Color(0xFFE2E8F0);
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color subtextColor =
+        isDark ? Colors.white54 : const Color(0xFF64748B);
+
+    return Scaffold(
+      backgroundColor:
+          isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: Text(
+          "Compartir con Ingeniero",
+          style: TextStyle(
+            color: textColor,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+        ),
+        backgroundColor: cardBg,
+        leading: BackButton(color: textColor),
+        elevation: 0.5,
+      ),
+      body: _isLoading
+          ? Center(
+              child: CircularProgressIndicator(color: unitColor),
+            )
+          : SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_isUnitShareActive && !_isEditing) ...[
+                    // Active Manager Header & Status
+                    _buildActiveManagerHeader(unitColor, textColor,
+                        subtextColor, cardBg, borderColor),
+                    const SizedBox(height: 24),
+
+                    // Active Shared Dates Manager
+                    _buildActiveSharedDatesManager(unitColor, textColor,
+                        subtextColor, cardBg, borderColor),
+                    const SizedBox(height: 24),
+
+                    // Revoke Button
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.link_off_rounded, size: 20),
+                        label: const Text(
+                          "DEJAR DE COMPARTIR TODOS LOS REGISTROS",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: Colors.redAccent,
+                          side: const BorderSide(
+                              color: Colors.redAccent, width: 1.3),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                        onPressed: _confirmRevokeAll,
+                      ),
+                    ),
+                    const SizedBox(height: 30),
+                  ] else ...[
+                    // Privacy & Advisory Card
+                    _buildPrivacyAdvisoryCard(
+                        unitColor, textColor, subtextColor),
+                    const SizedBox(height: 18),
+
+                    // Form Container Card
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(18),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: borderColor, width: 1.2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withAlpha(isDark ? 30 : 10),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: _buildShareForm(unitColor, textColor,
+                          subtextColor, accentColor, borderColor),
+                    ),
+                    const SizedBox(height: 30),
+                  ],
+                ],
+              ),
+            ),
+    );
+  }
+
+  Widget _buildActiveManagerHeader(Color unitColor, Color textColor,
+      Color subtextColor, Color cardBg, Color borderColor) {
+    final data = _shareData ?? {};
+    final managerName =
+        (data['manager_name'] ?? 'Ingeniero de Unidad').toString();
+    final managerEmp = (data['manager_emp'] ?? '').toString();
+
+    DateTime? activeUntil;
+    if (data['active_sharing_until'] is Timestamp) {
+      activeUntil = (data['active_sharing_until'] as Timestamp).toDate();
+    } else if (data['active_sharing_until'] is String) {
+      activeUntil = DateTime.tryParse(data['active_sharing_until']);
+    }
+
+    final bool shareRealEntry = data['share_real_entry'] == true;
+    final bool shareEntry = data['share_entry'] ?? true;
+    final bool shareExit = data['share_exit'] ?? true;
+    final bool shareNotes = data['share_notes'] == true;
+    final String mode = (data['mode'] ?? data['duration'] ?? 'Esta Semana')
+        .toString();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: unitColor.withAlpha(widget.isDarkMode ? 100 : 120),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(widget.isDarkMode ? 30 : 10),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.green
+                      .withAlpha(widget.isDarkMode ? 40 : 25),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.green.withAlpha(90)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.check_circle_rounded,
+                        color: Colors.greenAccent, size: 14),
+                    SizedBox(width: 6),
+                    Text(
+                      "COMPARTICIÓN ACTIVA",
+                      style: TextStyle(
+                        color: Colors.greenAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (activeUntil != null)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: unitColor.withAlpha(widget.isDarkMode ? 30 : 20),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    _formatCountdown(activeUntil),
+                    style: TextStyle(
+                      color: unitColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Manager Info
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor:
+                    unitColor.withAlpha(widget.isDarkMode ? 45 : 35),
+                child: Text(
+                  managerName.isNotEmpty
+                      ? managerName.substring(0, 1).toUpperCase()
+                      : 'I',
+                  style: TextStyle(
+                    color: unitColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            managerName,
+                            style: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: unitColor
+                                .withAlpha(widget.isDarkMode ? 35 : 25),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                                color: unitColor.withAlpha(120)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.shield_rounded,
+                                  size: 11, color: unitColor),
+                              const SizedBox(width: 4),
+                              Text(
+                                "ING. DE UNIDAD",
+                                style: TextStyle(
+                                  color: unitColor,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (managerEmp.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        "No. Empleado: $managerEmp",
+                        style: TextStyle(color: subtextColor, fontSize: 13),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Expiration & Mode Box
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: widget.isDarkMode
+                  ? Colors.black.withAlpha(40)
+                  : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.timer_outlined, color: unitColor, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        activeUntil != null
+                            ? "Vence: ${DateFormat('dd/MM/yyyy - hh:mm a').format(activeUntil)}"
+                            : "Vigencia activa",
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.only(left: 26),
+                  child: Text(
+                    "Modo de alcance: $mode",
+                    style: TextStyle(
+                      color: unitColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Active Permissions
+          Text(
+            "DATOS Y PERMISOS COMPARTIDOS:",
+            style: TextStyle(
+              color: subtextColor,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (shareEntry)
+                _buildActiveBadge(
+                    "Hora Entrada", Icons.login_rounded, Colors.green),
+              if (shareExit)
+                _buildActiveBadge(
+                    "Hora Salida", Icons.logout_rounded, Colors.green),
+              if (shareRealEntry)
+                _buildActiveBadge("Hora Entrada Real",
+                    Icons.fingerprint_rounded, Colors.blue),
+              if (shareNotes)
+                _buildActiveBadge(
+                    "Notas", Icons.note_alt_outlined, Colors.amber),
+              _buildActiveBadge(
+                mode,
+                Icons.calendar_today_rounded,
+                Colors.purpleAccent,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Edit Permissions/Mode Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: const Icon(Icons.tune_rounded, size: 18),
+              label: const Text("EDITAR PERMISOS O MODO"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.isDarkMode
+                    ? Colors.orangeAccent
+                    : const Color(0xFFEA580C),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onPressed: () {
+                setState(() => _isEditing = true);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveSharedDatesManager(Color unitColor, Color textColor,
+      Color subtextColor, Color cardBg, Color borderColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.date_range_rounded, color: unitColor, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  "REGISTROS COMPARTIDOS ACTIVOS",
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
+            if (_sharedShifts.isNotEmpty)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: unitColor.withAlpha(widget.isDarkMode ? 35 : 25),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  "${_sharedShifts.length} turnos",
+                  style: TextStyle(
+                    color: unitColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          "Listado de turnos que tu Ingeniero de Unidad puede visualizar actualmente. Pulsa la 'X' en cualquier día para excluirlo de la compartición.",
+          style: TextStyle(color: subtextColor, fontSize: 13),
+        ),
+        const SizedBox(height: 14),
+
+        if (_sharedShifts.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.event_busy_rounded,
+                    color: subtextColor, size: 36),
+                const SizedBox(height: 8),
+                Text(
+                  "No hay turnos compartidos actualmente para el periodo seleccionado.",
+                  style: TextStyle(color: subtextColor, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _sharedShifts.length,
+            itemBuilder: (context, index) {
+              final shift = _sharedShifts[index];
+              return _buildSharedDateItem(shift, unitColor, textColor,
+                  subtextColor, cardBg, borderColor);
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSharedDateItem(Map<String, dynamic> shift, Color unitColor,
+      Color textColor, Color subtextColor, Color itemBg, Color borderColor) {
+    final dateStr = (shift['date'] ?? '').toString();
+    final isFalta = shift['es_falta'] == true;
+    final isInProgress = shift['is_in_progress'] == true;
+    final isVacaciones = shift['es_vacaciones'] == true;
+    final isFestivo = shift['es_festivo'] == true;
+
+    Color badgeColor = Colors.green;
+    String badgeText = "COMPLETADO";
+    IconData badgeIcon = Icons.check_circle_rounded;
+
+    if (isFalta) {
+      badgeColor = Colors.redAccent;
+      badgeText = "FALTA";
+      badgeIcon = Icons.cancel_rounded;
+    } else if (isInProgress) {
+      badgeColor = Colors.orangeAccent;
+      badgeText = "EN CURSO";
+      badgeIcon = Icons.timelapse_rounded;
+    } else if (isVacaciones) {
+      badgeColor = Colors.blueAccent;
+      badgeText = "VACACIONES";
+      badgeIcon = Icons.beach_access_rounded;
+    } else if (isFestivo) {
+      badgeColor = Colors.purpleAccent;
+      badgeText = "FESTIVO";
+      badgeIcon = Icons.celebration_rounded;
+    }
+
+    final entradaStr = shift['entrada_str']?.toString();
+    final salidaStr = shift['salida_str']?.toString();
+    final realEntryStr = shift['entrada_real_str']?.toString();
+    final notas = (shift['notas'] ?? '').toString().trim();
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: itemBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: badgeColor
+                  .withAlpha(widget.isDarkMode ? 35 : 25),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(badgeIcon, color: badgeColor, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        _formatDayNameAndDate(dateStr),
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: badgeColor
+                            .withAlpha(widget.isDarkMode ? 35 : 25),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        badgeText,
+                        style: TextStyle(
+                          color: badgeColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                if (!isFalta && !isVacaciones) ...[
+                  Row(
+                    children: [
+                      if (entradaStr != null) ...[
+                        const Icon(Icons.login_rounded,
+                            size: 13, color: Colors.green),
+                        const SizedBox(width: 3),
+                        Text(
+                          entradaStr,
+                          style: TextStyle(color: subtextColor, fontSize: 12),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      if (salidaStr != null) ...[
+                        const Icon(Icons.logout_rounded,
+                            size: 13, color: Colors.orangeAccent),
+                        const SizedBox(width: 3),
+                        Text(
+                          salidaStr,
+                          style: TextStyle(color: subtextColor, fontSize: 12),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+                if (realEntryStr != null) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      const Icon(Icons.fingerprint_rounded,
+                          size: 13, color: Colors.blueAccent),
+                      const SizedBox(width: 3),
+                      Text(
+                        "Real: $realEntryStr",
+                        style: TextStyle(
+                          color: widget.isDarkMode
+                              ? Colors.lightBlueAccent
+                              : const Color(0xFF0369A1),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (notas.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    "Notas: $notas",
+                    style: TextStyle(
+                      color: subtextColor,
+                      fontSize: 11,
+                      fontStyle: FontStyle.italic,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close_rounded,
+                color: Colors.redAccent, size: 20),
+            tooltip: "Excluir este día",
+            onPressed: () => _removeSharedDate(shift),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildShareForm(Color unitColor, Color textColor, Color subtextColor,
+      Color accentColor, Color borderColor) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_isEditing) ...[
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: unitColor.withAlpha(widget.isDarkMode ? 30 : 20),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: unitColor.withAlpha(80)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.edit_note_rounded, color: unitColor, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "Editando permisos y alcance de compartición con ${_shareData?['manager_name'] ?? 'Ingeniero de Unidad'}",
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+        ] else ...[
+          Text(
+            "INGENIERO DE UNIDAD",
+            style: TextStyle(
+              color: subtextColor,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _searchController,
+            keyboardType: TextInputType.text,
+            style: TextStyle(color: textColor, fontSize: 15),
+            decoration: InputDecoration(
+              labelText: "No. Empleado o Nombre del Ingeniero",
+              labelStyle: TextStyle(
+                color: widget.isDarkMode
+                    ? const Color(0xFF94A3B8)
+                    : const Color(0xFF475569),
+                fontSize: 14,
+              ),
+              hintText: "Ej. 1043577 o Diego Merck",
+              hintStyle: TextStyle(
+                color: widget.isDarkMode
+                    ? const Color(0xFF64748B)
+                    : const Color(0xFF94A3B8),
+                fontSize: 14,
+              ),
+              prefixIcon: Icon(Icons.badge_rounded, color: unitColor),
+              suffixIcon: _isSearching
+                  ? Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: unitColor,
+                        ),
+                      ),
+                    )
+                  : (_searchController.text.isNotEmpty
+                      ? IconButton(
+                          icon: Icon(Icons.clear_rounded, color: subtextColor),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() {
+                              _selectedManager = null;
+                              _searchError = null;
+                            });
+                          },
+                        )
+                      : null),
+              filled: true,
+              fillColor: widget.isDarkMode
+                  ? const Color(0xFF0F172A)
+                  : const Color(0xFFF8FAFC),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: borderColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: borderColor),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: unitColor, width: 1.5),
+              ),
+            ),
+            onChanged: _onSearchChanged,
+            onSubmitted: _searchUnitManager,
+          ),
+          if (_searchError != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.redAccent
+                    .withAlpha(widget.isDarkMode ? 35 : 25),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.redAccent.withAlpha(80)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded,
+                      color: Colors.redAccent, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _searchError!,
+                      style: TextStyle(
+                        color: widget.isDarkMode
+                            ? Colors.white
+                            : Colors.red.shade900,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          if (_selectedManager != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: unitColor.withAlpha(widget.isDarkMode ? 35 : 20),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: unitColor.withAlpha(90)),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: unitColor.withAlpha(50),
+                    child: Text(
+                      _selectedManager!['name'].toString().isNotEmpty
+                          ? _selectedManager!['name']
+                              .toString()
+                              .substring(0, 1)
+                              .toUpperCase()
+                          : 'I',
+                      style: TextStyle(
+                        color: unitColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                _selectedManager!['name'].toString(),
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: unitColor
+                                    .withAlpha(widget.isDarkMode ? 40 : 30),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.shield_rounded,
+                                      size: 11, color: unitColor),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    "ING. DE UNIDAD",
+                                    style: TextStyle(
+                                      color: unitColor,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          "No. Empleado: ${_selectedManager!['emp'] ?? _selectedManager!['employee_number'] ?? ''}",
+                          style: TextStyle(color: subtextColor, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close_rounded,
+                        color: subtextColor, size: 20),
+                    tooltip: "Cambiar Ingeniero",
+                    onPressed: () {
+                      _searchController.clear();
+                      setState(() => _selectedManager = null);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+        ],
+
+        // Unified Vigencia Selector
+        Text(
+          "MODO DE VIGENCIA Y ALCANCE",
+          style: TextStyle(
+            color: subtextColor,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          "Elige el alcance de registros a compartir con tu Ingeniero de Unidad:",
+          style: TextStyle(color: subtextColor, fontSize: 12),
+        ),
+        const SizedBox(height: 10),
+
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _unifiedModes.map((mode) {
+            final isSelected = _selectedMode == mode;
+            return ChoiceChip(
+              label: Text(
+                mode,
+                style: TextStyle(
+                  color: isSelected
+                      ? (widget.isDarkMode ? Colors.black : Colors.white)
+                      : (widget.isDarkMode
+                          ? const Color(0xFFCBD5E1)
+                          : const Color(0xFF334155)),
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
+              selected: isSelected,
+              color: WidgetStateProperty.resolveWith<Color?>((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return unitColor;
+                }
+                return widget.isDarkMode
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFFF1F5F9);
+              }),
+              side: WidgetStateBorderSide.resolveWith((states) {
+                if (states.contains(WidgetState.selected)) {
+                  return BorderSide(color: unitColor, width: 1.5);
+                }
+                return BorderSide(color: borderColor);
+              }),
+              onSelected: (selected) {
+                if (selected) {
+                  setState(() => _selectedMode = mode);
+                }
+              },
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 10),
+
+        // Mode Description Banner
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: unitColor.withAlpha(widget.isDarkMode ? 25 : 15),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: unitColor.withAlpha(60)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.info_outline_rounded,
+                      color: unitColor, size: 16),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _getModeDescription(_selectedMode),
+                      style: TextStyle(
+                        color: textColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.only(left: 22),
+                child: Text(
+                  "Vigencia activa hasta: ${DateFormat('dd/MM/yyyy').format(_calculateActiveUntil(_selectedMode))} (con 2 semanas de consulta adicional)",
+                  style: TextStyle(color: subtextColor, fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        // Checkboxes for Permissions
+        Text(
+          "DATOS A COMPARTIR",
+          style: TextStyle(
+            color: subtextColor,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        _buildCheckboxTile(
+          title: "Hora Entrada",
+          subtitle: "Comparte tu hora de entrada programada",
+          value: _shareEntry,
+          onChanged: (v) => setState(() => _shareEntry = v ?? false),
+          unitColor: unitColor,
+          textColor: textColor,
+          subtextColor: subtextColor,
+        ),
+        _buildCheckboxTile(
+          title: "Hora Salida",
+          subtitle: "Comparte tu marcaje de salida",
+          value: _shareExit,
+          onChanged: (v) => setState(() => _shareExit = v ?? false),
+          unitColor: unitColor,
+          textColor: textColor,
+          subtextColor: subtextColor,
+        ),
+        _buildCheckboxTile(
+          title: "Hora Entrada Real",
+          subtitle: "Permite ver el minuto exacto de tu llegada",
+          value: _shareRealEntry,
+          onChanged: (v) => setState(() => _shareRealEntry = v ?? false),
+          unitColor: unitColor,
+          textColor: textColor,
+          subtextColor: subtextColor,
+        ),
+        _buildCheckboxTile(
+          title: "Notas de Jornada",
+          subtitle: "Comparte tus observaciones registradas en cada turno",
+          value: _shareNotes,
+          onChanged: (v) => setState(() => _shareNotes = v ?? false),
+          unitColor: unitColor,
+          textColor: textColor,
+          subtextColor: subtextColor,
+        ),
+        const SizedBox(height: 22),
+
+        // Action Buttons
+        if (_isEditing) ...[
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => setState(() => _isEditing = false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: subtextColor,
+                    side: BorderSide(color: borderColor),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: const Text("CANCELAR",
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: _isSaving
+                      ? null
+                      : () => _saveSettings(isUpdating: true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: unitColor,
+                    foregroundColor:
+                        widget.isDarkMode ? Colors.black : Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text("GUARDAR CAMBIOS",
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ] else ...[
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.share_rounded, size: 20),
+              label: Text(
+                _isSaving ? "GUARDANDO..." : "COMENZAR A COMPARTIR",
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: widget.isDarkMode
+                    ? Colors.orangeAccent
+                    : const Color(0xFFEA580C),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                disabledBackgroundColor: widget.isDarkMode
+                    ? Colors.white12
+                    : const Color(0xFFE2E8F0),
+                disabledForegroundColor: subtextColor,
+              ),
+              onPressed: (_selectedManager == null || _isSaving)
+                  ? null
+                  : () => _saveSettings(isUpdating: false),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildPrivacyAdvisoryCard(
+      Color unitColor, Color textColor, Color subtextColor) {
+    final Color advisoryBg = widget.isDarkMode
+        ? const Color(0xFF0F172A)
+        : const Color(0xFFF0F9FF);
+    final Color advisoryBorder = widget.isDarkMode
+        ? unitColor.withAlpha(80)
+        : const Color(0xFFBAE6FD);
+    final Color titleColor = widget.isDarkMode
+        ? unitColor
+        : const Color(0xFF0369A1);
+    final Color bodyColor = widget.isDarkMode
+        ? const Color(0xFFE2E8F0)
+        : const Color(0xFF334155);
+    final Color bulletIconColor = widget.isDarkMode
+        ? Colors.greenAccent
+        : const Color(0xFF059669);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: advisoryBg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: advisoryBorder, width: 1.2),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.shield_outlined, color: titleColor, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "Privacidad y Control de Datos",
+                  style: TextStyle(
+                    color: titleColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _buildPrivacyItem(
+            bulletIconColor,
+            "Acceso Específico:",
+            " El Ingeniero de Unidad ÚNICAMENTE podrá visualizar los campos que marques como activos.",
+            bodyColor,
+          ),
+          const SizedBox(height: 6),
+          _buildPrivacyItem(
+            bulletIconColor,
+            "Garantía Salarial:",
+            " Sueldos, tarifas por hora, cálculos de horas extras y pagos de nómina NUNCA se comparten.",
+            bodyColor,
+          ),
+          const SizedBox(height: 6),
+          _buildPrivacyItem(
+            bulletIconColor,
+            "Retiro Automático:",
+            " Al expirar la vigencia o tras las 2 semanas adicionales de consulta, los datos se eliminan automáticamente.",
+            bodyColor,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPrivacyItem(
+      Color iconColor, String title, String description, Color bodyColor) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(Icons.check_circle_outline_rounded,
+              size: 14, color: iconColor),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: TextStyle(color: bodyColor, fontSize: 12, height: 1.35),
+              children: [
+                TextSpan(
+                  text: title,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                TextSpan(text: description),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCheckboxTile({
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool?> onChanged,
+    required Color unitColor,
+    required Color textColor,
+    required Color subtextColor,
+  }) {
+    return CheckboxListTile(
+      title: Text(
+        title,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(color: subtextColor, fontSize: 12),
+      ),
+      value: value,
+      activeColor: unitColor,
+      checkColor: widget.isDarkMode ? Colors.black : Colors.white,
+      onChanged: onChanged,
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      controlAffinity: ListTileControlAffinity.leading,
+    );
+  }
+
+  Widget _buildActiveBadge(String label, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withAlpha(widget.isDarkMode ? 35 : 20),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withAlpha(90)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -13883,6 +19789,8 @@ class AdminUserSummary {
   final int shiftCount;
   final bool isMerged;
   final String? mergedInto;
+  final bool isUnitManager;
+  final String role;
   final Map<String, dynamic> rawData;
 
   AdminUserSummary({
@@ -13898,6 +19806,8 @@ class AdminUserSummary {
     required this.shiftCount,
     required this.isMerged,
     this.mergedInto,
+    this.isUnitManager = false,
+    this.role = 'empleado',
     required this.rawData,
   });
 
@@ -13929,7 +19839,14 @@ class MergeFieldComparison {
 
 class AdminAccountMergeScreen extends StatefulWidget {
   final bool isDarkMode;
-  const AdminAccountMergeScreen({super.key, required this.isDarkMode});
+  final bool isEmbedded;
+  final VoidCallback? onMergeComplete;
+  const AdminAccountMergeScreen({
+    super.key,
+    required this.isDarkMode,
+    this.isEmbedded = false,
+    this.onMergeComplete,
+  });
 
   @override
   State<AdminAccountMergeScreen> createState() =>
@@ -13969,11 +19886,102 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
   };
   bool _exactReplacement = true;
 
+  // Real-time debounced auto-search
+  Timer? _sourceDebounceTimer;
+  Timer? _targetDebounceTimer;
+  bool _isDebouncingSource = false;
+  bool _isDebouncingTarget = false;
+  int _sourceQueryId = 0;
+  int _targetQueryId = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _sourceController.addListener(_onSourceChanged);
+    _targetController.addListener(_onTargetChanged);
+  }
+
   @override
   void dispose() {
+    _sourceDebounceTimer?.cancel();
+    _targetDebounceTimer?.cancel();
+    _sourceController.removeListener(_onSourceChanged);
+    _targetController.removeListener(_onTargetChanged);
     _sourceController.dispose();
     _targetController.dispose();
     super.dispose();
+  }
+
+  void _onSourceChanged() {
+    final text = _sourceController.text.trim();
+    _sourceDebounceTimer?.cancel();
+
+    if (text.isEmpty) {
+      _sourceQueryId++;
+      setState(() {
+        _isDebouncingSource = false;
+        _isSearchingSource = false;
+        _sourceUser = null;
+        _sourceError = null;
+      });
+      return;
+    }
+
+    if (text.length < 3) {
+      _sourceQueryId++;
+      setState(() {
+        _isDebouncingSource = false;
+        _isSearchingSource = false;
+        _sourceUser = null;
+        _sourceError = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isDebouncingSource = true;
+    });
+
+    _sourceDebounceTimer = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      _searchSource();
+    });
+  }
+
+  void _onTargetChanged() {
+    final text = _targetController.text.trim();
+    _targetDebounceTimer?.cancel();
+
+    if (text.isEmpty) {
+      _targetQueryId++;
+      setState(() {
+        _isDebouncingTarget = false;
+        _isSearchingTarget = false;
+        _targetUser = null;
+        _targetError = null;
+      });
+      return;
+    }
+
+    if (text.length < 3) {
+      _targetQueryId++;
+      setState(() {
+        _isDebouncingTarget = false;
+        _isSearchingTarget = false;
+        _targetUser = null;
+        _targetError = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isDebouncingTarget = true;
+    });
+
+    _targetDebounceTimer = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      _searchTarget();
+    });
   }
 
   Color get _bg =>
@@ -14117,6 +20125,12 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
       }
     }
 
+    final bool isUnitMgr = userData['is_unit_manager'] == true ||
+        userData['role'] == 'ingeniero_de_unidad';
+    final String userRole =
+        (userData['role'] ?? (isUnitMgr ? 'ingeniero_de_unidad' : 'empleado'))
+            .toString();
+
     return AdminUserSummary(
       uid: foundUid,
       email: (userData['email'] ?? '').toString(),
@@ -14131,18 +20145,28 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
       shiftCount: count,
       isMerged: userData['is_merged'] == true,
       mergedInto: userData['merged_into'] as String?,
+      isUnitManager: isUnitMgr,
+      role: userRole,
       rawData: userData,
     );
   }
 
   Future<void> _searchSource() async {
+    _sourceDebounceTimer?.cancel();
     final query = _sourceController.text.trim();
     if (query.isEmpty) {
-      setState(() => _sourceError = "Ingresa un número de empleado o correo");
+      setState(() {
+        _isDebouncingSource = false;
+        _isSearchingSource = false;
+        _sourceError = "Ingresa un número de empleado o correo";
+        _sourceUser = null;
+      });
       return;
     }
 
+    final currentId = ++_sourceQueryId;
     setState(() {
+      _isDebouncingSource = false;
       _isSearchingSource = true;
       _sourceError = null;
       _sourceUser = null;
@@ -14150,7 +20174,7 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
 
     try {
       final user = await _lookupUser(query);
-      if (!mounted) return;
+      if (!mounted || currentId != _sourceQueryId) return;
       setState(() {
         _isSearchingSource = false;
         if (user != null) {
@@ -14162,7 +20186,7 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
         }
       });
     } on FirebaseException catch (fe) {
-      if (!mounted) return;
+      if (!mounted || currentId != _sourceQueryId) return;
       setState(() {
         _isSearchingSource = false;
         _sourceError = fe.code == 'permission-denied'
@@ -14170,7 +20194,7 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
             : "Error de Firebase: ${fe.message}";
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || currentId != _sourceQueryId) return;
       setState(() {
         _isSearchingSource = false;
         _sourceError = "Error: $e";
@@ -14179,13 +20203,21 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
   }
 
   Future<void> _searchTarget() async {
+    _targetDebounceTimer?.cancel();
     final query = _targetController.text.trim();
     if (query.isEmpty) {
-      setState(() => _targetError = "Ingresa un correo o número de empleado");
+      setState(() {
+        _isDebouncingTarget = false;
+        _isSearchingTarget = false;
+        _targetError = "Ingresa un correo o número de empleado";
+        _targetUser = null;
+      });
       return;
     }
 
+    final currentId = ++_targetQueryId;
     setState(() {
+      _isDebouncingTarget = false;
       _isSearchingTarget = true;
       _targetError = null;
       _targetUser = null;
@@ -14193,7 +20225,7 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
 
     try {
       final user = await _lookupUser(query);
-      if (!mounted) return;
+      if (!mounted || currentId != _targetQueryId) return;
       setState(() {
         _isSearchingTarget = false;
         if (user != null) {
@@ -14205,7 +20237,7 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
         }
       });
     } on FirebaseException catch (fe) {
-      if (!mounted) return;
+      if (!mounted || currentId != _targetQueryId) return;
       setState(() {
         _isSearchingTarget = false;
         _targetError = fe.code == 'permission-denied'
@@ -14213,12 +20245,80 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
             : "Error de Firebase: ${fe.message}";
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || currentId != _targetQueryId) return;
       setState(() {
         _isSearchingTarget = false;
         _targetError = "Error: $e";
       });
     }
+  }
+
+  Widget? _buildSourceSuffixIcon() {
+    final hasText = _sourceController.text.isNotEmpty;
+    final isLoading = _isSearchingSource || _isDebouncingSource;
+    if (!hasText && !isLoading) return null;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (isLoading)
+          Padding(
+            padding: EdgeInsets.only(right: hasText ? 4 : 12),
+            child: const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.amber),
+              ),
+            ),
+          ),
+        if (hasText)
+          IconButton(
+            icon: Icon(Icons.clear_rounded, size: 18, color: _textSecondary),
+            tooltip: "Borrar",
+            splashRadius: 16,
+            onPressed: () {
+              _sourceDebounceTimer?.cancel();
+              _sourceController.clear();
+            },
+          ),
+      ],
+    );
+  }
+
+  Widget? _buildTargetSuffixIcon() {
+    final hasText = _targetController.text.isNotEmpty;
+    final isLoading = _isSearchingTarget || _isDebouncingTarget;
+    if (!hasText && !isLoading) return null;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (isLoading)
+          Padding(
+            padding: EdgeInsets.only(right: hasText ? 4 : 12),
+            child: const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.blueAccent),
+              ),
+            ),
+          ),
+        if (hasText)
+          IconButton(
+            icon: Icon(Icons.clear_rounded, size: 18, color: _textSecondary),
+            tooltip: "Borrar",
+            splashRadius: 16,
+            onPressed: () {
+              _targetDebounceTimer?.cancel();
+              _targetController.clear();
+            },
+          ),
+      ],
+    );
   }
 
   List<MergeFieldComparison> _getComparisons() {
@@ -14838,6 +20938,9 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
         });
       }
 
+      // Notify external listener (e.g. AdminPortalScaffold to reload metrics)
+      widget.onMergeComplete?.call();
+
       // Show success modal
       if (!mounted) return;
       showDialog(
@@ -15060,80 +21163,93 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
           const SizedBox(height: 12),
 
           // Column labels for comparison
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: widget.isDarkMode
-                  ? Colors.white.withAlpha(8)
-                  : Colors.grey.withAlpha(20),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                const SizedBox(width: 38),
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    "CAMPO",
-                    style: TextStyle(
-                      color: _textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
+          LayoutBuilder(
+            builder: (context, headerConstraints) {
+              final bool isNarrow = headerConstraints.maxWidth < 460;
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: widget.isDarkMode
+                      ? Colors.white.withAlpha(8)
+                      : Colors.grey.withAlpha(20),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 38),
+                    Expanded(
+                      flex: 3,
+                      child: Text(
+                        "CAMPO",
+                        style: TextStyle(
+                          color: _textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
+                    Expanded(
+                      flex: 4,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Colors.amber,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              isNarrow ? "DONANTE" : "DONANTE (ORIGEN)",
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.amber,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      flex: 4,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: const BoxDecoration(
+                              color: Colors.blueAccent,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Flexible(
+                            child: Text(
+                              isNarrow ? "RECEPTORA" : "RECEPTORA (DESTINO)",
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.blueAccent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                Expanded(
-                  flex: 4,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: const BoxDecoration(
-                          color: Colors.amber,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      const Text(
-                        "DONANTE (ORIGEN)",
-                        style: TextStyle(
-                          color: Colors.amber,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  flex: 4,
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: const BoxDecoration(
-                          color: Colors.blueAccent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      const Text(
-                        "RECEPTORA (DESTINO)",
-                        style: TextStyle(
-                          color: Colors.blueAccent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
           const SizedBox(height: 8),
 
@@ -15466,43 +21582,75 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
                   ),
                 ),
               ),
-              if (user.isMerged)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withAlpha(35),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.orange.withAlpha(100)),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.inventory_2_outlined,
-                          color: Colors.orange, size: 14),
-                      SizedBox(width: 4),
-                      Text("Archivada",
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (user.isUnitManager) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.cyan.withAlpha(35),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.cyan.withAlpha(100)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.shield_rounded,
+                              size: 13, color: Colors.cyanAccent),
+                          const SizedBox(width: 4),
+                          Text("Ing. Unidad",
+                              style: TextStyle(
+                                  color: widget.isDarkMode
+                                      ? Colors.cyanAccent
+                                      : const Color(0xFF0284C7),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                  if (user.isMerged)
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withAlpha(35),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.orange.withAlpha(100)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.inventory_2_outlined,
+                              color: Colors.orange, size: 14),
+                          SizedBox(width: 4),
+                          Text("Archivada",
+                              style: TextStyle(
+                                  color: Colors.orange,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    )
+                  else
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withAlpha(35),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Text("Activa",
                           style: TextStyle(
-                              color: Colors.orange,
+                              color: Colors.greenAccent,
                               fontSize: 11,
                               fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                )
-              else
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withAlpha(35),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text("Activa",
-                      style: TextStyle(
-                          color: Colors.greenAccent,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold)),
-                ),
+                    ),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -15629,9 +21777,11 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
 
     return Scaffold(
       backgroundColor: _bg,
-      appBar: AppBar(
-        backgroundColor:
-            widget.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
+      appBar: widget.isEmbedded
+          ? null
+          : AppBar(
+              backgroundColor:
+                  widget.isDarkMode ? const Color(0xFF1E1E1E) : Colors.white,
         elevation: 0,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -15747,7 +21897,11 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
                   child: TextField(
                     controller: _sourceController,
                     style: TextStyle(color: _textPrimary, fontSize: 14),
-                    onSubmitted: (_) => _searchSource(),
+                    onSubmitted: (_) {
+                      _sourceDebounceTimer?.cancel();
+                      setState(() => _isDebouncingSource = false);
+                      _searchSource();
+                    },
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: _surface,
@@ -15755,6 +21909,7 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
                       hintStyle: TextStyle(color: _textSecondary, fontSize: 13),
                       prefixIcon: const Icon(Icons.person_search_outlined,
                           color: Colors.amber, size: 20),
+                      suffixIcon: _buildSourceSuffixIcon(),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: _border),
@@ -15782,8 +21937,14 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 13),
                   ),
-                  onPressed: _isSearchingSource ? null : _searchSource,
-                  child: _isSearchingSource
+                  onPressed: (_isSearchingSource || _isDebouncingSource)
+                      ? null
+                      : () {
+                          _sourceDebounceTimer?.cancel();
+                          setState(() => _isDebouncingSource = false);
+                          _searchSource();
+                        },
+                  child: (_isSearchingSource || _isDebouncingSource)
                       ? const SizedBox(
                           width: 20,
                           height: 20,
@@ -15832,7 +21993,11 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
                   child: TextField(
                     controller: _targetController,
                     style: TextStyle(color: _textPrimary, fontSize: 14),
-                    onSubmitted: (_) => _searchTarget(),
+                    onSubmitted: (_) {
+                      _targetDebounceTimer?.cancel();
+                      setState(() => _isDebouncingTarget = false);
+                      _searchTarget();
+                    },
                     decoration: InputDecoration(
                       filled: true,
                       fillColor: _surface,
@@ -15840,6 +22005,7 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
                       hintStyle: TextStyle(color: _textSecondary, fontSize: 13),
                       prefixIcon: const Icon(Icons.person_add_alt_outlined,
                           color: Colors.blueAccent, size: 20),
+                      suffixIcon: _buildTargetSuffixIcon(),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: BorderSide(color: _border),
@@ -15867,8 +22033,14 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 13),
                   ),
-                  onPressed: _isSearchingTarget ? null : _searchTarget,
-                  child: _isSearchingTarget
+                  onPressed: (_isSearchingTarget || _isDebouncingTarget)
+                      ? null
+                      : () {
+                          _targetDebounceTimer?.cancel();
+                          setState(() => _isDebouncingTarget = false);
+                          _searchTarget();
+                        },
+                  child: (_isSearchingTarget || _isDebouncingTarget)
                       ? const SizedBox(
                           width: 20,
                           height: 20,
@@ -16014,5 +22186,1547 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// ADMIN PORTAL SCAFFOLD (EXCLUSIVE CONSOLE FOR ADMIN USERS)
+// ---------------------------------------------------------------------------
+class AdminPortalScaffold extends StatefulWidget {
+  const AdminPortalScaffold({super.key});
+
+  @override
+  State<AdminPortalScaffold> createState() => _AdminPortalScaffoldState();
+}
+
+class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
+  int _currentTab = 0;
+  bool _isDarkMode = true;
+
+  // Metric variables
+  bool _isLoadingMetrics = true;
+  String? _metricsError;
+  int _totalUsers = 0;
+  int _activeUsers = 0;
+  int _mergedUsers = 0;
+  int _realEmailUsers = 0;
+  int _directoryCount = 0;
+  int _unitManagerCount = 0;
+
+  List<Map<String, dynamic>> _userList = [];
+  List<Map<String, dynamic>> _filteredUsers = [];
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTheme();
+    _loadAdminMetrics();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController.removeListener(_onSearchChanged);
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _onSearchChanged() {
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isEmpty) {
+      setState(() {
+        _filteredUsers = List.from(_userList);
+      });
+      return;
+    }
+
+    setState(() {
+      _filteredUsers = _userList.where((u) {
+        final name = (u['name'] ?? '').toString().toLowerCase();
+        final emp = (u['emp'] ?? '').toString().toLowerCase();
+        final email = (u['email'] ?? '').toString().toLowerCase();
+        final rec = (u['recEmail'] ?? '').toString().toLowerCase();
+        final uid = (u['uid'] ?? '').toString().toLowerCase();
+        final role = (u['role'] ?? '').toString().toLowerCase();
+        final isUnitMgr = u['isUnitManager'] == true;
+        final matchesRole = (query == 'ing' ||
+                query == 'unidad' ||
+                query == 'ingeniero' ||
+                query == 'manager') &&
+            isUnitMgr;
+
+        return name.contains(query) ||
+            emp.contains(query) ||
+            email.contains(query) ||
+            rec.contains(query) ||
+            uid.contains(query) ||
+            role.contains(query) ||
+            matchesRole;
+      }).toList();
+    });
+  }
+
+  Future<void> _loadTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (mounted) {
+      setState(() {
+        _isDarkMode = prefs.getBool('app_is_dark_mode') ?? true;
+      });
+    }
+  }
+
+  Future<void> _toggleTheme() async {
+    setState(() => _isDarkMode = !_isDarkMode);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('app_is_dark_mode', _isDarkMode);
+  }
+
+  Future<void> _loadAdminMetrics() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingMetrics = true;
+      _metricsError = null;
+    });
+
+    try {
+      final usersSnap =
+          await FirebaseFirestore.instance.collection('users').get();
+      final dirSnap = await FirebaseFirestore.instance
+          .collection('employee_directory')
+          .get();
+
+      int active = 0;
+      int merged = 0;
+      int realEmail = 0;
+      int unitManagers = 0;
+      final List<Map<String, dynamic>> list = [];
+
+      for (final doc in usersSnap.docs) {
+        final d = doc.data();
+        final isMerged = d['is_merged'] == true;
+        if (isMerged) {
+          merged++;
+        } else {
+          active++;
+        }
+
+        final bool isUnitMgr = d['is_unit_manager'] == true ||
+            d['role'] == 'ingeniero_de_unidad';
+        final String role =
+            (d['role'] ?? (isUnitMgr ? 'ingeniero_de_unidad' : 'empleado'))
+                .toString();
+
+        if (isUnitMgr) unitManagers++;
+
+        final email = (d['email'] ?? '').toString().trim().toLowerCase();
+        final rec =
+            (d['recovery_email'] ?? '').toString().trim().toLowerCase();
+        final isReal = (email.isNotEmpty && !email.endsWith('@televisa.com')) ||
+            (rec.isNotEmpty && !rec.endsWith('@televisa.com')) ||
+            d['is_new_style_user'] == true;
+
+        if (isReal) realEmail++;
+
+        final fName =
+            (d['first_name'] ?? d['firstName'] ?? '').toString().trim();
+        final lName =
+            (d['last_name'] ?? d['lastName'] ?? '').toString().trim();
+        final fullName = (fName.isNotEmpty || lName.isNotEmpty)
+            ? "$fName $lName".trim()
+            : (d['name'] ?? 'Sin nombre').toString().trim();
+
+        final emp =
+            (d['employee_number'] ?? d['user_emp'] ?? '').toString().trim();
+
+        list.add({
+          'uid': doc.id,
+          'name': fullName.isEmpty ? 'Sin nombre' : fullName,
+          'emp': emp,
+          'email': email,
+          'recEmail': rec,
+          'isMerged': isMerged,
+          'mergedInto': d['merged_into']?.toString() ?? '',
+          'isRealEmail': isReal,
+          'isUnitManager': isUnitMgr,
+          'role': role,
+        });
+      }
+
+      // Sort: active accounts first, then by employee number
+      list.sort((a, b) {
+        if (a['isMerged'] != b['isMerged']) {
+          return a['isMerged'] ? 1 : -1;
+        }
+        return (a['emp'] as String).compareTo(b['emp'] as String);
+      });
+
+      // Sync unit_managers directory for quick cross-user manager search
+      try {
+        final existingMgrsSnap =
+            await FirebaseFirestore.instance.collection('unit_managers').get();
+        final existingMgrIds = existingMgrsSnap.docs.map((d) => d.id).toSet();
+        final currentMgrs = list
+            .where((u) => u['isUnitManager'] == true && u['isMerged'] != true)
+            .toList();
+        final currentMgrIds = currentMgrs.map((u) => u['uid'] as String).toSet();
+
+        final syncBatch = FirebaseFirestore.instance.batch();
+        bool hasSyncOps = false;
+
+        for (final mgr in currentMgrs) {
+          final mUid = mgr['uid'] as String;
+          syncBatch.set(
+            FirebaseFirestore.instance.collection('unit_managers').doc(mUid),
+            {
+              'uid': mUid,
+              'name': mgr['name'],
+              'employee_number': mgr['emp'],
+              'role': 'ingeniero_de_unidad',
+              'is_unit_manager': true,
+              'synced_at': FieldValue.serverTimestamp(),
+            },
+            SetOptions(merge: true),
+          );
+          hasSyncOps = true;
+        }
+
+        for (final oldId in existingMgrIds) {
+          if (!currentMgrIds.contains(oldId)) {
+            syncBatch.delete(
+                FirebaseFirestore.instance.collection('unit_managers').doc(oldId));
+            hasSyncOps = true;
+          }
+        }
+
+        if (hasSyncOps) {
+          await syncBatch.commit();
+        }
+      } catch (e) {
+        debugPrint("Notice: could not sync unit_managers during admin metrics load: $e");
+      }
+
+      if (mounted) {
+        setState(() {
+          _totalUsers = usersSnap.docs.length;
+          _activeUsers = active;
+          _mergedUsers = merged;
+          _realEmailUsers = realEmail;
+          _directoryCount = dirSnap.docs.length;
+          _unitManagerCount = unitManagers;
+          _userList = list;
+          _filteredUsers = List.from(list);
+          _isLoadingMetrics = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _metricsError = e.toString();
+          _isLoadingMetrics = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _promptToggleUnitManager({
+    required String uid,
+    required String userName,
+    required String employeeNumber,
+    required bool currentIsUnitManager,
+  }) async {
+    final bool newStatus = !currentIsUnitManager;
+    final String actionText = newStatus ? "Asignar" : "Revocar";
+    final Color actionColor = newStatus
+        ? (_isDarkMode ? Colors.cyanAccent : const Color(0xFF0284C7))
+        : Colors.amber.shade800;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor:
+            _isDarkMode ? const Color(0xFF1E1E26) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Icon(
+              newStatus ? Icons.shield_rounded : Icons.shield_outlined,
+              color: actionColor,
+              size: 26,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "$actionText Ingeniero de Unidad",
+                style: TextStyle(
+                  color: _textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              "Usuario objetivo:",
+              style: TextStyle(color: _textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              userName,
+              style: TextStyle(
+                color: _textPrimary,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            if (employeeNumber.isNotEmpty)
+              Text(
+                "No. Empleado: $employeeNumber",
+                style: TextStyle(color: _textSecondary, fontSize: 13),
+              ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: actionColor.withAlpha(_isDarkMode ? 35 : 25),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: actionColor.withAlpha(80)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline_rounded,
+                      color: actionColor, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      newStatus
+                          ? "El usuario recibirá el rol de 'Ingeniero de Unidad' y acceso a herramientas de gestión de personal y supervisión."
+                          : "Se revocarán los permisos de 'Ingeniero de Unidad' y el usuario volverá al rol estándar de empleado.",
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              "CANCELAR",
+              style: TextStyle(
+                color: _isDarkMode ? Colors.white60 : Colors.black54,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: actionColor,
+              foregroundColor:
+                  newStatus && _isDarkMode ? Colors.black : Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              newStatus ? "ASIGNAR ROL" : "REVOCAR ROL",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+      batch.set(userRef, {
+        'is_unit_manager': newStatus,
+        'role': newStatus ? 'ingeniero_de_unidad' : 'empleado',
+        'role_updated_at': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      final mgrRef =
+          FirebaseFirestore.instance.collection('unit_managers').doc(uid);
+      if (newStatus) {
+        batch.set(mgrRef, {
+          'uid': uid,
+          'name': userName,
+          'employee_number': employeeNumber,
+          'role': 'ingeniero_de_unidad',
+          'is_unit_manager': true,
+          'updated_at': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      } else {
+        batch.delete(mgrRef);
+      }
+
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              newStatus
+                  ? "Rol 'Ingeniero de Unidad' asignado con éxito a $userName"
+                  : "Rol 'Ingeniero de Unidad' revocado a $userName",
+            ),
+            backgroundColor: newStatus ? Colors.teal : Colors.amber.shade800,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      await _loadAdminMetrics();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al actualizar rol: $e"),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor:
+            _isDarkMode ? const Color(0xFF1E1E26) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 26),
+            const SizedBox(width: 10),
+            Text(
+              "Cerrar Sesión",
+              style: TextStyle(
+                color: _isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          "¿Estás seguro de que deseas salir del Panel de Administración?",
+          style: TextStyle(
+            color: _isDarkMode ? Colors.white70 : const Color(0xFF475569),
+            fontSize: 15,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              "CANCELAR",
+              style: TextStyle(
+                color: _isDarkMode ? Colors.white60 : Colors.black54,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              "SALIR",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await FirebaseAuth.instance.signOut();
+    }
+  }
+
+  void _copyToClipboard(String text, String label) {
+    Clipboard.setData(ClipboardData(text: text));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Copiado $label al portapapeles: $text"),
+        backgroundColor: Colors.amber.shade800,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Color get _bg =>
+      _isDarkMode ? const Color(0xFF0F0F12) : const Color(0xFFF8FAFC);
+  Color get _surface =>
+      _isDarkMode ? const Color(0xFF16161D) : Colors.white;
+  Color get _cardBg =>
+      _isDarkMode ? const Color(0xFF1C1C24) : Colors.white;
+  Color get _border =>
+      _isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
+  Color get _textPrimary =>
+      _isDarkMode ? Colors.white : const Color(0xFF0F172A);
+  Color get _textSecondary =>
+      _isDarkMode ? Colors.white70 : const Color(0xFF64748B);
+
+  Widget _buildMetricCard({
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required List<Color> gradient,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: gradient),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: Colors.white, size: 18),
+              ),
+              Text(
+                title,
+                style: TextStyle(
+                  color: _textSecondary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: _textPrimary,
+              fontSize: 24,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: _textSecondary,
+              fontSize: 11,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResumenTab() {
+    if (_isLoadingMetrics) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const CircularProgressIndicator(color: Colors.amber),
+            const SizedBox(height: 16),
+            Text(
+              "Cargando métricas de usuarios...",
+              style: TextStyle(color: _textSecondary, fontSize: 15),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_metricsError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  color: Colors.redAccent, size: 48),
+              const SizedBox(height: 12),
+              Text(
+                "Error al cargar métricas",
+                style: TextStyle(
+                  color: _textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _metricsError!,
+                textAlign: TextAlign.center,
+                style: TextStyle(color: _textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.refresh, color: Colors.black),
+                label: const Text("REINTENTAR",
+                    style: TextStyle(
+                        color: Colors.black, fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.amber),
+                onPressed: _loadAdminMetrics,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final double adoptionPercent =
+        _totalUsers > 0 ? (_realEmailUsers / _totalUsers * 100) : 0.0;
+
+    return RefreshIndicator(
+      onRefresh: _loadAdminMetrics,
+      color: Colors.amber,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Top Welcome / Overview Bar
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Resumen del Sistema",
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Cuentas, directorio y estado de migración",
+                      style: TextStyle(color: _textSecondary, fontSize: 14),
+                    ),
+                  ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, color: Colors.amber),
+                  tooltip: "Actualizar métricas",
+                  onPressed: _loadAdminMetrics,
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // 4 Metrics Grid
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth > 700;
+                final crossAxisCount = isWide ? 4 : 2;
+                final aspectRatio = isWide ? 1.6 : 1.35;
+
+                return GridView.count(
+                  crossAxisCount: crossAxisCount,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 14,
+                  childAspectRatio: aspectRatio,
+                  children: [
+                    _buildMetricCard(
+                      title: "TOTAL CUENTAS",
+                      value: "$_totalUsers",
+                      subtitle: "Colección users",
+                      icon: Icons.groups_rounded,
+                      gradient: const [Color(0xFF4F46E5), Color(0xFF6366F1)],
+                    ),
+                    _buildMetricCard(
+                      title: "ACTIVAS",
+                      value: "$_activeUsers",
+                      subtitle: "Sin fusionar",
+                      icon: Icons.verified_user_rounded,
+                      gradient: const [Color(0xFF059669), Color(0xFF10B981)],
+                    ),
+                    _buildMetricCard(
+                      title: "FUSIONADAS",
+                      value: "$_mergedUsers",
+                      subtitle: "Cuentas archivadas",
+                      icon: Icons.archive_rounded,
+                      gradient: const [Color(0xFFD97706), Color(0xFFF59E0B)],
+                    ),
+                    _buildMetricCard(
+                      title: "DIRECTORIO",
+                      value: "$_directoryCount",
+                      subtitle: "Mapeos emp_dir",
+                      icon: Icons.badge_rounded,
+                      gradient: const [Color(0xFF0284C7), Color(0xFF38BDF8)],
+                    ),
+                  ],
+                );
+              },
+            ),
+
+            const SizedBox(height: 20),
+
+            // Adoption Progress Card
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: _cardBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: _border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.mark_email_read_rounded,
+                              color: Colors.amber, size: 22),
+                          const SizedBox(width: 10),
+                          Text(
+                            "Adopción de Correo Real",
+                            style: TextStyle(
+                              color: _textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withAlpha(_isDarkMode ? 35 : 25),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.amber.withAlpha(90)),
+                        ),
+                        child: Text(
+                          "${adoptionPercent.toStringAsFixed(1)}%",
+                          style: const TextStyle(
+                            color: Colors.amber,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: LinearProgressIndicator(
+                      value: _totalUsers > 0
+                          ? (_realEmailUsers / _totalUsers).clamp(0.0, 1.0)
+                          : 0.0,
+                      minHeight: 10,
+                      backgroundColor:
+                          _isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0),
+                      valueColor:
+                          const AlwaysStoppedAnimation<Color>(Colors.amber),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "$_realEmailUsers de $_totalUsers cuentas registradas usan correo personal/institucional (@gmail, @outlook, etc.).",
+                    style: TextStyle(color: _textSecondary, fontSize: 13),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 28),
+
+            // Search Header
+            Row(
+              children: [
+                const Icon(Icons.person_search_rounded,
+                    color: Colors.amber, size: 24),
+                const SizedBox(width: 10),
+                Text(
+                  "Explorador de Usuarios",
+                  style: TextStyle(
+                    color: _textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  _unitManagerCount > 0
+                      ? "Mostrando ${_filteredUsers.length} de $_totalUsers ($_unitManagerCount Ing. Unidad)"
+                      : "Mostrando ${_filteredUsers.length} de $_totalUsers",
+                  style: TextStyle(color: _textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Search TextField
+            TextField(
+              controller: _searchController,
+              style: TextStyle(color: _textPrimary),
+              decoration: InputDecoration(
+                hintText:
+                    "Buscar por No. Empleado, nombre, correo o UID...",
+                hintStyle: TextStyle(color: _textSecondary),
+                prefixIcon:
+                    Icon(Icons.search_rounded, color: _textSecondary),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon:
+                            Icon(Icons.clear_rounded, color: _textSecondary),
+                        onPressed: () {
+                          _searchController.clear();
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: _cardBg,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: _border),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: _border),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: const BorderSide(color: Colors.amber, width: 1.5),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Users List
+            if (_filteredUsers.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(32),
+                alignment: Alignment.center,
+                child: Column(
+                  children: [
+                    Icon(Icons.search_off_rounded,
+                        color: _textSecondary, size: 48),
+                    const SizedBox(height: 12),
+                    Text(
+                      "No se encontraron cuentas con ese criterio",
+                      style: TextStyle(color: _textSecondary, fontSize: 15),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _filteredUsers.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final u = _filteredUsers[index];
+                  final bool isMerged = u['isMerged'] == true;
+                  final bool isUnitManager = u['isUnitManager'] == true;
+                  final String emp = u['emp'] ?? '';
+                  final String name = u['name'] ?? 'Sin nombre';
+                  final String email = u['email'] ?? '';
+                  final String rec = u['recEmail'] ?? '';
+                  final String uid = u['uid'] ?? '';
+                  final String displayEmail =
+                      (email.isNotEmpty && !email.endsWith('@televisa.com'))
+                          ? email
+                          : (rec.isNotEmpty ? rec : email);
+
+                  final Color unitManagerColor = _isDarkMode
+                      ? Colors.cyanAccent
+                      : const Color(0xFF0284C7);
+
+                  return Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: _cardBg,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isMerged
+                            ? Colors.orange.withAlpha(_isDarkMode ? 80 : 100)
+                            : (isUnitManager
+                                ? unitManagerColor.withAlpha(_isDarkMode ? 90 : 110)
+                                : _border),
+                        width: isUnitManager && !isMerged ? 1.5 : 1.0,
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Avatar Circle
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundColor: isMerged
+                              ? Colors.orange.withAlpha(40)
+                              : (isUnitManager
+                                  ? unitManagerColor.withAlpha(_isDarkMode ? 40 : 30)
+                                  : Colors.amber.withAlpha(40)),
+                          child: Text(
+                            emp.isNotEmpty
+                                ? emp.substring(0, 1)
+                                : (name.isNotEmpty ? name.substring(0, 1) : '?'),
+                            style: TextStyle(
+                              color: isMerged
+                                  ? Colors.orange
+                                  : (isUnitManager
+                                      ? unitManagerColor
+                                      : Colors.amber),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+
+                        // Details Column
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      name,
+                                      style: TextStyle(
+                                        color: _textPrimary,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  if (isMerged)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withAlpha(40),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        "FUSIONADO",
+                                        style: TextStyle(
+                                          color: Colors.orange,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.withAlpha(40),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        "ACTIVO",
+                                        style: TextStyle(
+                                          color: Colors.greenAccent,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  if (isUnitManager) ...[
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: unitManagerColor.withAlpha(_isDarkMode ? 35 : 25),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: unitManagerColor.withAlpha(120),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.shield_rounded,
+                                            size: 11,
+                                            color: unitManagerColor,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            "ING. DE UNIDAD",
+                                            style: TextStyle(
+                                              color: unitManagerColor,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  if (emp.isNotEmpty) ...[
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: _border,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        "No. $emp",
+                                        style: TextStyle(
+                                          color: _textPrimary,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Flexible(
+                                    child: Text(
+                                      displayEmail.isNotEmpty
+                                          ? displayEmail
+                                          : uid,
+                                      style: TextStyle(
+                                        color: _textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (isMerged && u['mergedInto'] != '')
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    "Destino UID: ${u['mergedInto']}",
+                                    style: TextStyle(
+                                      color: Colors.orange.shade300,
+                                      fontSize: 11,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+
+                        // Actions
+                        IconButton(
+                          icon: Icon(
+                            isUnitManager
+                                ? Icons.shield_rounded
+                                : Icons.shield_outlined,
+                            color: isUnitManager
+                                ? unitManagerColor
+                                : _textSecondary,
+                            size: 22,
+                          ),
+                          tooltip: isUnitManager
+                              ? "Revocar Ingeniero de Unidad"
+                              : "Asignar Ingeniero de Unidad",
+                          onPressed: () => _promptToggleUnitManager(
+                            uid: uid,
+                            userName: name,
+                            employeeNumber: emp,
+                            currentIsUnitManager: isUnitManager,
+                          ),
+                        ),
+                        PopupMenuButton<String>(
+                          icon: Icon(Icons.more_vert_rounded,
+                              color: _textSecondary, size: 20),
+                          tooltip: "Más opciones",
+                          color: _cardBg,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: _border),
+                          ),
+                          onSelected: (val) {
+                            if (val == 'toggle_unit_manager') {
+                              _promptToggleUnitManager(
+                                uid: uid,
+                                userName: name,
+                                employeeNumber: emp,
+                                currentIsUnitManager: isUnitManager,
+                              );
+                            } else if (val == 'copy_uid') {
+                              _copyToClipboard(uid, "UID");
+                            } else if (val == 'migrate') {
+                              final targetQuery =
+                                  emp.isNotEmpty ? emp : displayEmail;
+                              _copyToClipboard(targetQuery, "identificador");
+                              setState(() => _currentTab = 1);
+                            }
+                          },
+                          itemBuilder: (ctx) => [
+                            PopupMenuItem(
+                              value: 'toggle_unit_manager',
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isUnitManager
+                                        ? Icons.shield_outlined
+                                        : Icons.shield_rounded,
+                                    color: isUnitManager
+                                        ? Colors.amber.shade800
+                                        : unitManagerColor,
+                                    size: 18,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    isUnitManager
+                                        ? "Revocar Ingeniero de Unidad"
+                                        : "Asignar Ingeniero de Unidad",
+                                    style: TextStyle(
+                                      color: _textPrimary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'copy_uid',
+                              child: Row(
+                                children: [
+                                  Icon(Icons.copy_rounded,
+                                      color: _textSecondary, size: 18),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    "Copiar UID",
+                                    style: TextStyle(
+                                        color: _textPrimary, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: 'migrate',
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.merge_type_rounded,
+                                      color: Colors.amber, size: 18),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    "Migrar cuenta",
+                                    style: TextStyle(
+                                        color: _textPrimary, fontSize: 13),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            const SizedBox(height: 30),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMigracionTab() {
+    return AdminAccountMergeScreen(
+      isDarkMode: _isDarkMode,
+      isEmbedded: true,
+      onMergeComplete: _loadAdminMetrics,
+    );
+  }
+
+  Widget _buildAjustesTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "Ajustes de Administración",
+            style: TextStyle(
+              color: _textPrimary,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Configuración del portal e identidad administrativa",
+            style: TextStyle(color: _textSecondary, fontSize: 14),
+          ),
+          const SizedBox(height: 20),
+
+          // Admin Identity Card
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.amber.withAlpha(_isDarkMode ? 30 : 25),
+                  Colors.orange.withAlpha(_isDarkMode ? 15 : 10),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.amber.withAlpha(_isDarkMode ? 90 : 120),
+              ),
+            ),
+            child: Row(
+              children: [
+                const CircleAvatar(
+                  radius: 28,
+                  backgroundColor: Colors.amber,
+                  child: Icon(Icons.admin_panel_settings_rounded,
+                      color: Colors.black, size: 30),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            "Super Administrador",
+                            style: TextStyle(
+                              color: Colors.amber,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withAlpha(40),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              "ROOT",
+                              style: TextStyle(
+                                color: Colors.amber,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        kAdminEmail,
+                        style: TextStyle(
+                          color: _textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "UID: $kAdminUid",
+                        style: TextStyle(color: _textSecondary, fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded, color: Colors.amber),
+                  tooltip: "Copiar UID del Administrador",
+                  onPressed: () =>
+                      _copyToClipboard(kAdminUid, "UID Administrador"),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // Appearance Card
+          Container(
+            decoration: BoxDecoration(
+              color: _cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _border),
+            ),
+            child: SwitchListTile(
+              secondary: Icon(
+                _isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                color: Colors.amber,
+              ),
+              title: Text(
+                _isDarkMode ? "Modo Oscuro" : "Modo Luz de Día",
+                style: TextStyle(
+                  color: _textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              subtitle: Text(
+                _isDarkMode
+                    ? "Tema de alto contraste nocturno"
+                    : "Tema luminoso para luz natural",
+                style: TextStyle(color: _textSecondary, fontSize: 13),
+              ),
+              value: _isDarkMode,
+              activeColor: Colors.amber,
+              onChanged: (_) => _toggleTheme(),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // System Info Card
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: _cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Información del Sistema",
+                  style: TextStyle(
+                    color: _textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildInfoRow("Versión Aplicación", "v.23.14.0 27/10/26"),
+                const Divider(height: 20),
+                _buildInfoRow("Entorno", "Firebase Production (Hosting & Firestore)"),
+                const Divider(height: 20),
+                _buildInfoRow("Reglas de Seguridad",
+                    "Bypass Superadmin Activo (minominapro@gmail.com)"),
+                const Divider(height: 20),
+                _buildInfoRow("Modo Operativo", "Consola Administrativa Exclusiva"),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 28),
+
+          // Logout Button
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent.shade700,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 52),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
+              elevation: 2,
+            ),
+            icon: const Icon(Icons.logout_rounded, size: 20),
+            label: const Text(
+              "CERRAR SESIÓN DE ADMINISTRADOR",
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+            onPressed: _confirmSignOut,
+          ),
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: TextStyle(color: _textSecondary, fontSize: 13)),
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: TextStyle(
+              color: _textPrimary,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _bg,
+      appBar: AppBar(
+        backgroundColor: _surface,
+        elevation: 0,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: Colors.amber.withAlpha(_isDarkMode ? 35 : 25),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.amber.withAlpha(90)),
+              ),
+              child: const Icon(Icons.shield_rounded,
+                  color: Colors.amber, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Mi Nómina Pro",
+                  style: TextStyle(
+                    color: _textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Text(
+                  "PORTAL DE ADMINISTRACIÓN",
+                  style: TextStyle(
+                    color: Colors.amber,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.0,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              _isDarkMode
+                  ? Icons.light_mode_rounded
+                  : Icons.dark_mode_rounded,
+              color: Colors.amber,
+            ),
+            tooltip: _isDarkMode ? "Modo Luz de Día" : "Modo Oscuro",
+            onPressed: _toggleTheme,
+          ),
+          IconButton(
+            icon: Icon(Icons.logout_rounded, color: Colors.redAccent.shade100),
+            tooltip: "Cerrar sesión",
+            onPressed: _confirmSignOut,
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: IndexedStack(
+        index: _currentTab,
+        children: [
+          _buildResumenTab(),
+          _buildMigracionTab(),
+          _buildAjustesTab(),
+        ],
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: _surface,
+          border: Border(top: BorderSide(color: _border)),
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentTab,
+          onTap: (index) {
+            setState(() => _currentTab = index);
+            if (index == 0) {
+              _loadAdminMetrics();
+            }
+          },
+          backgroundColor: _surface,
+          selectedItemColor: Colors.amber,
+          unselectedItemColor: _textSecondary,
+          selectedLabelStyle:
+              const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          unselectedLabelStyle:
+              const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
+          type: BottomNavigationBarType.fixed,
+          elevation: 0,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.analytics_outlined),
+              activeIcon: Icon(Icons.analytics_rounded),
+              label: "Resumen",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.merge_type_outlined),
+              activeIcon: Icon(Icons.merge_type_rounded),
+              label: "Migración",
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.admin_panel_settings_outlined),
+              activeIcon: Icon(Icons.admin_panel_settings_rounded),
+              label: "Ajustes Admin",
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 
 

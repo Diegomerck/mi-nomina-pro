@@ -10,7 +10,7 @@ service cloud.firestore {
       );
     }
 
-    // User profiles and history subcollection
+    // User profiles and history/settings subcollections
     match /users/{userId} {
       // Users can read/write their own account; Admins can read/write all accounts
       allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
@@ -19,12 +19,34 @@ service cloud.firestore {
         // Users can read/write their own history; Admins can read/write all histories
         allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
       }
+
+      match /settings/{docId} {
+        // Users can read/write their own settings; Admins can read/write all settings
+        allow read, write: if request.auth != null && (request.auth.uid == userId || isAdmin());
+      }
     }
     
     // Directory mapping employee number -> registered email / UID
     match /employee_directory/{empNo} {
       allow read: if true;
       allow write: if request.auth != null;
+    }
+
+    // Unit Managers directory (for employee/manager discovery)
+    match /unit_managers/{doc} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Shared shifts with Unit Managers
+    match /unit_shares/{managerUid} {
+      allow read, write: if request.auth != null;
+
+      match /members/{memberUid} {
+        // Member can read/write their own document; Manager can read documents shared with them; Admin full access
+        allow read: if request.auth != null;
+        allow write: if request.auth != null && (request.auth.uid == memberUid || isAdmin());
+      }
     }
   }
 }
