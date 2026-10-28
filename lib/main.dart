@@ -9258,7 +9258,36 @@ class _TelevisaAppState extends State<TelevisaApp> {
   // =========================================================================
   // UNIT SHARE ("COMPARTIR CON") SETTINGS & NAVIGATION
   // =========================================================================
+  // UNIT SHARE SETTINGS & CACHE HELPERS
+  // =========================================================================
 
+  Map<String, dynamic> _sanitizeUnitShareMap(Map<String, dynamic> data) {
+    final sanitized = <String, dynamic>{};
+    data.forEach((key, value) {
+      if (value is Timestamp) {
+        sanitized[key] = value.toDate().toIso8601String();
+      } else if (value is DateTime) {
+        sanitized[key] = value.toIso8601String();
+      } else if (value is Map) {
+        sanitized[key] =
+            _sanitizeUnitShareMap(Map<String, dynamic>.from(value));
+      } else if (value is List) {
+        sanitized[key] = value.map((item) {
+          if (item is Timestamp) {
+            return item.toDate().toIso8601String();
+          } else if (item is DateTime) {
+            return item.toIso8601String();
+          } else if (item is Map) {
+            return _sanitizeUnitShareMap(Map<String, dynamic>.from(item));
+          }
+          return item;
+        }).toList();
+      } else {
+        sanitized[key] = value;
+      }
+    });
+    return sanitized;
+  }
 
   Future<void> _loadUnitShareSettings() async {
     final user = FirebaseAuth.instance.currentUser;
@@ -9270,16 +9299,25 @@ class _TelevisaAppState extends State<TelevisaApp> {
     if (cached != null) {
       try {
         final Map<String, dynamic> c = jsonDecode(cached);
-        final untilStr = c['active_sharing_until']?.toString();
-        final activeUntil =
-            untilStr != null ? DateTime.tryParse(untilStr) : null;
+        final rawUntil = c['active_sharing_until'];
+        DateTime? activeUntil;
+        if (rawUntil is Timestamp) {
+          activeUntil = rawUntil.toDate();
+        } else if (rawUntil is DateTime) {
+          activeUntil = rawUntil;
+        } else if (rawUntil is String) {
+          activeUntil = DateTime.tryParse(rawUntil);
+        } else if (rawUntil != null) {
+          activeUntil = DateTime.tryParse(rawUntil.toString());
+        }
+
         if (c['is_active'] == true &&
             activeUntil != null &&
             !DateTime.now().isAfter(activeUntil)) {
           if (mounted) {
             setState(() {
               _isUnitShareActive = true;
-              _activeUnitShareData = c;
+              _activeUnitShareData = _sanitizeUnitShareMap(c);
             });
           }
         }
@@ -9298,35 +9336,43 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
       if (doc.exists && doc.data() != null) {
         final d = doc.data()!;
-        final bool isActive = d['is_active'] == true;
+        final sanitizedDoc = _sanitizeUnitShareMap(d);
+        final bool isActive = sanitizedDoc['is_active'] == true;
         DateTime? activeUntil;
-        if (d['active_sharing_until'] is Timestamp) {
-          activeUntil = (d['active_sharing_until'] as Timestamp).toDate();
-        } else if (d['active_sharing_until'] is String) {
-          activeUntil = DateTime.tryParse(d['active_sharing_until']);
+        final rawUntil = sanitizedDoc['active_sharing_until'];
+        if (rawUntil is Timestamp) {
+          activeUntil = rawUntil.toDate();
+        } else if (rawUntil is DateTime) {
+          activeUntil = rawUntil;
+        } else if (rawUntil is String) {
+          activeUntil = DateTime.tryParse(rawUntil);
         }
 
         final bool isExpired =
             activeUntil != null && DateTime.now().isAfter(activeUntil);
 
         if (isActive && !isExpired) {
+          if (activeUntil != null) {
+            sanitizedDoc['active_sharing_until'] = activeUntil.toIso8601String();
+          }
+          final rawRetention = sanitizedDoc['data_retention_until'];
+          if (rawRetention is Timestamp) {
+            sanitizedDoc['data_retention_until'] =
+                rawRetention.toDate().toIso8601String();
+          } else if (rawRetention is DateTime) {
+            sanitizedDoc['data_retention_until'] =
+                rawRetention.toIso8601String();
+          }
+
           await prefs.setString(
             cacheKey,
-            jsonEncode({
-              ...d,
-              'active_sharing_until': activeUntil?.toIso8601String(),
-              'data_retention_until': (d['data_retention_until'] is Timestamp)
-                  ? (d['data_retention_until'] as Timestamp)
-                      .toDate()
-                      .toIso8601String()
-                  : null,
-            }),
+            jsonEncode(sanitizedDoc),
           );
 
           if (mounted) {
             setState(() {
               _isUnitShareActive = true;
-              _activeUnitShareData = d;
+              _activeUnitShareData = sanitizedDoc;
             });
           }
           return;
@@ -9357,6 +9403,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
       DateTime? activeUntil;
       if (rawUntil is Timestamp) {
         activeUntil = rawUntil.toDate();
+      } else if (rawUntil is DateTime) {
+        activeUntil = rawUntil;
       } else if (rawUntil is String) {
         activeUntil = DateTime.tryParse(rawUntil);
       }
@@ -9484,11 +9532,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
       }
     }
 
-    final updatedData = {
+    final updatedData = _sanitizeUnitShareMap({
       ..._activeUnitShareData!,
       'excluded_dates': currentExcluded,
       'custom_dates': currentCustom,
-    };
+    });
 
     if (mounted) {
       setState(() {
@@ -9806,6 +9854,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
     DateTime? activeUntil;
     if (rawUntil is Timestamp) {
       activeUntil = rawUntil.toDate();
+    } else if (rawUntil is DateTime) {
+      activeUntil = rawUntil;
     } else if (rawUntil is String) {
       activeUntil = DateTime.tryParse(rawUntil);
     }
