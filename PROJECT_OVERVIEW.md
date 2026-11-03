@@ -1,8 +1,8 @@
 # PROJECT OVERVIEW: Mi Nómina Pro (nomina-televisa-v2)
 
 > **Document Status**: Living Technical Reference Document  
-> **Last Updated**: October 2026  
-> **Version**: `v.23.15.0 28/10/26` (Build `1.0.0+2`)  
+> **Last Updated**: November 2026  
+> **Version**: `v.23.16.0 03/11/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.15.0` (October 2026 Release).
+- **Internal Version**: `v.23.16.0` (November 2026 Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,7 +234,9 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
-- **v.23.14.0 27/10/26 (Current Release)**: Ventana unificada de edición de turnos con interacción directa en un solo modal (Entrada, Salida, Entrada Real y Notas integradas con validación horaria). Protección contra cierres accidentales mediante control de salida y diálogo de confirmación de descarte. Filtro estricto de rangos temporales en sincronización y optimizaciones de rendimiento y respuesta visual en la interfaz general.
+- **v.23.16.0 03/11/26 (Current Release)**: Proyección de calendario de pagos 2027 (enero y febrero) para visualizar pagos de horas extra de diciembre. Selector rápido de año (`2026 | 2027`) fijo en la parte superior de las pestañas Nómina y Año, encabezado anual compacto, pago triple automático en días festivos laborados y mejoras de contraste en Modo Claro.
+- **v.23.15.0 28/10/26**: Sincronización y consistencia de cuentas, mejoras en flujos de recuperación de contraseña y depuración de registros obsoletos.
+- **v.23.14.0 27/10/26**: Ventana unificada de edición de turnos con interacción directa en un solo modal (Entrada, Salida, Entrada Real y Notas integradas con validación horaria). Protección contra cierres accidentales mediante control de salida y diálogo de confirmación de descarte. Filtro estricto de rangos temporales en sincronización y optimizaciones de rendimiento y respuesta visual en la interfaz general.
 - **v.23.13.2 16/10/26 (Internal Admin Release)**: Consola interna de administración para fusión y migración selectiva de cuentas (`AdminAccountMergeScreen`). Herramienta con acceso restringido para administradores (`minominapro@gmail.com` / UID `RybFq34QonRHbx3m1KitV1Wcft83`) accesible desde la pestaña Ajustes. Búsqueda de cuentas donante y receptora por número de empleado o correo electrónico con validación en tiempo real. Matriz comparativa interactiva campo por campo (turnos con selector de reemplazo exacto para eliminar huérfanos, sueldo diario, jornada, descansos, retención, fomento, cuota sindical, aumentos históricos y perfil) con casillas de verificación independientes para transferencia granular. Sincronización automática del directorio público (`employee_directory`) y marcado de cuenta donante fusionada sin pérdida de registros originales.
 - **v.23.13.1 16/10/26**: Acceso dual unificado con Número de Empleado o Correo Electrónico mediante tabla pública de directorio (`employee_directory`) y reglas de seguridad optimizadas. Rediseño moderno y acogedor de la pantalla de acceso con encabezado dinámico, visibilidad de contraseña y botones de acción destacados. Mensajes de error claros y tranquilizadores con diferenciación de contraseña errónea sin riesgo de bloqueo de cuenta. Herramienta interactiva de recuperación de contraseña directamente en pantalla de acceso (`sendPasswordResetEmail`).
 - **v.23.12.1 15/10/26**: Implementación de Días de Descanso personalizados con historial por rangos de fechas (soporte para descansos entre semana y turnos especiales). Historial de parámetros para Salario Diario, Jornada Ordinaria, Prima Dominical, Prima Vacacional y Aguinaldo con vigencias históricas independientes sin alterar periodos pasados. Cálculo automático de horas extra al 300% (triple) en días de descanso laborados conforme a la LFT con desglose separado de pago base y prima de descanso. Corrección de teclado con punto decimal en sueldo, protección contra eliminación del último periodo base y auto-cierre/apertura continua de líneas de tiempo.

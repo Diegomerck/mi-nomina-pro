@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'web_reload_stub.dart' if (dart.library.html) 'web_reload.dart';
 
 final Map<String, String> _changelogTitles = {
+  "23.16.0": "📅 Versión 23.16.0 (03/11/26) — Adelanto de Nómina 2027 y Selector de Año",
   "23.15.0": "⚡ Versión 23.15.0 (28/10/26) — Optimización de Cuentas, Seguridad y Rendimiento",
   "23.14.0": "⏱️ Versión 23.14.0 (27/10/26) — Edición de Turnos Renovada y Mejoras de Rendimiento",
   "23.13.1": "🔑 Versión 23.13.1 (16/10/26) — Acceso con Empleado o Correo y Recuperación",
@@ -26,6 +27,13 @@ final Map<String, String> _changelogTitles = {
 };
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.16.0": [
+    "📅 Adelanto de pagos de 2027: Ya puedes ver cuándo se pagarán tus horas extra de diciembre en las primeras quincenas de enero y febrero de 2027.",
+    "🔄 Botón para cambiar entre 2026 y 2027: En las pestañas de Nómina y Año ahora tienes un botón arriba para saltar de un año a otro en un toque, sin tener que bajar por toda la lista.",
+    "✨ Vista del Año más amplia: Redujimos el tamaño del encabezado en la pestaña Año para que quepan más semanas en tu pantalla.",
+    "🎉 Días festivos al triple: Si marcas un día como festivo trabajado, tu pago diario ahora se calcula al triple automáticamente.",
+    "☀️ Mejor lectura en Modo Claro: Ajustamos los colores y ventanas emergentes para que todo se lea con total claridad.",
+  ],
   "23.15.0": [
     "⚡ Sincronización y consistencia de cuentas: Mejoras internas en la gestión de credenciales y registros del sistema.",
     "🔑 Asistencia en restablecimiento de contraseña: Optimizaciones en los flujos de recuperación para cuentas con correo verificado.",
@@ -1779,7 +1787,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
   String _dateString = "";
   String _timeRemainingMessage = "";
 
-  final Map<String, Map<String, dynamic>> _payCalendar2026 = {
+  int _selectedNominaYear = 2026;
+  int _selectedAnoYear = 2026;
+
+  final Map<String, Map<String, dynamic>> _payCalendar = {
     "2026001": {
       "weeks": [48, 49, 50],
       "payout": "15/01/26",
@@ -1899,6 +1910,26 @@ class _TelevisaAppState extends State<TelevisaApp> {
       "weeks": [47, 48],
       "payout": "30/12/26",
       "label": "Dic - 2da"
+    },
+    "2027001": {
+      "weeks": [49, 50, 51],
+      "payout": "15/01/27",
+      "label": "Ene - 1ra"
+    },
+    "2027002": {
+      "weeks": [52, 53],
+      "payout": "29/01/27",
+      "label": "Ene - 2da"
+    },
+    "2027003": {
+      "weeks": [1, 2, 3],
+      "payout": "15/02/27",
+      "label": "Feb - 1ra"
+    },
+    "2027004": {
+      "weeks": [4],
+      "payout": "26/02/27",
+      "label": "Feb - 2da"
     },
   };
 
@@ -3343,8 +3374,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
   }
 
   int _getWeekNumber(DateTime date) {
+    // Jan 1-3, 2027 belong to Week 53 of 2026 rather than returning 0
+    if (date.year == 2027 && date.month == 1 && date.day <= 3) {
+      return 53;
+    }
     int dayOfYear = int.parse(DateFormat("D").format(date));
-    return ((dayOfYear - date.weekday + 10) / 7).floor();
+    int week = ((dayOfYear - date.weekday + 10) / 7).floor();
+    if (week == 0) {
+      DateTime prevYearEnd = DateTime(date.year - 1, 12, 31);
+      int prevDayOfYear = int.parse(DateFormat("D").format(prevYearEnd));
+      return ((prevDayOfYear - prevYearEnd.weekday + 10) / 7).floor();
+    }
+    return week;
   }
 
   Map<WorkDay, OvertimeBreakdown> calculateWeeklyOvertimeBreakdown(
@@ -4322,7 +4363,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.15.0 28/10/26",
+                "v.23.16.0 03/11/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,
@@ -7374,6 +7415,130 @@ class _TelevisaAppState extends State<TelevisaApp> {
     );
   }
 
+  Widget _buildYearSegmentedControl({
+    required int selectedYear,
+    required ValueChanged<int> onYearChanged,
+  }) {
+    const years = [2026, 2027];
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: _isDarkMode
+            ? Colors.black.withAlpha(120)
+            : const Color(0xFFE2E8F0),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: _isDarkMode
+              ? Colors.white.withAlpha(35)
+              : const Color(0xFFCBD5E1),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: years.map((year) {
+          final isSelected = selectedYear == year;
+          return GestureDetector(
+            onTap: isSelected ? null : () => onYearChanged(year),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? (_isDarkMode ? Colors.orange : const Color(0xFFEA580C))
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: (_isDarkMode
+                                  ? Colors.orange
+                                  : const Color(0xFFEA580C))
+                              .withAlpha(80),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Text(
+                year.toString(),
+                style: TextStyle(
+                  color: isSelected
+                      ? (_isDarkMode ? Colors.black : Colors.white)
+                      : (_isDarkMode ? Colors.white70 : const Color(0xFF475569)),
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _build2027DisclaimerBanner({EdgeInsetsGeometry? margin}) {
+    return Container(
+      margin: margin,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: _isDarkMode
+            ? Colors.amber.withAlpha(20)
+            : const Color(0xFFFFFBEB),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: _isDarkMode
+              ? Colors.amber.withAlpha(90)
+              : const Color(0xFFFDE68A),
+          width: 1.2,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline_rounded,
+            color: _isDarkMode ? Colors.amberAccent : const Color(0xFFD97706),
+            size: 22,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "CALENDARIO 2027 PRELIMINAR",
+                  style: TextStyle(
+                    color: _isDarkMode
+                        ? Colors.amberAccent
+                        : const Color(0xFFB45309),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Las fechas de corte y depósito de 2027 son estimaciones preliminares sujetas a confirmación oficial por parte de la Mesa de Control de Incidencias.",
+                  style: TextStyle(
+                    color: _isDarkMode
+                        ? Colors.white70
+                        : const Color(0xFF78350F),
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   final List<GlobalKey> _weekKeys = List.generate(53, (_) => GlobalKey());
   bool _hasAutoScrolledAnoTab = false;
 
@@ -7381,7 +7546,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
     Future.delayed(const Duration(milliseconds: 150), () {
       if (!mounted) return;
       DateTime now = DateTime.now();
-      int year = now.year;
+      int year = _selectedAnoYear;
+      if (year != now.year) return;
       DateTime jan1 = DateTime(year, 1, 1);
       DateTime firstMonday = jan1.subtract(Duration(days: jan1.weekday - 1));
 
@@ -7412,7 +7578,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
   }
 
   Widget _buildAnoTab() {
-    int year = DateTime.now().year;
+    int year = _selectedAnoYear;
     DateTime jan1 = DateTime(year, 1, 1);
     // Find the Monday of the week containing Jan 1st
     DateTime firstMonday = jan1.subtract(Duration(days: jan1.weekday - 1));
@@ -7434,39 +7600,69 @@ class _TelevisaAppState extends State<TelevisaApp> {
     ];
 
     // Trigger auto-scroll on first display of this tab
-    if (!_hasAutoScrolledAnoTab) {
+    if (!_hasAutoScrolledAnoTab && _selectedAnoYear == DateTime.now().year) {
       _hasAutoScrolledAnoTab = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _scrollToCurrentWeek();
       });
     }
 
-    return SingleChildScrollView(
-      controller: _anoScrollController,
-      child: Column(
-        children: [
+    return Column(
+      children: [
         Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           width: double.infinity,
           decoration: BoxDecoration(
             color: _isDarkMode
                 ? Colors.orange.withAlpha(30)
                 : const Color(0xFFFFF7ED),
-            border: _isDarkMode
-                ? null
-                : const Border(
-                    bottom: BorderSide(color: Color(0xFFE2E8F0), width: 1.5)),
+            border: Border(
+              bottom: BorderSide(
+                color: _isDarkMode
+                    ? Colors.orange.withAlpha(60)
+                    : const Color(0xFFE2E8F0),
+                width: 1.5,
+              ),
+            ),
           ),
-          child: Text("REGISTRO ANUAL $year",
-              textAlign: TextAlign.center,
-              style: TextStyle(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                "Registro Anual:",
+                style: TextStyle(
                   color: _isDarkMode
                       ? Colors.orange
                       : const Color(0xFFC2410C),
-                  fontSize: 22,
+                  fontSize: 17,
                   fontWeight: FontWeight.bold,
-                  letterSpacing: 2)),
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(width: 12),
+              _buildYearSegmentedControl(
+                selectedYear: _selectedAnoYear,
+                onYearChanged: (newYear) {
+                  setState(() => _selectedAnoYear = newYear);
+                  if (_selectedAnoYear == DateTime.now().year) {
+                    _scrollToCurrentWeek();
+                  } else if (_anoScrollController.hasClients) {
+                    _anoScrollController.animateTo(
+                      0.0,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                    );
+                  }
+                },
+              ),
+            ],
+          ),
         ),
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _anoScrollController,
+            child: Column(
+              children: [
         // Month header row
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -7546,9 +7742,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
               // Highlight current week logic
               DateTime now = DateTime.now();
-              bool isCurrent =
+              bool isCurrent = now.year == year &&
                   now.isAfter(weekStart.subtract(const Duration(seconds: 1))) &&
-                      now.isBefore(weekEnd.add(const Duration(seconds: 1)));
+                  now.isBefore(weekEnd.add(const Duration(seconds: 1)));
 
               // Check if this week contains the first day of a month
               String? monthLabel;
@@ -7654,8 +7850,17 @@ class _TelevisaAppState extends State<TelevisaApp> {
               );
             },
           ),
-      ],
-    ));
+          if (_selectedAnoYear == 2027)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+              child: _build2027DisclaimerBanner(),
+            ),
+        ],
+      ),
+    ),
+  ),
+],
+);
   }
 
   Widget _buildWeekOvertimeSummary(DateTime weekStart) {
@@ -8021,6 +8226,39 @@ class _TelevisaAppState extends State<TelevisaApp> {
     );
   }
 
+  (DateTime, DateTime)? _getQuincenaDateRange(
+      String pid, Map<String, dynamic> cfg) {
+    List<int> quincenaWeeks = List<int>.from(cfg['weeks'] ?? []);
+    if (quincenaWeeks.isEmpty) return null;
+    quincenaWeeks.sort();
+
+    int quincenaYear = int.tryParse(pid.substring(0, 4)) ?? 2026;
+    int quincenaNum = int.tryParse(pid.substring(4)) ?? 1;
+
+    // Quincenas 1 and 2 in a payout calendar (payout in January) cover the closing weeks of the previous year
+    int yearForFirstWeek = (quincenaNum <= 2 && quincenaWeeks.first >= 48)
+        ? quincenaYear - 1
+        : quincenaYear;
+    int yearForLastWeek = (quincenaNum <= 2 && quincenaWeeks.last >= 48)
+        ? quincenaYear - 1
+        : quincenaYear;
+
+    DateTime jan4First = DateTime(yearForFirstWeek, 1, 4);
+    DateTime firstMonday =
+        jan4First.subtract(Duration(days: jan4First.weekday - 1));
+    DateTime startDate =
+        firstMonday.add(Duration(days: (quincenaWeeks.first - 1) * 7));
+
+    DateTime jan4Last = DateTime(yearForLastWeek, 1, 4);
+    DateTime lastMonday =
+        jan4Last.subtract(Duration(days: jan4Last.weekday - 1));
+    DateTime endDate = lastMonday
+        .add(Duration(days: (quincenaWeeks.last - 1) * 7))
+        .add(const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
+
+    return (startDate, endDate);
+  }
+
   void _scrollToActiveNomina() {
     Future.delayed(const Duration(milliseconds: 150), () {
       if (!mounted || !_nominaScrollController.hasClients) return;
@@ -8028,24 +8266,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
       DateTime now = DateTime.now();
       int enProgresoIndex = -1;
 
-      for (int i = 0; i < _payCalendar2026.length; i++) {
-        var cfg = _payCalendar2026.values.elementAt(i);
-        List<int> quincenaWeeks = List<int>.from(cfg['weeks']);
-        if (quincenaWeeks.isNotEmpty) {
-          quincenaWeeks.sort();
-          int firstWeek = quincenaWeeks.first;
-          int lastWeek = quincenaWeeks.last;
-          int yearForFirstWeek = firstWeek >= 48 ? now.year - 1 : now.year;
-          int yearForLastWeek = lastWeek >= 48 ? now.year - 1 : now.year;
-          DateTime jan4First = DateTime(yearForFirstWeek, 1, 4);
-          DateTime firstMonday = jan4First.subtract(Duration(days: jan4First.weekday - 1));
-          DateTime quincenaStartDate = firstMonday.add(Duration(days: (firstWeek - 1) * 7));
-          DateTime jan4Last = DateTime(yearForLastWeek, 1, 4);
-          DateTime lastMonday = jan4Last.subtract(Duration(days: jan4Last.weekday - 1));
-          DateTime lastWeekStart = lastMonday.add(Duration(days: (lastWeek - 1) * 7));
-          DateTime quincenaEndDate = lastWeekStart.add(const Duration(days: 6, hours: 23, minutes: 59));
-          bool isCurrentlyAffected = now.isAfter(quincenaStartDate.subtract(const Duration(seconds: 1))) &&
-                                     now.isBefore(quincenaEndDate.add(const Duration(seconds: 1)));
+      final pids = _payCalendar.keys
+          .where((k) => k.startsWith(_selectedNominaYear.toString()))
+          .toList();
+
+      for (int i = 0; i < pids.length; i++) {
+        String pid = pids[i];
+        var cfg = _payCalendar[pid]!;
+        final range = _getQuincenaDateRange(pid, cfg);
+        if (range != null) {
+          bool isCurrentlyAffected = now.isAfter(
+                  range.$1.subtract(const Duration(seconds: 1))) &&
+              now.isBefore(range.$2.add(const Duration(seconds: 1)));
           if (isCurrentlyAffected) {
             enProgresoIndex = i;
             break;
@@ -8056,9 +8288,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
       if (enProgresoIndex != -1) {
         double estimatedItemHeight = 135.0;
         double viewport = _nominaScrollController.position.viewportDimension;
-        
+
         // Formula from Screenshot 1 shifted up by 2 cards (-250px) to match Screenshot 2
-        double targetOffset = (((enProgresoIndex + 1) * estimatedItemHeight) - viewport + 24.0) - 250.0;
+        double targetOffset =
+            (((enProgresoIndex + 1) * estimatedItemHeight) - viewport + 24.0) -
+                250.0;
         double maxScroll = _nominaScrollController.position.maxScrollExtent;
         targetOffset = targetOffset.clamp(0.0, maxScroll);
 
@@ -8075,174 +8309,162 @@ class _TelevisaAppState extends State<TelevisaApp> {
     // Get current date info for determining quincena status
     DateTime now = DateTime.now();
 
-    return ListView.builder(
-      controller: _nominaScrollController,
-      padding: const EdgeInsets.all(16),
-      itemCount: _payCalendar2026.length,
-      itemBuilder: (context, index) {
-        String pid = _payCalendar2026.keys.elementAt(index);
-        var cfg = _payCalendar2026[pid]!;
-        List<WorkDay> matched = _weeklyHistory
-            .where((d) => cfg['weeks'].contains(_getWeekNumber(d.entrada)))
-            .toList();
+    // 1. Calculate globalNextToPayPid across all entries in _payCalendar (chronologically)
+    String? globalNextToPayPid;
+    DateTime? earliestUnpaidPayoutDate;
 
-        // Parse payout date (format: "dd/MM/yy")
-        DateTime? payoutDate;
-        try {
-          String payoutStr = cfg['payout'] as String;
-          List<String> parts = payoutStr.split('/');
-          if (parts.length == 3) {
-            int day = int.parse(parts[0]);
-            int month = int.parse(parts[1]);
-            int year = 2000 + int.parse(parts[2]); // Convert "26" to "2026"
-            payoutDate = DateTime(year, month, day);
-          }
-        } catch (e) {
-          payoutDate = null;
+    for (final entry in _payCalendar.entries) {
+      final checkPid = entry.key;
+      final checkCfg = entry.value;
+
+      DateTime? checkPayoutDate;
+      try {
+        String checkPayoutStr = checkCfg['payout'] as String;
+        List<String> parts = checkPayoutStr.split('/');
+        if (parts.length == 3) {
+          int day = int.parse(parts[0]);
+          int month = int.parse(parts[1]);
+          int year = 2000 + int.parse(parts[2]);
+          checkPayoutDate = DateTime(year, month, day);
         }
+      } catch (e) {
+        continue;
+      }
 
-        // Determine quincena status
-        // 1. Paid out: payout date is today or has passed (GREEN) - DATE BASED ONLY
-        // 2. Currently affected: current week is in this quincena's weeks (ORANGE)
-        // 3. Next to be paid: the next quincena after the current one (YELLOW)
+      if (checkPayoutDate == null) continue;
 
-        bool isPaidOut = payoutDate != null &&
-            (payoutDate.isBefore(now) ||
-                (payoutDate.year == now.year &&
-                    payoutDate.month == now.month &&
-                    payoutDate.day == now.day));
+      // Skip if paid out (payout date is today or in the past)
+      bool checkIsPaidOut = checkPayoutDate.isBefore(now) ||
+          (checkPayoutDate.year == now.year &&
+              checkPayoutDate.month == now.month &&
+              checkPayoutDate.day == now.day);
+      if (checkIsPaidOut) continue;
 
-        // Calculate date range for this quincena based on its weeks
-        DateTime? quincenaStartDate;
-        DateTime? quincenaEndDate;
+      // Skip if currently affected (shift period in progress)
+      final checkRange = _getQuincenaDateRange(checkPid, checkCfg);
+      bool checkIsCurrentlyAffected = checkRange != null &&
+          now.isAfter(checkRange.$1.subtract(const Duration(seconds: 1))) &&
+          now.isBefore(checkRange.$2.add(const Duration(seconds: 1)));
+      if (checkIsCurrentlyAffected) continue;
 
-        // Find the first and last week of this quincena
-        List<int> quincenaWeeks = List<int>.from(cfg['weeks']);
-        if (quincenaWeeks.isNotEmpty) {
-          // Sort weeks to find first and last
-          quincenaWeeks.sort();
+      // Check if chronologically earliest unpaid non-affected payout
+      if (earliestUnpaidPayoutDate == null ||
+          checkPayoutDate.isBefore(earliestUnpaidPayoutDate)) {
+        earliestUnpaidPayoutDate = checkPayoutDate;
+        globalNextToPayPid = checkPid;
+      }
+    }
 
-          // Find dates for first week (Monday) and last week (Sunday)
-          // Week 1 starts on first Monday of year
-          DateTime jan4 = DateTime(now.year, 1, 4); // Jan 4 is always in week 1
-          DateTime firstMonday =
-              jan4.subtract(Duration(days: jan4.weekday - 1));
+    final List<String> currentYearPids = _payCalendar.keys
+        .where((k) => k.startsWith(_selectedNominaYear.toString()))
+        .toList();
 
-          int firstWeek = quincenaWeeks.first;
-          int lastWeek = quincenaWeeks.last;
+    final bool show2027Disclaimer = (_selectedNominaYear == 2027);
 
-          // Handle year boundary - if week is 48+, it's likely previous year
-          // For 2026 calendar, weeks 48+ are from 2025
-          int yearForFirstWeek = firstWeek >= 48 ? now.year - 1 : now.year;
-          int yearForLastWeek = lastWeek >= 48 ? now.year - 1 : now.year;
-
-          // Recalculate firstMonday for correct year
-          DateTime jan4First = DateTime(yearForFirstWeek, 1, 4);
-          firstMonday =
-              jan4First.subtract(Duration(days: jan4First.weekday - 1));
-          quincenaStartDate =
-              firstMonday.add(Duration(days: (firstWeek - 1) * 7));
-
-          // For end date, use the year of the last week
-          DateTime jan4Last = DateTime(yearForLastWeek, 1, 4);
-          DateTime lastMonday =
-              jan4Last.subtract(Duration(days: jan4Last.weekday - 1));
-          DateTime lastWeekStart =
-              lastMonday.add(Duration(days: (lastWeek - 1) * 7));
-          quincenaEndDate = lastWeekStart
-              .add(const Duration(days: 6, hours: 23, minutes: 59));
-        }
-
-        // Currently affected if today falls within the quincena's date range
-        bool isCurrentlyAffected = quincenaStartDate != null &&
-            quincenaEndDate != null &&
-            now.isAfter(
-                quincenaStartDate.subtract(const Duration(seconds: 1))) &&
-            now.isBefore(quincenaEndDate.add(const Duration(seconds: 1)));
-
-        // Find if this is the next quincena after current
-        bool isNextToPay = false;
-        if (!isPaidOut && !isCurrentlyAffected && payoutDate != null) {
-          // Find the earliest unpaid payout date (that is not currently affected)
-          // This is the true "next to pay" - the chronologically next unpaid quincena
-          DateTime? earliestUnpaidPayoutDate;
-          String? earliestUnpaidPid;
-
-          for (int i = 0; i < _payCalendar2026.length; i++) {
-            String checkPid = _payCalendar2026.keys.elementAt(i);
-            var checkCfg = _payCalendar2026.values.elementAt(i);
-
-            // Parse payout date
-            DateTime? checkPayoutDate;
-            try {
-              String checkPayoutStr = checkCfg['payout'] as String;
-              List<String> parts = checkPayoutStr.split('/');
-              if (parts.length == 3) {
-                int day = int.parse(parts[0]);
-                int month = int.parse(parts[1]);
-                int year = 2000 + int.parse(parts[2]);
-                checkPayoutDate = DateTime(year, month, day);
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: _isDarkMode
+                ? Colors.orange.withAlpha(25)
+                : const Color(0xFFFFF7ED),
+            border: Border(
+              bottom: BorderSide(
+                color: _isDarkMode
+                    ? Colors.orange.withAlpha(60)
+                    : const Color(0xFFE2E8F0),
+                width: 1.5,
+              ),
+            ),
+          ),
+          child: Center(
+            child: _buildYearSegmentedControl(
+              selectedYear: _selectedNominaYear,
+              onYearChanged: (newYear) {
+                setState(() => _selectedNominaYear = newYear);
+                if (_selectedNominaYear == DateTime.now().year) {
+                  _scrollToActiveNomina();
+                } else if (_nominaScrollController.hasClients) {
+                  _nominaScrollController.animateTo(
+                    0.0,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                  );
+                }
+              },
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            controller: _nominaScrollController,
+            padding: const EdgeInsets.all(16),
+            itemCount: currentYearPids.length + (show2027Disclaimer ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (index == currentYearPids.length) {
+                return _build2027DisclaimerBanner(
+                  margin: const EdgeInsets.only(top: 8, bottom: 20),
+                );
               }
-            } catch (e) {
-              continue;
-            }
 
-            // Skip if paid out (payout date is today or in the past)
-            bool checkIsPaidOut = checkPayoutDate != null &&
-                (checkPayoutDate.isBefore(now) ||
-                    (checkPayoutDate.year == now.year &&
-                        checkPayoutDate.month == now.month &&
-                        checkPayoutDate.day == now.day));
+              String pid = currentYearPids[index];
+              var cfg = _payCalendar[pid]!;
 
-            if (checkIsPaidOut) continue;
+              // Calculate date range for this quincena based on its weeks and quincena year
+              final dateRange = _getQuincenaDateRange(pid, cfg);
+              final DateTime? quincenaStartDate = dateRange?.$1;
+              final DateTime? quincenaEndDate = dateRange?.$2;
 
-            // Skip if currently affected
-            List<int> checkWeeks = List<int>.from(checkCfg['weeks']);
-            DateTime? checkStartDate;
-            DateTime? checkEndDate;
-            List<int> checkQuincenaWeeks = List<int>.from(checkWeeks);
-            if (checkQuincenaWeeks.isNotEmpty) {
-              checkQuincenaWeeks.sort();
-              int firstWeek = checkQuincenaWeeks.first;
-              int lastWeek = checkQuincenaWeeks.last;
-              int yearForFirstWeek = firstWeek >= 48 ? now.year - 1 : now.year;
-              int yearForLastWeek = lastWeek >= 48 ? now.year - 1 : now.year;
-              DateTime jan4First = DateTime(yearForFirstWeek, 1, 4);
-              DateTime firstMonday =
-                  jan4First.subtract(Duration(days: jan4First.weekday - 1));
-              checkStartDate =
-                  firstMonday.add(Duration(days: (firstWeek - 1) * 7));
-              DateTime jan4Last = DateTime(yearForLastWeek, 1, 4);
-              DateTime lastMonday =
-                  jan4Last.subtract(Duration(days: jan4Last.weekday - 1));
-              DateTime lastWeekStart =
-                  lastMonday.add(Duration(days: (lastWeek - 1) * 7));
-              checkEndDate = lastWeekStart
-                  .add(const Duration(days: 6, hours: 23, minutes: 59));
-            }
+              List<WorkDay> matched = _weeklyHistory.where((d) {
+                if (!cfg['weeks'].contains(_getWeekNumber(d.entrada))) {
+                  return false;
+                }
+                if (quincenaStartDate != null && quincenaEndDate != null) {
+                  return d.entrada.isAfter(quincenaStartDate
+                          .subtract(const Duration(seconds: 1))) &&
+                      d.entrada.isBefore(quincenaEndDate
+                          .add(const Duration(seconds: 1)));
+                }
+                return true;
+              }).toList();
 
-            bool checkIsCurrentlyAffected = checkStartDate != null &&
-                checkEndDate != null &&
-                now.isAfter(
-                    checkStartDate.subtract(const Duration(seconds: 1))) &&
-                now.isBefore(checkEndDate.add(const Duration(seconds: 1)));
-
-            if (checkIsCurrentlyAffected) continue;
-
-            // This quincena is unpaid and not currently affected
-            // Check if it's the earliest one
-            if (checkPayoutDate != null) {
-              if (earliestUnpaidPayoutDate == null ||
-                  checkPayoutDate.isBefore(earliestUnpaidPayoutDate)) {
-                earliestUnpaidPayoutDate = checkPayoutDate;
-                earliestUnpaidPid = checkPid;
+              // Parse payout date (format: "dd/MM/yy")
+              DateTime? payoutDate;
+              try {
+                String payoutStr = cfg['payout'] as String;
+                List<String> parts = payoutStr.split('/');
+                if (parts.length == 3) {
+                  int day = int.parse(parts[0]);
+                  int month = int.parse(parts[1]);
+                  int year = 2000 + int.parse(parts[2]); // Convert "26" to 2026, "27" to 2027
+                  payoutDate = DateTime(year, month, day);
+                }
+              } catch (e) {
+                payoutDate = null;
               }
-            }
-          }
 
-          // Mark as next to pay if this is the earliest unpaid quincena
-          isNextToPay = (pid == earliestUnpaidPid);
-        }
+              // Determine quincena status
+              // 1. Paid out: payout date is today or has passed (GREEN) - DATE BASED ONLY
+              // 2. Currently affected: current week is in this quincena's weeks (ORANGE)
+              // 3. Next to be paid: the next quincena after the current one (YELLOW)
+
+              bool isPaidOut = payoutDate != null &&
+                  (payoutDate.isBefore(now) ||
+                      (payoutDate.year == now.year &&
+                          payoutDate.month == now.month &&
+                          payoutDate.day == now.day));
+
+              // Currently affected if today falls within the quincena's date range
+              bool isCurrentlyAffected = quincenaStartDate != null &&
+                  quincenaEndDate != null &&
+                  now.isAfter(
+                      quincenaStartDate.subtract(const Duration(seconds: 1))) &&
+                  now.isBefore(quincenaEndDate.add(const Duration(seconds: 1)));
+
+              // Set isNextToPay based on the global next-to-pay payout
+              bool isNextToPay = (pid == globalNextToPayPid);
 
         // Determine colors based on status - NOW PURELY DATE-BASED, NOT DATA-DEPENDENT
         Color cardColor;
@@ -8530,7 +8752,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
           ),
         );
       },
-    );
+    ),
+  ),
+],
+);
   }
 
   Widget _buildExtrasTab() {
@@ -9351,6 +9576,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
         sanitized[key] = value.toDate().toIso8601String();
       } else if (value is DateTime) {
         sanitized[key] = value.toIso8601String();
+      } else if (value is FieldValue) {
+        sanitized[key] = DateTime.now().toIso8601String();
       } else if (value is Map) {
         sanitized[key] =
             _sanitizeUnitShareMap(Map<String, dynamic>.from(value));
@@ -9360,6 +9587,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
             return item.toDate().toIso8601String();
           } else if (item is DateTime) {
             return item.toIso8601String();
+          } else if (item is FieldValue) {
+            return DateTime.now().toIso8601String();
           } else if (item is Map) {
             return _sanitizeUnitShareMap(Map<String, dynamic>.from(item));
           }
@@ -9382,21 +9611,30 @@ class _TelevisaAppState extends State<TelevisaApp> {
     if (cached != null) {
       try {
         final Map<String, dynamic> c = jsonDecode(cached);
-        final rawUntil = c['active_sharing_until'];
-        DateTime? activeUntil;
-        if (rawUntil is Timestamp) {
-          activeUntil = rawUntil.toDate();
-        } else if (rawUntil is DateTime) {
-          activeUntil = rawUntil;
-        } else if (rawUntil is String) {
-          activeUntil = DateTime.tryParse(rawUntil);
-        } else if (rawUntil != null) {
-          activeUntil = DateTime.tryParse(rawUntil.toString());
+        bool hasActive = false;
+        final rawShares = c['shares'];
+        if (rawShares is Map && rawShares.isNotEmpty) {
+          for (final val in rawShares.values) {
+            if (val is Map) {
+              final activeUntil = parseUnitShareDate(val['active_sharing_until']);
+              final isExpired =
+                  activeUntil != null && DateTime.now().isAfter(activeUntil);
+              if (val['is_active'] != false && !isExpired) {
+                hasActive = true;
+                break;
+              }
+            }
+          }
+        } else {
+          final activeUntil = parseUnitShareDate(c['active_sharing_until']);
+          final isExpired =
+              activeUntil != null && DateTime.now().isAfter(activeUntil);
+          if (c['is_active'] == true && !isExpired) {
+            hasActive = true;
+          }
         }
 
-        if (c['is_active'] == true &&
-            activeUntil != null &&
-            !DateTime.now().isAfter(activeUntil)) {
+        if (hasActive) {
           if (mounted) {
             setState(() {
               _isUnitShareActive = true;
@@ -9420,33 +9658,30 @@ class _TelevisaAppState extends State<TelevisaApp> {
       if (doc.exists && doc.data() != null) {
         final d = doc.data()!;
         final sanitizedDoc = _sanitizeUnitShareMap(d);
-        final bool isActive = sanitizedDoc['is_active'] == true;
-        DateTime? activeUntil;
-        final rawUntil = sanitizedDoc['active_sharing_until'];
-        if (rawUntil is Timestamp) {
-          activeUntil = rawUntil.toDate();
-        } else if (rawUntil is DateTime) {
-          activeUntil = rawUntil;
-        } else if (rawUntil is String) {
-          activeUntil = DateTime.tryParse(rawUntil);
+        bool hasActive = false;
+        final rawShares = sanitizedDoc['shares'];
+        if (rawShares is Map && rawShares.isNotEmpty) {
+          for (final val in rawShares.values) {
+            if (val is Map) {
+              final activeUntil = parseUnitShareDate(val['active_sharing_until']);
+              final isExpired =
+                  activeUntil != null && DateTime.now().isAfter(activeUntil);
+              if (val['is_active'] != false && !isExpired) {
+                hasActive = true;
+                break;
+              }
+            }
+          }
+        } else {
+          final activeUntil = parseUnitShareDate(sanitizedDoc['active_sharing_until']);
+          final isExpired =
+              activeUntil != null && DateTime.now().isAfter(activeUntil);
+          if (sanitizedDoc['is_active'] == true && !isExpired) {
+            hasActive = true;
+          }
         }
 
-        final bool isExpired =
-            activeUntil != null && DateTime.now().isAfter(activeUntil);
-
-        if (isActive && !isExpired) {
-          if (activeUntil != null) {
-            sanitizedDoc['active_sharing_until'] = activeUntil.toIso8601String();
-          }
-          final rawRetention = sanitizedDoc['data_retention_until'];
-          if (rawRetention is Timestamp) {
-            sanitizedDoc['data_retention_until'] =
-                rawRetention.toDate().toIso8601String();
-          } else if (rawRetention is DateTime) {
-            sanitizedDoc['data_retention_until'] =
-                rawRetention.toIso8601String();
-          }
-
+        if (hasActive) {
           await prefs.setString(
             cacheKey,
             jsonEncode(sanitizedDoc),
@@ -9458,7 +9693,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               _activeUnitShareData = sanitizedDoc;
             });
           }
-          // Self-heal: ensure remote manager doc only holds strictly filtered shifts
+          // Self-heal: ensure remote manager docs hold strictly filtered shifts
           _syncShiftsToUnitManager();
           return;
         } else {
@@ -9489,25 +9724,75 @@ class _TelevisaAppState extends State<TelevisaApp> {
     );
   }
 
+  Map<String, Map<String, dynamic>> _getActiveShareGrants() {
+    if (!_isUnitShareActive || _activeUnitShareData == null) return {};
+    return extractActiveSharesFromMap(_activeUnitShareData!);
+  }
+
+  bool _isDateSharedWithSpecificManager(
+    String mgrKey,
+    Map<String, dynamic> grant,
+    DateTime date, {
+    String? shiftId,
+  }) {
+    final activeUntil = parseUnitShareDate(grant['active_sharing_until']);
+    final isExpired =
+        activeUntil != null && DateTime.now().isAfter(activeUntil);
+    if (grant['is_active'] == false || isExpired) return false;
+    final mode =
+        (grant['mode'] ?? grant['duration'] ?? 'Esta Semana').toString();
+    final customDates = parseUnitShareStringSet(grant['custom_dates']);
+    final excludedDates = parseUnitShareStringSet(grant['excluded_dates']);
+    return isDateSharedUnderUnitShare(
+      date: date,
+      shiftId: shiftId,
+      mode: mode,
+      activeUntil: activeUntil,
+      customDates: customDates,
+      excludedDates: excludedDates,
+    );
+  }
+
   bool _isDateSharedWithManager(DateTime date, {String? shiftId}) {
     if (!_isUnitShareActive || _activeUnitShareData == null) return false;
+    final activeGrants = _getActiveShareGrants();
+    if (activeGrants.isNotEmpty) {
+      for (final entry in activeGrants.entries) {
+        if (_isDateSharedWithSpecificManager(
+          entry.key,
+          entry.value,
+          date,
+          shiftId: shiftId,
+        )) {
+          return true;
+        }
+      }
+      return false;
+    }
+
     final mode = (_activeUnitShareData?['mode'] ??
             _activeUnitShareData?['duration'] ??
             _activeUnitShareData?['timeframe'] ??
             '')
         .toString();
-    final excludedDates = parseUnitShareStringSet(_activeUnitShareData!['excluded_dates']);
+    final excludedDates =
+        parseUnitShareStringSet(_activeUnitShareData!['excluded_dates']);
     final dateKey = DateFormat('yyyy-MM-dd').format(date);
     if (excludedDates.contains(dateKey) ||
-        (shiftId != null && shiftId.isNotEmpty && excludedDates.contains(shiftId))) {
+        (shiftId != null &&
+            shiftId.isNotEmpty &&
+            excludedDates.contains(shiftId))) {
       return false;
     }
 
     if (mode == 'Yo Decido') {
-      final customDates = parseUnitShareStringSet(_activeUnitShareData!['custom_dates']);
+      final customDates =
+          parseUnitShareStringSet(_activeUnitShareData!['custom_dates']);
       if (customDates.isEmpty) return false;
       return customDates.contains(dateKey) ||
-          (shiftId != null && shiftId.isNotEmpty && customDates.contains(shiftId));
+          (shiftId != null &&
+              shiftId.isNotEmpty &&
+              customDates.contains(shiftId));
     }
 
     return _isDateInUnitShareRange(date, mode);
@@ -9516,11 +9801,90 @@ class _TelevisaAppState extends State<TelevisaApp> {
   Future<void> _toggleUnitShareForDate({
     required DateTime date,
     String? shiftId,
-    required bool share,
+    bool? share,
+    String? managerKey,
+    Map<String, bool>? perManagerShare,
   }) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || _activeUnitShareData == null) return;
     final dateKey = DateFormat('yyyy-MM-dd').format(date);
+
+    final rawShares = _activeUnitShareData!['shares'];
+    final Map<String, dynamic> updatedShares = {};
+    if (rawShares is Map && rawShares.isNotEmpty) {
+      for (final entry in rawShares.entries) {
+        updatedShares[entry.key.toString()] =
+            Map<String, dynamic>.from(entry.value as Map);
+      }
+    } else {
+      final activeGrants = extractActiveSharesFromMap(_activeUnitShareData!);
+      for (final entry in activeGrants.entries) {
+        updatedShares[entry.key] = Map<String, dynamic>.from(entry.value);
+      }
+    }
+
+    if (updatedShares.isNotEmpty) {
+      for (final entry in updatedShares.entries) {
+        final mgrKey = entry.key;
+        final grant = Map<String, dynamic>.from(entry.value as Map);
+        bool? targetShare;
+        if (perManagerShare != null) {
+          if (perManagerShare.containsKey(mgrKey)) {
+            targetShare = perManagerShare[mgrKey];
+          }
+        } else if (managerKey != null) {
+          if (mgrKey == managerKey) {
+            targetShare = share;
+          }
+        } else {
+          targetShare = share;
+        }
+
+        if (targetShare != null) {
+          final mode = (grant['mode'] ?? grant['duration'] ?? '').toString();
+          List<dynamic> grantExcluded =
+              List<dynamic>.from(grant['excluded_dates'] ?? []);
+          List<dynamic> grantCustom =
+              List<dynamic>.from(grant['custom_dates'] ?? []);
+
+          if (mode == 'Yo Decido') {
+            if (targetShare) {
+              if (!grantCustom.contains(dateKey)) grantCustom.add(dateKey);
+              if (shiftId != null && !grantCustom.contains(shiftId)) {
+                grantCustom.add(shiftId);
+              }
+              grantExcluded.removeWhere((e) =>
+                  e.toString() == dateKey ||
+                  (shiftId != null && e.toString() == shiftId));
+            } else {
+              grantCustom.removeWhere((e) =>
+                  e.toString() == dateKey ||
+                  (shiftId != null && e.toString() == shiftId));
+              if (!grantExcluded.contains(dateKey)) grantExcluded.add(dateKey);
+              if (shiftId != null && !grantExcluded.contains(shiftId)) {
+                grantExcluded.add(shiftId);
+              }
+            }
+          } else {
+            if (targetShare) {
+              grantExcluded.removeWhere((e) =>
+                  e.toString() == dateKey ||
+                  (shiftId != null && e.toString() == shiftId));
+            } else {
+              if (!grantExcluded.contains(dateKey)) grantExcluded.add(dateKey);
+              if (shiftId != null && !grantExcluded.contains(shiftId)) {
+                grantExcluded.add(shiftId);
+              }
+            }
+          }
+
+          grant['excluded_dates'] = grantExcluded;
+          grant['custom_dates'] = grantCustom;
+          updatedShares[mgrKey] = grant;
+        }
+      }
+    }
+
     final mode = (_activeUnitShareData?['mode'] ??
             _activeUnitShareData?['duration'] ??
             _activeUnitShareData?['timeframe'] ??
@@ -9532,8 +9896,16 @@ class _TelevisaAppState extends State<TelevisaApp> {
     List<dynamic> currentCustom = List<dynamic>.from(
         (_activeUnitShareData!['custom_dates'] as List<dynamic>?) ?? []);
 
+    final bool effectiveTopShare = share ??
+        (perManagerShare != null
+            ? perManagerShare.values.any((v) => v)
+            : updatedShares.entries.any((e) =>
+                _isDateSharedWithSpecificManager(
+                    e.key, e.value as Map<String, dynamic>, date,
+                    shiftId: shiftId)));
+
     if (mode == 'Yo Decido') {
-      if (share) {
+      if (effectiveTopShare) {
         if (!currentCustom.contains(dateKey)) currentCustom.add(dateKey);
         if (shiftId != null && !currentCustom.contains(shiftId)) {
           currentCustom.add(shiftId);
@@ -9551,7 +9923,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         }
       }
     } else {
-      if (share) {
+      if (effectiveTopShare) {
         currentExcluded.removeWhere((e) =>
             e.toString() == dateKey ||
             (shiftId != null && e.toString() == shiftId));
@@ -9563,11 +9935,19 @@ class _TelevisaAppState extends State<TelevisaApp> {
       }
     }
 
-    final updatedData = _sanitizeUnitShareMap({
+    final cleanShares = sanitizeSharesMapForFirestore(updatedShares);
+
+    final Map<String, dynamic> updatedMap = {
       ..._activeUnitShareData!,
       'excluded_dates': currentExcluded,
       'custom_dates': currentCustom,
-    });
+    };
+    if (cleanShares.isNotEmpty) {
+      updatedMap['shares'] = cleanShares;
+      updatedMap['managers'] = cleanShares.values.toList();
+    }
+
+    final updatedData = _sanitizeUnitShareMap(updatedMap);
 
     if (mounted) {
       setState(() {
@@ -9580,15 +9960,21 @@ class _TelevisaAppState extends State<TelevisaApp> {
     await prefs.setString(cacheKey, jsonEncode(updatedData));
 
     try {
+      final firestoreUpdate = <String, dynamic>{
+        'excluded_dates': currentExcluded,
+        'custom_dates': currentCustom,
+        'updated_at': FieldValue.serverTimestamp(),
+      };
+      if (cleanShares.isNotEmpty) {
+        firestoreUpdate['shares'] = cleanShares;
+        firestoreUpdate['managers'] = cleanShares.values.toList();
+      }
       await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .collection('settings')
           .doc('unit_share')
-          .set({
-        'excluded_dates': currentExcluded,
-        'custom_dates': currentCustom,
-      }, SetOptions(merge: true));
+          .set(firestoreUpdate, SetOptions(merge: true));
 
       await _syncShiftsToUnitManager();
     } catch (e) {
@@ -9601,38 +9987,166 @@ class _TelevisaAppState extends State<TelevisaApp> {
       return const SizedBox.shrink();
     }
 
-    final bool isShared = _isDateSharedWithManager(date, shiftId: shiftId);
-    final String managerName =
-        (_activeUnitShareData?['manager_name'] ?? 'Ingeniero de Unidad')
-            .toString();
-    final String mode = (_activeUnitShareData?['mode'] ??
-            _activeUnitShareData?['duration'] ??
-            '')
-        .toString();
+    final activeGrants = _getActiveShareGrants();
+    if (activeGrants.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     final Color primaryColor =
         _isDarkMode ? Colors.cyanAccent : const Color(0xFF0284C7);
     final Color cardBg = _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
-    final Color borderColor = isShared
-        ? (_isDarkMode
-            ? Colors.cyanAccent.withAlpha(90)
-            : const Color(0xFF0284C7).withAlpha(120))
-        : (_isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0));
+    final Color borderColor =
+        _isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
+    final Color textColor =
+        _isDarkMode ? Colors.white : const Color(0xFF0F172A);
+    final Color subtextColor =
+        _isDarkMode ? Colors.white60 : const Color(0xFF64748B);
 
-    final String statusSubtitle = isShared
-        ? "Visible para $managerName"
-        : (mode == 'Yo Decido'
-            ? "Oculto para $managerName (Modo Yo Decido)"
-            : "Excluido para $managerName");
+    if (activeGrants.length == 1) {
+      final entry = activeGrants.entries.first;
+      final mgrKey = entry.key;
+      final grant = entry.value;
+      final isShared = _isDateSharedWithSpecificManager(
+        mgrKey,
+        grant,
+        date,
+        shiftId: shiftId,
+      );
+      final String managerName =
+          (grant['manager_name'] ?? 'Ingeniero de Unidad').toString();
+      final String mode =
+          (grant['mode'] ?? grant['duration'] ?? '').toString();
 
+      final Color singleBorderColor = isShared
+          ? (_isDarkMode
+              ? Colors.cyanAccent.withAlpha(90)
+              : const Color(0xFF0284C7).withAlpha(120))
+          : borderColor;
+
+      final String statusSubtitle = isShared
+          ? "Visible para $managerName"
+          : (mode == 'Yo Decido'
+              ? "Oculto para $managerName (Modo Yo Decido)"
+              : "Excluido para $managerName");
+
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(top: 14, bottom: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(14),
+          border:
+              Border.all(color: singleBorderColor, width: isShared ? 1.4 : 1.0),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(_isDarkMode ? 30 : 8),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: isShared
+                    ? primaryColor.withAlpha(_isDarkMode ? 40 : 25)
+                    : (_isDarkMode
+                        ? Colors.white.withAlpha(12)
+                        : const Color(0xFFF1F5F9)),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                isShared ? Icons.share_rounded : Icons.visibility_off_outlined,
+                color: isShared
+                    ? primaryColor
+                    : (_isDarkMode ? Colors.white38 : const Color(0xFF94A3B8)),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        "Compartir turno de hoy",
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: isShared
+                              ? Colors.green.withAlpha(_isDarkMode ? 40 : 30)
+                              : Colors.grey.withAlpha(_isDarkMode ? 40 : 30),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          isShared ? "COMPARTIDO" : "NO COMPARTIDO",
+                          style: TextStyle(
+                            color: isShared
+                                ? (_isDarkMode
+                                    ? Colors.greenAccent
+                                    : const Color(0xFF16A34A))
+                                : (_isDarkMode
+                                    ? Colors.white60
+                                    : const Color(0xFF64748B)),
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    statusSubtitle,
+                    style: TextStyle(
+                      color: subtextColor,
+                      fontSize: 11.5,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Switch.adaptive(
+              value: isShared,
+              activeColor: primaryColor,
+              onChanged: (val) async {
+                await _toggleUnitShareForDate(
+                  date: date,
+                  shiftId: shiftId,
+                  managerKey: mgrKey,
+                  share: val,
+                );
+              },
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Multiple active managers
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(top: 14, bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor, width: isShared ? 1.4 : 1.0),
+        border: Border.all(color: borderColor, width: 1.0),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withAlpha(_isDarkMode ? 30 : 8),
@@ -9641,93 +10155,167 @@ class _TelevisaAppState extends State<TelevisaApp> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: isShared
-                  ? primaryColor.withAlpha(_isDarkMode ? 40 : 25)
-                  : (_isDarkMode
-                      ? Colors.white.withAlpha(12)
-                      : const Color(0xFFF1F5F9)),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isShared ? Icons.share_rounded : Icons.visibility_off_outlined,
-              color: isShared
-                  ? primaryColor
-                  : (_isDarkMode ? Colors.white38 : const Color(0xFF94A3B8)),
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: primaryColor.withAlpha(_isDarkMode ? 40 : 25),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.share_rounded,
+                  color: primaryColor,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       "Compartir turno de hoy",
                       style: TextStyle(
-                        color: _isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                        color: textColor,
                         fontWeight: FontWeight.bold,
                         fontSize: 13.5,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: isShared
-                            ? Colors.green.withAlpha(_isDarkMode ? 40 : 30)
-                            : Colors.grey.withAlpha(_isDarkMode ? 40 : 30),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Text(
-                        isShared ? "COMPARTIDO" : "NO COMPARTIDO",
-                        style: TextStyle(
-                          color: isShared
-                              ? (_isDarkMode
-                                  ? Colors.greenAccent
-                                  : const Color(0xFF16A34A))
-                              : (_isDarkMode
-                                  ? Colors.white60
-                                  : const Color(0xFF64748B)),
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.bold,
-                        ),
+                    Text(
+                      "Visibilidad por supervisor (${activeGrants.length} activos)",
+                      style: TextStyle(
+                        color: subtextColor,
+                        fontSize: 11,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  statusSubtitle,
-                  style: TextStyle(
-                    color:
-                        _isDarkMode ? Colors.white60 : const Color(0xFF64748B),
-                    fontSize: 11.5,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Divider(
+            height: 1,
+            color: _isDarkMode ? Colors.white12 : const Color(0xFFF1F5F9),
+          ),
+          const SizedBox(height: 8),
+          ...activeGrants.entries.map((entry) {
+            final mgrKey = entry.key;
+            final grant = entry.value;
+            final isShared = _isDateSharedWithSpecificManager(
+              mgrKey,
+              grant,
+              date,
+              shiftId: shiftId,
+            );
+            final String mgrName =
+                (grant['manager_name'] ?? 'Ingeniero').toString();
+            final String mgrEmp = (grant['manager_emp'] ?? '').toString();
+            final String initial = mgrName.isNotEmpty
+                ? mgrName.substring(0, 1).toUpperCase()
+                : 'I';
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: isShared
+                        ? primaryColor.withAlpha(_isDarkMode ? 45 : 30)
+                        : (_isDarkMode
+                            ? Colors.white12
+                            : const Color(0xFFE2E8F0)),
+                    child: Text(
+                      initial,
+                      style: TextStyle(
+                        color: isShared
+                            ? primaryColor
+                            : (_isDarkMode
+                                ? Colors.white60
+                                : const Color(0xFF64748B)),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11.5,
+                      ),
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          Switch.adaptive(
-            value: isShared,
-            activeColor: primaryColor,
-            onChanged: (val) async {
-              await _toggleUnitShareForDate(
-                date: date,
-                shiftId: shiftId,
-                share: val,
-              );
-            },
-          ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                mgrName,
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12.5,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: isShared
+                                    ? Colors.green
+                                        .withAlpha(_isDarkMode ? 40 : 30)
+                                    : Colors.grey
+                                        .withAlpha(_isDarkMode ? 40 : 30),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                isShared ? "COMPARTIDO" : "NO COMPARTIDO",
+                                style: TextStyle(
+                                  color: isShared
+                                      ? (_isDarkMode
+                                          ? Colors.greenAccent
+                                          : const Color(0xFF16A34A))
+                                      : subtextColor,
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (mgrEmp.isNotEmpty)
+                          Text(
+                            "No. Emp: $mgrEmp",
+                            style: TextStyle(
+                              color: subtextColor,
+                              fontSize: 10.5,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Switch.adaptive(
+                    value: isShared,
+                    activeColor: primaryColor,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: (val) async {
+                      await _toggleUnitShareForDate(
+                        date: date,
+                        shiftId: shiftId,
+                        managerKey: mgrKey,
+                        share: val,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            );
+          }),
         ],
       ),
     );
@@ -9750,6 +10338,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
             _activeUnitShareData?['duration'] ??
             'Esta Semana')
         .toString();
+    final rawShares = _activeUnitShareData?['shares'];
+    final rawManagers = _activeUnitShareData?['managers'];
+    final int managersCount = (rawShares is Map && rawShares.isNotEmpty)
+        ? rawShares.length
+        : ((rawManagers is List && rawManagers.isNotEmpty)
+            ? rawManagers.length
+            : (managerName.isNotEmpty ? 1 : 0));
 
     return Container(
       width: double.infinity,
@@ -9844,8 +10439,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       const SizedBox(height: 4),
                       Text(
                         isActive
-                            ? "Compartiendo con $managerName ($mode)"
-                            : "Concede acceso temporal a tu Ingeniero de Unidad",
+                            ? (managersCount > 1
+                                ? "Compartiendo con $managersCount ingenieros de unidad"
+                                : "Compartiendo con $managerName ($mode)")
+                            : "Comparte tus horarios de forma segura. Tú decides qué datos mostrar y cuándo dejar de compartir.",
                         style: TextStyle(
                           color: subtextColor,
                           fontSize: 13,
@@ -9869,43 +10466,163 @@ class _TelevisaAppState extends State<TelevisaApp> {
     );
   }
 
-
-
-
-
-
-
-
   Future<void> _syncShiftsToUnitManager() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     if (!_isUnitShareActive || _activeUnitShareData == null) return;
 
-    final rawUntil = _activeUnitShareData!['active_sharing_until'];
-    DateTime? activeUntil;
-    if (rawUntil is Timestamp) {
-      activeUntil = rawUntil.toDate();
-    } else if (rawUntil is DateTime) {
-      activeUntil = rawUntil;
-    } else if (rawUntil is String) {
-      activeUntil = DateTime.tryParse(rawUntil);
+    final now = DateTime.now();
+
+    // Find last clock out
+    Timestamp? lastClockOut;
+    final completed = _weeklyHistory
+        .where((d) => !d.isInProgress && !d.esFalta)
+        .toList();
+    if (completed.isNotEmpty) {
+      completed.sort((a, b) => b.salida.compareTo(a.salida));
+      lastClockOut = Timestamp.fromDate(completed.first.salida);
     }
 
-    if (activeUntil == null || DateTime.now().isAfter(activeUntil)) {
-      return;
-    }
-
-    final String managerUid =
-        (_activeUnitShareData!['manager_uid'] ?? _activeUnitShareData!['uid'] ?? '')
-            .toString()
+    final String memberName =
+        "${_firstNameController.text.trim()} ${_lastNameController.text.trim()}"
             .trim();
-    final String managerDocId =
-        (_activeUnitShareData!['manager_doc_id'] ?? '').toString().trim();
-    final String managerEmp =
-        (_activeUnitShareData!['manager_emp'] ?? '').toString().trim();
-    if (managerUid.isEmpty && managerDocId.isEmpty) return;
+    final String memberEmp = _userEmpNoController.text.trim();
 
     try {
+      // 1. Independent shares structure
+      final rawShares = _activeUnitShareData!['shares'];
+      if (rawShares is Map && rawShares.isNotEmpty) {
+        for (final entry in rawShares.entries) {
+          final grant = Map<String, dynamic>.from(entry.value as Map);
+          final activeUntil = parseUnitShareDate(grant['active_sharing_until']);
+          final isExpired =
+              activeUntil != null && now.isAfter(activeUntil);
+          if (grant['is_active'] == false || isExpired) continue;
+
+          final String mUid =
+              (grant['manager_uid'] ?? entry.key).toString().trim();
+          final String mDocId =
+              (grant['manager_doc_id'] ?? '').toString().trim();
+          final String mEmp = (grant['manager_emp'] ?? '').toString().trim();
+          if (mUid.isEmpty && mDocId.isEmpty && mEmp.isEmpty) continue;
+
+          final String mode =
+              (grant['mode'] ?? grant['duration'] ?? 'Esta Semana').toString();
+          final bool shareEntry = grant['share_entry'] ?? true;
+          final bool shareExit = grant['share_exit'] ?? true;
+          final bool shareRealEntry = grant['share_real_entry'] == true;
+          final bool shareNotes = grant['share_notes'] == true;
+          final customDates = parseUnitShareStringSet(grant['custom_dates']);
+          final excludedDates = parseUnitShareStringSet(grant['excluded_dates']);
+
+          final List<WorkDay> relevantShifts = filterWorkDaysForUnitShare(
+            _weeklyHistory,
+            mode: mode,
+            activeUntil: activeUntil,
+            customDates: customDates,
+            excludedDates: excludedDates,
+            now: now,
+          );
+
+          final List<Map<String, dynamic>> sanitizedShifts =
+              sanitizeWorkDaysForUnitShare(
+            relevantShifts,
+            shareEntry: shareEntry,
+            shareExit: shareExit,
+            shareRealEntry: shareRealEntry,
+            shareNotes: shareNotes,
+          );
+
+          final memberData = {
+            'member_name': memberName.isNotEmpty
+                ? memberName
+                : (user.displayName ?? 'Sin nombre'),
+            'member_emp': memberEmp,
+            'mode': mode,
+            'duration': mode,
+            'timeframe': mode,
+            'active_sharing_until': activeUntil != null
+                ? Timestamp.fromDate(activeUntil)
+                : null,
+            'share_entry': shareEntry,
+            'share_exit': shareExit,
+            'share_real_entry': shareRealEntry,
+            'share_notes': shareNotes,
+            'shifts': sanitizedShifts,
+            'last_clock_out': lastClockOut,
+            'last_synced_at': FieldValue.serverTimestamp(),
+          };
+
+          if (mUid.isNotEmpty) {
+            await FirebaseFirestore.instance
+                .collection('unit_shares')
+                .doc(mUid)
+                .collection('members')
+                .doc(user.uid)
+                .set(memberData, SetOptions(merge: true));
+          }
+          if (mDocId.isNotEmpty && mDocId != mUid) {
+            await FirebaseFirestore.instance
+                .collection('unit_shares')
+                .doc(mDocId)
+                .collection('members')
+                .doc(user.uid)
+                .set(memberData, SetOptions(merge: true));
+          }
+          if (mEmp.isNotEmpty && mEmp != mUid && mEmp != mDocId) {
+            await FirebaseFirestore.instance
+                .collection('unit_shares')
+                .doc(mEmp)
+                .collection('members')
+                .doc(user.uid)
+                .set(memberData, SetOptions(merge: true));
+          }
+        }
+        return;
+      }
+
+      // 2. Fallback legacy structure
+      final rawUntil = _activeUnitShareData!['active_sharing_until'];
+      final activeUntil = parseUnitShareDate(rawUntil);
+      if (activeUntil != null && now.isAfter(activeUntil)) {
+        return;
+      }
+
+      final List<Map<String, dynamic>> targetManagers = [];
+      final rawManagers = _activeUnitShareData!['managers'];
+      if (rawManagers is List && rawManagers.isNotEmpty) {
+        for (final m in rawManagers) {
+          if (m is Map) {
+            targetManagers.add(Map<String, dynamic>.from(m));
+          }
+        }
+      }
+      if (targetManagers.isEmpty) {
+        final legacyUid = (_activeUnitShareData!['manager_uid'] ??
+                _activeUnitShareData!['uid'] ??
+                '')
+            .toString()
+            .trim();
+        final legacyDocId =
+            (_activeUnitShareData!['manager_doc_id'] ?? '').toString().trim();
+        final legacyEmp =
+            (_activeUnitShareData!['manager_emp'] ?? '').toString().trim();
+        final legacyName =
+            (_activeUnitShareData!['manager_name'] ?? '').toString().trim();
+        if (legacyUid.isNotEmpty ||
+            legacyDocId.isNotEmpty ||
+            legacyEmp.isNotEmpty) {
+          targetManagers.add({
+            'uid': legacyUid,
+            'doc_id': legacyDocId,
+            'emp': legacyEmp,
+            'name': legacyName,
+          });
+        }
+      }
+
+      if (targetManagers.isEmpty) return;
+
       final bool shareEntry = _activeUnitShareData!['share_entry'] ?? true;
       final bool shareExit = _activeUnitShareData!['share_exit'] ?? true;
       final bool shareRealEntry =
@@ -9917,7 +10634,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
               'Esta Semana')
           .toString();
 
-      final now = DateTime.now();
       final excludedDates =
           parseUnitShareStringSet(_activeUnitShareData!['excluded_dates']);
       final customDates =
@@ -9932,16 +10648,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
         now: now,
       );
 
-      // Find last clock out
-      Timestamp? lastClockOut;
-      final completed = _weeklyHistory
-          .where((d) => !d.isInProgress && !d.esFalta)
-          .toList();
-      if (completed.isNotEmpty) {
-        completed.sort((a, b) => b.salida.compareTo(a.salida));
-        lastClockOut = Timestamp.fromDate(completed.first.salida);
-      }
-
       final List<Map<String, dynamic>> sanitizedShifts =
           sanitizeWorkDaysForUnitShare(
         relevantShifts,
@@ -9951,62 +10657,58 @@ class _TelevisaAppState extends State<TelevisaApp> {
         shareNotes: shareNotes,
       );
 
-      final String memberName =
-          "${_firstNameController.text.trim()} ${_lastNameController.text.trim()}"
-              .trim();
-      final String memberEmp = _userEmpNoController.text.trim();
+      final memberData = {
+        'member_name': memberName.isNotEmpty
+            ? memberName
+            : (user.displayName ?? 'Sin nombre'),
+        'member_emp': memberEmp,
+        'mode': mode,
+        'duration': mode,
+        'timeframe': mode,
+        'active_sharing_until': activeUntil != null
+            ? Timestamp.fromDate(activeUntil)
+            : null,
+        'share_entry': shareEntry,
+        'share_exit': shareExit,
+        'share_real_entry': shareRealEntry,
+        'share_notes': shareNotes,
+        'shifts': sanitizedShifts,
+        'last_clock_out': lastClockOut,
+        'last_synced_at': FieldValue.serverTimestamp(),
+      };
 
-      if (managerUid.isNotEmpty) {
-        await FirebaseFirestore.instance
-            .collection('unit_shares')
-            .doc(managerUid)
-            .collection('members')
-            .doc(user.uid)
-            .set({
-          'member_name': memberName.isNotEmpty
-              ? memberName
-              : (user.displayName ?? 'Sin nombre'),
-          'member_emp': memberEmp,
-          'shifts': sanitizedShifts,
-          'last_clock_out': lastClockOut,
-          'last_synced_at': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
+      for (final mgr in targetManagers) {
+        final String mUid = (mgr['uid'] ?? '').toString().trim();
+        final String mDocId = (mgr['doc_id'] ?? '').toString().trim();
+        final String mEmp =
+            (mgr['emp'] ?? mgr['employee_number'] ?? '').toString().trim();
 
-      if (managerDocId.isNotEmpty && managerDocId != managerUid) {
-        await FirebaseFirestore.instance
-            .collection('unit_shares')
-            .doc(managerDocId)
-            .collection('members')
-            .doc(user.uid)
-            .set({
-          'member_name': memberName.isNotEmpty
-              ? memberName
-              : (user.displayName ?? 'Sin nombre'),
-          'member_emp': memberEmp,
-          'shifts': sanitizedShifts,
-          'last_clock_out': lastClockOut,
-          'last_synced_at': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-      }
+        if (mUid.isNotEmpty) {
+          await FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(mUid)
+              .collection('members')
+              .doc(user.uid)
+              .set(memberData, SetOptions(merge: true));
+        }
 
-      if (managerEmp.isNotEmpty &&
-          managerEmp != managerUid &&
-          managerEmp != managerDocId) {
-        await FirebaseFirestore.instance
-            .collection('unit_shares')
-            .doc(managerEmp)
-            .collection('members')
-            .doc(user.uid)
-            .set({
-          'member_name': memberName.isNotEmpty
-              ? memberName
-              : (user.displayName ?? 'Sin nombre'),
-          'member_emp': memberEmp,
-          'shifts': sanitizedShifts,
-          'last_clock_out': lastClockOut,
-          'last_synced_at': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
+        if (mDocId.isNotEmpty && mDocId != mUid) {
+          await FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(mDocId)
+              .collection('members')
+              .doc(user.uid)
+              .set(memberData, SetOptions(merge: true));
+        }
+
+        if (mEmp.isNotEmpty && mEmp != mUid && mEmp != mDocId) {
+          await FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(mEmp)
+              .collection('members')
+              .doc(user.uid)
+              .set(memberData, SetOptions(merge: true));
+        }
       }
     } catch (e) {
       debugPrint("Error in _syncShiftsToUnitManager: $e");
@@ -11247,7 +11949,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     color: _isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.15.0 28/10/26",
+            Text("Versión v.23.16.0 03/11/26",
                 style: TextStyle(
                     color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
                     fontSize: 14)),
@@ -12311,75 +13013,109 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 ),
                 if (_isUnitShareActive && _activeUnitShareData != null) ...[
                   const SizedBox(height: 6),
-                  Builder(
-                    builder: (context) {
-                      final bool isShared = _isDateSharedWithManager(
-                        day.entrada,
-                        shiftId: day.id,
-                      );
-                      final String managerName = (_activeUnitShareData!['manager_name'] ??
-                              _activeUnitShareData!['name'] ??
-                              'Ingeniero de Unidad')
-                          .toString()
-                          .trim();
+                  StatefulBuilder(
+                    builder: (modalCtx, setModalState) {
+                      final activeGrants = _getActiveShareGrants();
+                      if (activeGrants.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
 
-                      final Color badgeColor = isShared
-                          ? (_isDarkMode
-                              ? Colors.cyanAccent
-                              : const Color(0xFF0284C7))
-                          : (_isDarkMode
-                              ? Colors.white60
-                              : const Color(0xFF64748B));
-                      final Color badgeBg = isShared
-                          ? (_isDarkMode
-                              ? Colors.cyanAccent.withAlpha(35)
-                              : const Color(0xFFE0F2FE))
-                          : (_isDarkMode
-                              ? Colors.white10
-                              : const Color(0xFFF1F5F9));
-                      final Color badgeBorder = isShared
-                          ? (_isDarkMode
-                              ? Colors.cyanAccent.withAlpha(90)
-                              : const Color(0xFF7DD3FC))
-                          : (_isDarkMode
-                              ? Colors.white12
-                              : const Color(0xFFCBD5E1));
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: activeGrants.entries.map((entry) {
+                          final mgrKey = entry.key;
+                          final grant = entry.value;
+                          final bool isShared = _isDateSharedWithSpecificManager(
+                            mgrKey,
+                            grant,
+                            day.entrada,
+                            shiftId: day.id,
+                          );
+                          final String mgrName = (grant['manager_name'] ??
+                                  grant['name'] ??
+                                  'Ingeniero de Unidad')
+                              .toString()
+                              .trim();
 
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: badgeBg,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: badgeBorder),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isShared
-                                  ? Icons.share_rounded
-                                  : Icons.visibility_off_rounded,
-                              size: 13,
-                              color: badgeColor,
+                          final Color badgeColor = isShared
+                              ? (_isDarkMode
+                                  ? Colors.cyanAccent
+                                  : const Color(0xFF0284C7))
+                              : (_isDarkMode
+                                  ? Colors.white60
+                                  : const Color(0xFF64748B));
+                          final Color badgeBg = isShared
+                              ? (_isDarkMode
+                                  ? Colors.cyanAccent.withAlpha(35)
+                                  : const Color(0xFFE0F2FE))
+                              : (_isDarkMode
+                                  ? Colors.white10
+                                  : const Color(0xFFF1F5F9));
+                          final Color badgeBorder = isShared
+                              ? (_isDarkMode
+                                  ? Colors.cyanAccent.withAlpha(90)
+                                  : const Color(0xFF7DD3FC))
+                              : (_isDarkMode
+                                  ? Colors.white12
+                                  : const Color(0xFFCBD5E1));
+
+                          return Container(
+                            margin: const EdgeInsets.only(top: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: badgeBg,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: badgeBorder),
                             ),
-                            const SizedBox(width: 5),
-                            Flexible(
-                              child: Text(
-                                isShared
-                                    ? "Compartido con $managerName"
-                                    : "No compartido",
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isShared
+                                      ? Icons.share_rounded
+                                      : Icons.visibility_off_rounded,
+                                  size: 14,
                                   color: badgeColor,
                                 ),
-                              ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    isShared
+                                        ? "Compartido con $mgrName"
+                                        : "No compartido con $mgrName",
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: badgeColor,
+                                    ),
+                                  ),
+                                ),
+                                SizedBox(
+                                  height: 24,
+                                  child: Switch.adaptive(
+                                    value: isShared,
+                                    activeColor: badgeColor,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
+                                    onChanged: (val) async {
+                                      await _toggleUnitShareForDate(
+                                        date: day.entrada,
+                                        shiftId: day.id,
+                                        managerKey: mgrKey,
+                                        share: val,
+                                      );
+                                      if (mounted) {
+                                        setModalState(() {});
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          );
+                        }).toList(),
                       );
                     },
                   ),
@@ -12881,11 +13617,25 @@ class _TelevisaAppState extends State<TelevisaApp> {
     WorkDay day = _weeklyHistory[existingIndex];
 
     final bool canShare = _isUnitShareActive && _activeUnitShareData != null;
+    final activeGrants =
+        canShare ? _getActiveShareGrants() : <String, Map<String, dynamic>>{};
     final String managerName =
         (_activeUnitShareData?['manager_name'] ?? 'Ingeniero de Unidad')
             .toString();
     final bool initialShare =
         canShare ? _isDateSharedWithManager(day.entrada, shiftId: day.id) : true;
+
+    final Map<String, bool> initialShareMap = {};
+    if (canShare && activeGrants.isNotEmpty) {
+      for (final entry in activeGrants.entries) {
+        initialShareMap[entry.key] = _isDateSharedWithSpecificManager(
+          entry.key,
+          entry.value,
+          day.entrada,
+          shiftId: day.id,
+        );
+      }
+    }
 
     final _EditWorkDayResult? result = await showDialog<_EditWorkDayResult>(
       context: context,
@@ -12896,6 +13646,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
         canShare: canShare,
         initialShare: initialShare,
         managerName: managerName,
+        activeGrants: activeGrants,
+        initialShareMap: initialShareMap,
         onPickTime: (ctx, {required initialTime, title}) =>
             _showScrollTimePicker(ctx, initialTime: initialTime, title: title),
       ),
@@ -12920,14 +13672,33 @@ class _TelevisaAppState extends State<TelevisaApp> {
     await _saveData();
     _syncTodayStateFromHistory();
 
-    if (canShare && result.share != initialShare) {
-      await _toggleUnitShareForDate(
-        date: day.entrada,
-        shiftId: day.id,
-        share: result.share,
-      );
-    } else if (canShare) {
-      await _syncShiftsToUnitManager();
+    if (canShare) {
+      if (result.perManagerShare != null) {
+        bool changed = false;
+        for (final entry in result.perManagerShare!.entries) {
+          if (initialShareMap[entry.key] != entry.value) {
+            changed = true;
+            break;
+          }
+        }
+        if (changed) {
+          await _toggleUnitShareForDate(
+            date: day.entrada,
+            shiftId: day.id,
+            perManagerShare: result.perManagerShare,
+          );
+        } else {
+          await _syncShiftsToUnitManager();
+        }
+      } else if (result.share != initialShare) {
+        await _toggleUnitShareForDate(
+          date: day.entrada,
+          shiftId: day.id,
+          share: result.share,
+        );
+      } else {
+        await _syncShiftsToUnitManager();
+      }
     }
 
     if (mounted) {
@@ -13096,6 +13867,7 @@ class _EditWorkDayResult {
   final bool share;
   final bool isInProgress;
   final bool timesModified;
+  final Map<String, bool>? perManagerShare;
 
   const _EditWorkDayResult({
     required this.entrada,
@@ -13105,8 +13877,12 @@ class _EditWorkDayResult {
     required this.share,
     required this.isInProgress,
     required this.timesModified,
+    this.perManagerShare,
   });
 }
+
+
+
 
 class _EditWorkDayDialog extends StatefulWidget {
   final WorkDay day;
@@ -13114,6 +13890,8 @@ class _EditWorkDayDialog extends StatefulWidget {
   final bool canShare;
   final bool initialShare;
   final String managerName;
+  final Map<String, Map<String, dynamic>>? activeGrants;
+  final Map<String, bool>? initialShareMap;
   final Future<TimeOfDay?> Function(
     BuildContext context, {
     required TimeOfDay initialTime,
@@ -13126,6 +13904,8 @@ class _EditWorkDayDialog extends StatefulWidget {
     required this.canShare,
     required this.initialShare,
     required this.managerName,
+    this.activeGrants,
+    this.initialShareMap,
     required this.onPickTime,
   });
 
@@ -13140,6 +13920,7 @@ class _EditWorkDayDialogState extends State<_EditWorkDayDialog> {
   late TextEditingController _notesController;
   late bool _share;
   late bool _isInProgress;
+  late Map<String, bool> _managerShares;
 
   @override
   void initState() {
@@ -13150,6 +13931,9 @@ class _EditWorkDayDialogState extends State<_EditWorkDayDialog> {
     _notesController = TextEditingController(text: widget.day.notas);
     _share = widget.initialShare;
     _isInProgress = widget.day.isInProgress;
+    _managerShares = widget.initialShareMap != null
+        ? Map<String, bool>.from(widget.initialShareMap!)
+        : {};
   }
 
   @override
@@ -13163,7 +13947,14 @@ class _EditWorkDayDialogState extends State<_EditWorkDayDialog> {
     if (!_isInProgress && _salida != widget.day.salida) return true;
     if (_entradaReal != widget.day.entradaReal) return true;
     if (_notesController.text.trim() != widget.day.notas.trim()) return true;
-    if (widget.canShare && _share != widget.initialShare) return true;
+    if (widget.canShare) {
+      if (_share != widget.initialShare) return true;
+      if (widget.initialShareMap != null) {
+        for (final entry in _managerShares.entries) {
+          if (widget.initialShareMap![entry.key] != entry.value) return true;
+        }
+      }
+    }
     if (_isInProgress != widget.day.isInProgress) return true;
     return false;
   }
@@ -13253,6 +14044,7 @@ class _EditWorkDayDialogState extends State<_EditWorkDayDialog> {
       share: _share,
       isInProgress: _isInProgress,
       timesModified: _timesModified,
+      perManagerShare: _managerShares.isNotEmpty ? _managerShares : null,
     ));
   }
 
@@ -13586,109 +14378,254 @@ class _EditWorkDayDialogState extends State<_EditWorkDayDialog> {
 
                 // Manager Share Toggle (if canShare is true)
                 if (widget.canShare) ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: fieldBg,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _share
-                            ? (isDark
-                                ? Colors.cyanAccent.withAlpha(90)
-                                : const Color(0xFF0284C7).withAlpha(120))
-                            : borderColor,
-                        width: _share ? 1.4 : 1.0,
+                  if (widget.activeGrants != null &&
+                      widget.activeGrants!.length > 1) ...[
+                    Text(
+                      "COMPARTIR CON SUPERVISORES",
+                      style: TextStyle(
+                        color: subtextColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(7),
-                          decoration: BoxDecoration(
-                            color: _share
-                                ? primaryColor.withAlpha(isDark ? 40 : 25)
-                                : (isDark ? Colors.white12 : Colors.white),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            _share
-                                ? Icons.share_rounded
-                                : Icons.visibility_off_outlined,
-                            color: _share ? primaryColor : subtextColor,
-                            size: 18,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Text(
-                                    "Compartir con ${widget.managerName}",
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: fieldBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: widget.activeGrants!.entries.map((entry) {
+                          final mgrKey = entry.key;
+                          final grant = entry.value;
+                          final mgrName = (grant['manager_name'] ?? 'Ingeniero')
+                              .toString();
+                          final mgrEmp =
+                              (grant['manager_emp'] ?? '').toString();
+                          final bool isMgrShared =
+                              _managerShares[mgrKey] ?? false;
+
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 13,
+                                  backgroundColor: isMgrShared
+                                      ? primaryColor.withAlpha(isDark ? 45 : 30)
+                                      : (isDark
+                                          ? Colors.white12
+                                          : const Color(0xFFE2E8F0)),
+                                  child: Text(
+                                    mgrName.isNotEmpty
+                                        ? mgrName.substring(0, 1).toUpperCase()
+                                        : 'I',
                                     style: TextStyle(
-                                      color: textColor,
+                                      color: isMgrShared
+                                          ? primaryColor
+                                          : subtextColor,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 12.5,
+                                      fontSize: 11,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(width: 6),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 5, vertical: 1.5),
-                                    decoration: BoxDecoration(
-                                      color: _share
-                                          ? Colors.green
-                                              .withAlpha(isDark ? 40 : 30)
-                                          : Colors.grey
-                                              .withAlpha(isDark ? 40 : 30),
-                                      borderRadius: BorderRadius.circular(5),
-                                    ),
-                                    child: Text(
-                                      _share ? "COMPARTIDO" : "NO COMPARTIDO",
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              mgrName,
+                                              style: TextStyle(
+                                                color: textColor,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 5),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: isMgrShared
+                                                  ? Colors.green.withAlpha(
+                                                      isDark ? 40 : 30)
+                                                  : Colors.grey.withAlpha(
+                                                      isDark ? 40 : 30),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              isMgrShared
+                                                  ? "COMPARTIDO"
+                                                  : "NO COMPARTIDO",
+                                              style: TextStyle(
+                                                color: isMgrShared
+                                                    ? (isDark
+                                                        ? Colors.greenAccent
+                                                        : const Color(
+                                                            0xFF16A34A))
+                                                    : subtextColor,
+                                                fontSize: 8,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      if (mgrEmp.isNotEmpty)
+                                        Text(
+                                          "No. Emp: $mgrEmp",
+                                          style: TextStyle(
+                                            color: subtextColor,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                                Switch.adaptive(
+                                  value: isMgrShared,
+                                  activeColor: primaryColor,
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _managerShares[mgrKey] = val;
+                                      _share =
+                                          _managerShares.values.any((v) => v);
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: fieldBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: _share
+                              ? (isDark
+                                  ? Colors.cyanAccent.withAlpha(90)
+                                  : const Color(0xFF0284C7).withAlpha(120))
+                              : borderColor,
+                          width: _share ? 1.4 : 1.0,
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                              color: _share
+                                  ? primaryColor.withAlpha(isDark ? 40 : 25)
+                                  : (isDark ? Colors.white12 : Colors.white),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              _share
+                                  ? Icons.share_rounded
+                                  : Icons.visibility_off_outlined,
+                              color: _share ? primaryColor : subtextColor,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      "Compartir con ${widget.managerName}",
                                       style: TextStyle(
-                                        color: _share
-                                            ? (isDark
-                                                ? Colors.greenAccent
-                                                : const Color(0xFF16A34A))
-                                            : subtextColor,
-                                        fontSize: 9,
+                                        color: textColor,
                                         fontWeight: FontWeight.bold,
+                                        fontSize: 12.5,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 5, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: _share
+                                            ? Colors.green
+                                                .withAlpha(isDark ? 40 : 30)
+                                            : Colors.grey
+                                                .withAlpha(isDark ? 40 : 30),
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      child: Text(
+                                        _share ? "COMPARTIDO" : "NO COMPARTIDO",
+                                        style: TextStyle(
+                                          color: _share
+                                              ? (isDark
+                                                  ? Colors.greenAccent
+                                                  : const Color(0xFF16A34A))
+                                              : subtextColor,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                _share
-                                    ? "Visible en reporte de unidad"
-                                    : "Oculto para el reporte",
-                                style: TextStyle(
-                                  color: subtextColor,
-                                  fontSize: 11,
+                                  ],
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 2),
+                                Text(
+                                  _share
+                                      ? "Visible en reporte de unidad"
+                                      : "Oculto para el reporte",
+                                  style: TextStyle(
+                                    color: subtextColor,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        Switch.adaptive(
-                          value: _share,
-                          activeColor: primaryColor,
-                          onChanged: (val) {
-                            setState(() {
-                              _share = val;
-                            });
-                          },
-                        ),
-                      ],
+                          Switch.adaptive(
+                            value: _share,
+                            activeColor: primaryColor,
+                            onChanged: (val) {
+                              setState(() {
+                                _share = val;
+                                if (_managerShares.isNotEmpty) {
+                                  for (final k
+                                      in _managerShares.keys.toList()) {
+                                    _managerShares[k] = val;
+                                  }
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
+                    const SizedBox(height: 18),
+                  ],
                 ],
 
                 // Action buttons
@@ -15142,6 +16079,39 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
   }
 }
 
+/// Recursively sanitizes a value (or nested maps/lists) so that any [FieldValue]
+/// (such as [FieldValue.serverTimestamp()]) is converted into a [Timestamp] before
+/// being placed into Firestore arrays or nested maps.
+dynamic sanitizeForFirestoreArray(dynamic value) {
+  if (value is FieldValue) {
+    return Timestamp.now();
+  }
+  if (value is Map) {
+    final sanitized = <String, dynamic>{};
+    value.forEach((k, v) {
+      sanitized[k.toString()] = sanitizeForFirestoreArray(v);
+    });
+    return sanitized;
+  }
+  if (value is List) {
+    return value.map((item) => sanitizeForFirestoreArray(item)).toList();
+  }
+  return value;
+}
+
+/// Sanitizes a shares map to guarantee that no individual grant contains [FieldValue] instances.
+Map<String, Map<String, dynamic>> sanitizeSharesMapForFirestore(
+    Map<dynamic, dynamic> rawShares) {
+  final result = <String, Map<String, dynamic>>{};
+  rawShares.forEach((key, value) {
+    if (value is Map) {
+      result[key.toString()] =
+          Map<String, dynamic>.from(sanitizeForFirestoreArray(value) as Map);
+    }
+  });
+  return result;
+}
+
 /// Parses a unit-share date/timestamp stored as [Timestamp], [DateTime], or ISO string.
 DateTime? parseUnitShareDate(dynamic raw) {
   if (raw == null) return null;
@@ -15298,6 +16268,94 @@ List<Map<String, dynamic>> sanitizeWorkDaysForUnitShare(
   }).toList();
 }
 
+/// Extracts all active (non-expired and is_active!=false) share grants from a unit_share document.
+Map<String, Map<String, dynamic>> extractActiveSharesFromMap(
+    Map<String, dynamic> data) {
+  final Map<String, Map<String, dynamic>> result = {};
+  final now = DateTime.now();
+
+  final rawShares = data['shares'];
+  if (rawShares is Map && rawShares.isNotEmpty) {
+    for (final entry in rawShares.entries) {
+      if (entry.value is Map) {
+        final grant = Map<String, dynamic>.from(entry.value as Map);
+        final activeUntil = parseUnitShareDate(grant['active_sharing_until']);
+        final isExpired =
+            activeUntil != null && now.isAfter(activeUntil);
+        if (grant['is_active'] != false && !isExpired) {
+          final uid = (grant['manager_uid'] ?? entry.key).toString().trim();
+          if (uid.isNotEmpty) {
+            result[uid] = grant;
+          }
+        }
+      }
+    }
+  }
+
+  if (result.isNotEmpty) return result;
+
+  // Fallback: check 'managers' list or legacy top-level
+  final bool isOverallActive = data['is_active'] == true;
+  final overallActiveUntil = parseUnitShareDate(data['active_sharing_until']);
+  final isOverallExpired =
+      overallActiveUntil != null && now.isAfter(overallActiveUntil);
+
+  if (isOverallActive && !isOverallExpired) {
+    final rawManagers = data['managers'];
+    if (rawManagers is List && rawManagers.isNotEmpty) {
+      for (final m in rawManagers) {
+        if (m is Map) {
+          final uid = (m['uid'] ?? '').toString().trim();
+          if (uid.isNotEmpty) {
+            result[uid] = {
+              'manager_uid': uid,
+              'manager_doc_id': (m['doc_id'] ?? '').toString().trim(),
+              'manager_name':
+                  (m['name'] ?? 'Ingeniero de Unidad').toString().trim(),
+              'manager_emp':
+                  (m['emp'] ?? m['employee_number'] ?? '').toString().trim(),
+              'mode': data['mode'] ?? data['duration'] ?? 'Esta Semana',
+              'active_sharing_until': data['active_sharing_until'],
+              'data_retention_until': data['data_retention_until'],
+              'share_entry': data['share_entry'] ?? true,
+              'share_exit': data['share_exit'] ?? true,
+              'share_real_entry': data['share_real_entry'] == true,
+              'share_notes': data['share_notes'] == true,
+              'custom_dates': data['custom_dates'] ?? [],
+              'excluded_dates': data['excluded_dates'] ?? [],
+              'is_active': true,
+            };
+          }
+        }
+      }
+    }
+    if (result.isEmpty) {
+      final legacyUid =
+          (data['manager_uid'] ?? data['uid'] ?? '').toString().trim();
+      if (legacyUid.isNotEmpty) {
+        result[legacyUid] = {
+          'manager_uid': legacyUid,
+          'manager_doc_id': (data['manager_doc_id'] ?? '').toString().trim(),
+          'manager_name':
+              (data['manager_name'] ?? 'Ingeniero de Unidad').toString().trim(),
+          'manager_emp': (data['manager_emp'] ?? '').toString().trim(),
+          'mode': data['mode'] ?? data['duration'] ?? 'Esta Semana',
+          'active_sharing_until': data['active_sharing_until'],
+          'data_retention_until': data['data_retention_until'],
+          'share_entry': data['share_entry'] ?? true,
+          'share_exit': data['share_exit'] ?? true,
+          'share_real_entry': data['share_real_entry'] == true,
+          'share_notes': data['share_notes'] == true,
+          'custom_dates': data['custom_dates'] ?? [],
+          'excluded_dates': data['excluded_dates'] ?? [],
+          'is_active': true,
+        };
+      }
+    }
+  }
+  return result;
+}
+
 class UnitShareScreen extends StatefulWidget {
   final bool isDarkMode;
   final List<WorkDay>? weeklyHistory;
@@ -15312,21 +16370,35 @@ class UnitShareScreen extends StatefulWidget {
   State<UnitShareScreen> createState() => _UnitShareScreenState();
 }
 
+
 class _UnitShareScreenState extends State<UnitShareScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isUnitShareActive = false;
-  bool _isEditing = false;
   Map<String, dynamic>? _shareData;
 
+  // Active independent shares: managerUid -> grant map
+  Map<String, Map<String, dynamic>> _activeShares = {};
+
+  // For viewing shared shifts under active shares:
+  String? _inspectingManagerUid;
   List<Map<String, dynamic>> _sharedShifts = [];
   StreamSubscription? _memberSubscription;
 
+  // Search controller and state
   final TextEditingController _searchController = TextEditingController();
   Timer? _searchDebounceTimer;
   bool _isSearching = false;
   String? _searchError;
-  Map<String, dynamic>? _selectedManager;
+  List<Map<String, dynamic>> _searchResults = [];
+
+  // Configuration mode:
+  // If active shares exist, we view the active cards list by default (_isConfiguringShare = false).
+  // When adding (+ Compartir con otro Ingeniero) or editing an existing share, _isConfiguringShare = true.
+  // If no active shares exist, _isConfiguringShare is true by default.
+  bool _isConfiguringShare = false;
+  String? _editingManagerUid; // null if adding/new share, managerUid if editing
+  Map<String, dynamic>? _selectedCandidate; // the engineer candidate picked for this configuration
 
   String _selectedMode = 'Esta Semana';
   static const List<String> _unifiedModes = [
@@ -15362,6 +16434,43 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
     _searchDebounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  Map<String, dynamic> _sanitizeUnitShareMap(Map<String, dynamic> data) {
+    final sanitized = <String, dynamic>{};
+    data.forEach((key, value) {
+      if (value is Timestamp) {
+        sanitized[key] = value.toDate().toIso8601String();
+      } else if (value is DateTime) {
+        sanitized[key] = value.toIso8601String();
+      } else if (value is FieldValue) {
+        sanitized[key] = DateTime.now().toIso8601String();
+      } else if (value is Map) {
+        sanitized[key] =
+            _sanitizeUnitShareMap(Map<String, dynamic>.from(value));
+      } else if (value is List) {
+        sanitized[key] = value.map((item) {
+          if (item is Timestamp) {
+            return item.toDate().toIso8601String();
+          } else if (item is DateTime) {
+            return item.toIso8601String();
+          } else if (item is FieldValue) {
+            return DateTime.now().toIso8601String();
+          } else if (item is Map) {
+            return _sanitizeUnitShareMap(Map<String, dynamic>.from(item));
+          }
+          return item;
+        }).toList();
+      } else {
+        sanitized[key] = value;
+      }
+    });
+    return sanitized;
+  }
+
+  Map<String, Map<String, dynamic>> _extractActiveSharesFromMap(
+      Map<String, dynamic> data) {
+    return extractActiveSharesFromMap(data);
   }
 
   Future<void> _loadInitialData() async {
@@ -15408,27 +16517,12 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
       if (cached != null) {
         try {
           final Map<String, dynamic> c = jsonDecode(cached);
-          final untilStr = c['active_sharing_until']?.toString();
-          final activeUntil =
-              untilStr != null ? DateTime.tryParse(untilStr) : null;
-          if (c['is_active'] == true &&
-              activeUntil != null &&
-              !DateTime.now().isAfter(activeUntil)) {
+          final parsedShares = _extractActiveSharesFromMap(c);
+          if (parsedShares.isNotEmpty) {
+            _activeShares = parsedShares;
+            _shareData = _sanitizeUnitShareMap(c);
             _isUnitShareActive = true;
-            _shareData = c;
-            _selectedMode = c['mode'] ?? c['duration'] ?? 'Esta Semana';
-            _shareEntry = c['share_entry'] ?? true;
-            _shareExit = c['share_exit'] ?? true;
-            _shareRealEntry = c['share_real_entry'] == true;
-            _shareNotes = c['share_notes'] == true;
-            final rawExcluded = c['excluded_dates'] as List<dynamic>?;
-            if (rawExcluded != null) {
-              _excludedDates = rawExcluded.map((e) => e.toString()).toSet();
-            }
-            final rawCustom = c['custom_dates'] as List<dynamic>?;
-            if (rawCustom != null) {
-              _customDates = rawCustom.map((e) => e.toString()).toSet();
-            }
+            _isConfiguringShare = false;
           }
         } catch (_) {}
       }
@@ -15442,55 +16536,48 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
 
       if (doc.exists && doc.data() != null) {
         final d = doc.data()!;
-        final bool isActive = d['is_active'] == true;
-        DateTime? activeUntil;
-        if (d['active_sharing_until'] is Timestamp) {
-          activeUntil = (d['active_sharing_until'] as Timestamp).toDate();
-        } else if (d['active_sharing_until'] is String) {
-          activeUntil = DateTime.tryParse(d['active_sharing_until']);
-        }
-
-        final bool isExpired =
-            activeUntil != null && DateTime.now().isAfter(activeUntil);
-
-        if (isActive && !isExpired) {
+        final parsedShares = _extractActiveSharesFromMap(d);
+        if (parsedShares.isNotEmpty) {
+          _activeShares = parsedShares;
+          _shareData = _sanitizeUnitShareMap(d);
           _isUnitShareActive = true;
-          _shareData = d;
-          _selectedMode = d['mode'] ?? d['duration'] ?? 'Esta Semana';
-          _shareEntry = d['share_entry'] ?? true;
-          _shareExit = d['share_exit'] ?? true;
-          _shareRealEntry = d['share_real_entry'] == true;
-          _shareNotes = d['share_notes'] == true;
-          final rawExcluded = d['excluded_dates'] as List<dynamic>?;
-          if (rawExcluded != null) {
-            _excludedDates = rawExcluded.map((e) => e.toString()).toSet();
-          }
-          final rawCustom = d['custom_dates'] as List<dynamic>?;
-          if (rawCustom != null) {
-            _customDates = rawCustom.map((e) => e.toString()).toSet();
+          _isConfiguringShare = false;
+
+          // Self-heal each manager
+          for (final entry in _activeShares.entries) {
+            final grant = entry.value;
+            final mUid = entry.key;
+            final activeUntil = parseUnitShareDate(grant['active_sharing_until']);
+            _healSharedShifts(
+              managerUid: mUid,
+              userUid: user.uid,
+              mode: (grant['mode'] ?? grant['duration'] ?? 'Esta Semana')
+                  .toString(),
+              activeUntil: activeUntil,
+              customDates: parseUnitShareStringSet(grant['custom_dates']),
+              excludedDates: parseUnitShareStringSet(grant['excluded_dates']),
+              shareEntry: grant['share_entry'] ?? true,
+              shareExit: grant['share_exit'] ?? true,
+              shareRealEntry: grant['share_real_entry'] == true,
+              shareNotes: grant['share_notes'] == true,
+            );
           }
 
-          final mgrUid = (d['manager_uid'] ?? d['uid'] ?? '').toString();
-          if (mgrUid.isNotEmpty) {
-            // Self-heal: ensure remote manager doc only holds strictly filtered shifts
-            _healSharedShifts(
-              managerUid: mgrUid,
-              userUid: user.uid,
-              mode: _selectedMode,
-              activeUntil: activeUntil,
-              customDates: _customDates,
-              excludedDates: _excludedDates,
-              shareEntry: _shareEntry,
-              shareExit: _shareExit,
-              shareRealEntry: _shareRealEntry,
-              shareNotes: _shareNotes,
-            );
-            _setupMemberListener(mgrUid, user.uid);
-          }
+          _inspectingManagerUid = _activeShares.keys.first;
+          _setupMemberListener(_inspectingManagerUid!, user.uid);
         } else {
           _isUnitShareActive = false;
           _shareData = null;
+          _activeShares.clear();
+          _isConfiguringShare = true;
+          _selectedCandidate = null;
         }
+      } else {
+        _isUnitShareActive = false;
+        _shareData = null;
+        _activeShares.clear();
+        _isConfiguringShare = true;
+        _selectedCandidate = null;
       }
     } catch (e) {
       debugPrint("Error loading unit share in UnitShareScreen: $e");
@@ -15583,7 +16670,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
       if (mounted) {
         setState(() {
           _isSearching = false;
-          _selectedManager = null;
+          _searchResults = [];
           _searchError = null;
         });
       }
@@ -15607,7 +16694,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
         if (mounted) {
           setState(() {
             _isSearching = false;
-            _selectedManager = null;
+            _searchResults = [];
             _searchError =
                 "No hay Ingenieros de Unidad registrados en el sistema.";
           });
@@ -15631,7 +16718,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
         if (mounted) {
           setState(() {
             _isSearching = false;
-            _selectedManager = null;
+            _searchResults = [];
             _searchError =
                 "No se encontró ningún Ingeniero de Unidad con '$query'.";
           });
@@ -15639,67 +16726,115 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
         return;
       }
 
-      var matchDoc = matchingDocs.first;
+      final List<Map<String, dynamic>> results = [];
       for (final doc in matchingDocs) {
-        final d = doc.data();
-        final emp = (d['employee_number'] ?? d['user_emp'] ?? '')
-            .toString()
-            .trim()
-            .toLowerCase();
-        final name = (d['name'] ?? '').toString().trim().toLowerCase();
-        if (emp == normalizedQuery || name == normalizedQuery) {
-          matchDoc = doc;
-          break;
+        final data = doc.data();
+        final managerDocId = doc.id;
+        final managerUid = (data['uid'] ?? managerDocId).toString().trim();
+
+        if (currentUser != null &&
+            (managerUid == currentUser.uid || managerDocId == currentUser.uid)) {
+          continue;
         }
+
+        final fullName = (data['name'] ?? 'Sin nombre').toString().trim();
+        final emp = (data['employee_number'] ?? data['user_emp'] ?? '')
+            .toString()
+            .trim();
+
+        results.add({
+          'uid': managerUid,
+          'doc_id': managerDocId,
+          'name': fullName.isEmpty ? 'Sin nombre' : fullName,
+          'emp': emp,
+          'employee_number': emp,
+          'role': data['role'] ?? 'ingeniero_de_unidad',
+        });
       }
 
-      final managerDocId = matchDoc.id;
-      final data = matchDoc.data();
-      final managerUid = (data['uid'] ?? managerDocId).toString().trim();
-
-      if (currentUser != null &&
-          (managerUid == currentUser.uid || managerDocId == currentUser.uid)) {
+      if (results.isEmpty) {
         if (mounted) {
           setState(() {
             _isSearching = false;
-            _selectedManager = null;
+            _searchResults = [];
             _searchError = "No puedes compartir datos con tu propia cuenta.";
           });
         }
         return;
       }
 
-      final fullName = (data['name'] ?? 'Sin nombre').toString().trim();
-      final emp = (data['employee_number'] ?? data['user_emp'] ?? query)
-          .toString()
-          .trim();
-
       if (mounted) {
         setState(() {
           _isSearching = false;
           _searchError = null;
-          _selectedManager = {
-            'uid': managerUid,
-            'doc_id': managerDocId,
-            'name': fullName.isEmpty ? 'Sin nombre' : fullName,
-            'emp': emp,
-            'employee_number': emp,
-            'role': data['role'] ?? 'ingeniero_de_unidad',
-          };
+          _searchResults = results;
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isSearching = false;
-          _selectedManager = null;
+          _searchResults = [];
           _searchError = "Error al buscar: $e";
         });
       }
     }
   }
 
-  DateTime _calculateActiveUntil(String mode, [DateTime? fromDate]) {
+  void _selectCandidate(Map<String, dynamic> candidate) {
+    final uid =
+        (candidate['uid'] ?? candidate['doc_id'] ?? '').toString().trim();
+    final emp = (candidate['emp'] ?? candidate['employee_number'] ?? '')
+        .toString()
+        .trim();
+
+    final isAlreadyShared = _activeShares.values.any((s) {
+      final sUid = (s['manager_uid'] ?? s['uid'] ?? '').toString().trim();
+      final sEmp = (s['manager_emp'] ?? s['emp'] ?? '').toString().trim();
+      return (uid.isNotEmpty && sUid == uid) ||
+          (emp.isNotEmpty && sEmp == emp);
+    });
+
+    if (isAlreadyShared) {
+      final name = candidate['name'] ?? 'este supervisor';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              "Ya estás compartiendo asistencia con $name. Puedes editar sus permisos o revocar su acceso desde la lista de comparticiones activas."),
+          backgroundColor: Colors.amber.shade800,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _selectedCandidate = candidate;
+      _searchController.clear();
+      _searchResults = [];
+      _searchError = null;
+      _isSearching = false;
+      _selectedMode = 'Esta Semana';
+      _shareEntry = true;
+      _shareExit = true;
+      _shareRealEntry = false;
+      _shareNotes = true;
+      _customDates = {};
+      _excludedDates = {};
+    });
+  }
+
+  void _removeSelectedCandidate() {
+    setState(() {
+      _selectedCandidate = null;
+      _searchController.clear();
+      _searchResults = [];
+      _searchError = null;
+    });
+  }
+
+  DateTime? _calculateActiveUntil(String mode, [DateTime? fromDate]) {
     final now = fromDate ?? DateTime.now();
     switch (mode) {
       case 'Solo Hoy':
@@ -15718,11 +16853,12 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
       case 'Todos Mis Registros':
       case 'Yo Decido':
       default:
-        return now.add(const Duration(days: 365));
+        return null; // Unlimited vigencia (sin fecha límite)
     }
   }
 
-  String _formatCountdown(DateTime activeUntil) {
+  String _formatCountdown(DateTime? activeUntil) {
+    if (activeUntil == null) return "Vigencia: Ilimitada";
     final now = DateTime.now();
     final diff = activeUntil.difference(now);
     if (diff.isNegative) return "Expirado";
@@ -15784,18 +16920,21 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
       case 'Este Año':
         return "Se compartirán los registros del año calendario en curso.";
       case 'Todos Mis Registros':
-        return "Se compartirán todos tus registros históricos acumulados en la app.";
+        return "Se compartirán todos tus registros históricos acumulados en la app. Vigencia: Ilimitada.";
       case 'Yo Decido':
-        return "Tú decides qué turnos compartir o excluir individualmente en la lista activa.";
+        return "Tú decides qué turnos compartir o excluir individualmente en la lista activa. Vigencia: Ilimitada.";
       default:
         return "";
     }
   }
 
   Future<bool> _showConfirmUnitManagerDialog({
-    required String managerName,
-    required String managerEmp,
+    required Map<String, dynamic> manager,
   }) async {
+    final mName = (manager['name'] ?? 'Ingeniero de Unidad').toString();
+    final mEmp =
+        (manager['emp'] ?? manager['employee_number'] ?? '').toString();
+
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -15847,11 +16986,11 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                 color: widget.isDarkMode
                     ? const Color(0xFF0F172A)
                     : const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(
                   color: widget.isDarkMode
-                      ? Colors.cyanAccent.withAlpha(60)
-                      : const Color(0xFFBAE6FD),
+                    ? Colors.cyanAccent.withAlpha(60)
+                    : const Color(0xFFBAE6FD),
                 ),
               ),
               child: Row(
@@ -15862,8 +17001,8 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                         ? Colors.cyanAccent.withAlpha(40)
                         : const Color(0xFF0284C7).withAlpha(30),
                     child: Text(
-                      managerName.isNotEmpty
-                          ? managerName.substring(0, 1).toUpperCase()
+                      mName.isNotEmpty
+                          ? mName.substring(0, 1).toUpperCase()
                           : 'I',
                       style: TextStyle(
                         color: widget.isDarkMode
@@ -15880,27 +17019,25 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          managerName,
+                          mName,
                           style: TextStyle(
                             color: widget.isDarkMode
                                 ? Colors.white
                                 : const Color(0xFF0F172A),
                             fontWeight: FontWeight.bold,
-                            fontSize: 15,
+                            fontSize: 14,
                           ),
                         ),
-                        if (managerEmp.isNotEmpty) ...[
-                          const SizedBox(height: 2),
+                        if (mEmp.isNotEmpty)
                           Text(
-                            "No. Empleado: $managerEmp",
+                            "No. Empleado: $mEmp",
                             style: TextStyle(
                               color: widget.isDarkMode
                                   ? const Color(0xFF94A3B8)
                                   : const Color(0xFF64748B),
-                              fontSize: 13,
+                              fontSize: 12,
                             ),
                           ),
-                        ],
                       ],
                     ),
                   ),
@@ -15952,7 +17089,33 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
     return result ?? false;
   }
 
-  Future<void> _saveSettings({bool isUpdating = false}) async {
+  Map<String, dynamic> _encodeSharesForCache(Map<String, dynamic> doc) {
+    final result = <String, dynamic>{};
+    doc.forEach((key, val) {
+      if (val is Timestamp) {
+        result[key] = val.toDate().toIso8601String();
+      } else if (val is DateTime) {
+        result[key] = val.toIso8601String();
+      } else if (val is FieldValue) {
+        result[key] = DateTime.now().toIso8601String();
+      } else if (val is Map) {
+        result[key] = _encodeSharesForCache(Map<String, dynamic>.from(val));
+      } else if (val is List) {
+        result[key] = val.map((e) {
+          if (e is Timestamp) return e.toDate().toIso8601String();
+          if (e is DateTime) return e.toIso8601String();
+          if (e is FieldValue) return DateTime.now().toIso8601String();
+          if (e is Map) return _encodeSharesForCache(Map<String, dynamic>.from(e));
+          return e;
+        }).toList();
+      } else {
+        result[key] = val;
+      }
+    });
+    return result;
+  }
+
+  Future<void> _saveShareInstance({bool isUpdating = false}) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -15964,35 +17127,19 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
       return;
     }
 
-    final manager = isUpdating ? _shareData : _selectedManager;
-    if (manager == null) {
+    final mgr = _selectedCandidate;
+    if (mgr == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Por favor selecciona un Ingeniero de Unidad válido."),
+          content: Text("Por favor selecciona a un Ingeniero de Unidad."),
           backgroundColor: Colors.redAccent,
         ),
       );
       return;
     }
 
-    final String managerUid =
-        (manager['uid'] ?? manager['manager_uid'] ?? '').toString().trim();
-    final String managerDocId =
-        (manager['doc_id'] ?? manager['manager_doc_id'] ?? '').toString().trim();
-    final String managerName =
-        (manager['name'] ?? manager['manager_name'] ?? 'Ingeniero de Unidad')
-            .toString()
-            .trim();
-    final String managerEmp =
-        (manager['emp'] ?? manager['employee_number'] ?? manager['manager_emp'] ?? '')
-            .toString()
-            .trim();
-
     if (!isUpdating) {
-      final confirmed = await _showConfirmUnitManagerDialog(
-        managerName: managerName,
-        managerEmp: managerEmp,
-      );
+      final confirmed = await _showConfirmUnitManagerDialog(manager: mgr);
       if (!confirmed) return;
     }
 
@@ -16001,12 +17148,21 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
     try {
       final now = DateTime.now();
       final activeUntil = _calculateActiveUntil(_selectedMode, now);
-      final retentionUntil = activeUntil.add(const Duration(days: 14));
+      final retentionUntil = activeUntil?.add(const Duration(days: 14));
 
-      // Filter shifts
+      final mgrUid = (mgr['uid'] ?? '').toString().trim();
+      final mgrDocId = (mgr['doc_id'] ?? '').toString().trim();
+      final mgrName = (mgr['name'] ?? 'Ingeniero de Unidad').toString().trim();
+      final mgrEmp =
+          (mgr['emp'] ?? mgr['employee_number'] ?? '').toString().trim();
+      final targetKey = mgrUid.isNotEmpty
+          ? mgrUid
+          : (mgrDocId.isNotEmpty ? mgrDocId : mgrEmp);
+
+      final existingGrant = _activeShares[targetKey];
       final customDates = _customDates.isNotEmpty
           ? _customDates
-          : parseUnitShareStringSet(_shareData?['custom_dates']);
+          : parseUnitShareStringSet(existingGrant?['custom_dates']);
 
       final List<WorkDay> relevantShifts = filterWorkDaysForUnitShare(
         _userWorkDays,
@@ -16034,23 +17190,71 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
         shareNotes: _shareNotes,
       );
 
-      final sharePayload = {
-        'manager_uid': managerUid,
-        'manager_doc_id': managerDocId,
-        'manager_name': managerName,
-        'manager_emp': managerEmp,
-        'is_active': true,
+      final shareGrant = {
+        'manager_uid': mgrUid,
+        'manager_doc_id': mgrDocId,
+        'manager_name': mgrName,
+        'manager_emp': mgrEmp,
         'mode': _selectedMode,
         'duration': _selectedMode,
         'timeframe': _selectedMode,
-        'active_sharing_until': Timestamp.fromDate(activeUntil),
-        'data_retention_until': Timestamp.fromDate(retentionUntil),
+        'active_sharing_until':
+            activeUntil != null ? Timestamp.fromDate(activeUntil) : null,
+        'data_retention_until': retentionUntil != null
+            ? Timestamp.fromDate(retentionUntil)
+            : null,
         'share_real_entry': _shareRealEntry,
         'share_entry': _shareEntry,
         'share_exit': _shareExit,
         'share_notes': _shareNotes,
         'excluded_dates': _excludedDates.toList(),
         'custom_dates': customDates.toList(),
+        'is_active': true,
+        'created_at': (existingGrant != null &&
+                existingGrant['created_at'] != null &&
+                existingGrant['created_at'] is! FieldValue)
+            ? existingGrant['created_at']
+            : Timestamp.fromDate(now),
+        'updated_at': Timestamp.fromDate(now),
+      };
+
+      final Map<String, Map<String, dynamic>> rawUpdatedShares =
+          Map.from(_activeShares);
+      rawUpdatedShares[targetKey] = shareGrant;
+      final Map<String, Map<String, dynamic>> updatedShares =
+          sanitizeSharesMapForFirestore(rawUpdatedShares);
+
+      final primaryGrant = updatedShares.values.first;
+      final String primaryUid =
+          (primaryGrant['manager_uid'] ?? '').toString().trim();
+      final String primaryDocId =
+          (primaryGrant['manager_doc_id'] ?? '').toString().trim();
+      final String primaryName =
+          (primaryGrant['manager_name'] ?? 'Ingeniero de Unidad')
+              .toString()
+              .trim();
+      final String primaryEmp =
+          (primaryGrant['manager_emp'] ?? '').toString().trim();
+
+      final userSettingsDoc = {
+        'shares': updatedShares,
+        'managers': updatedShares.values.toList(),
+        'manager_uid': primaryUid,
+        'manager_doc_id': primaryDocId,
+        'manager_name': primaryName,
+        'manager_emp': primaryEmp,
+        'is_active': true,
+        'mode': primaryGrant['mode'] ?? _selectedMode,
+        'duration': primaryGrant['mode'] ?? _selectedMode,
+        'timeframe': primaryGrant['mode'] ?? _selectedMode,
+        'active_sharing_until': primaryGrant['active_sharing_until'],
+        'data_retention_until': primaryGrant['data_retention_until'],
+        'share_real_entry': primaryGrant['share_real_entry'] ?? false,
+        'share_entry': primaryGrant['share_entry'] ?? true,
+        'share_exit': primaryGrant['share_exit'] ?? true,
+        'share_notes': primaryGrant['share_notes'] ?? false,
+        'excluded_dates': primaryGrant['excluded_dates'] ?? [],
+        'custom_dates': primaryGrant['custom_dates'] ?? [],
         'updated_at': FieldValue.serverTimestamp(),
       };
 
@@ -16065,8 +17269,11 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
         'mode': _selectedMode,
         'duration': _selectedMode,
         'timeframe': _selectedMode,
-        'active_sharing_until': Timestamp.fromDate(activeUntil),
-        'data_retention_until': Timestamp.fromDate(retentionUntil),
+        'active_sharing_until':
+            activeUntil != null ? Timestamp.fromDate(activeUntil) : null,
+        'data_retention_until': retentionUntil != null
+            ? Timestamp.fromDate(retentionUntil)
+            : null,
         'share_real_entry': _shareRealEntry,
         'share_entry': _shareEntry,
         'share_exit': _shareExit,
@@ -16085,39 +17292,37 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             .doc(user.uid)
             .collection('settings')
             .doc('unit_share'),
-        sharePayload,
+        userSettingsDoc,
         SetOptions(merge: true),
       );
 
-      if (managerUid.isNotEmpty) {
+      if (mgrUid.isNotEmpty) {
         batch.set(
           FirebaseFirestore.instance
               .collection('unit_shares')
-              .doc(managerUid)
+              .doc(mgrUid)
               .collection('members')
               .doc(user.uid),
           memberPayload,
           SetOptions(merge: true),
         );
       }
-      if (managerDocId.isNotEmpty && managerDocId != managerUid) {
+      if (mgrDocId.isNotEmpty && mgrDocId != mgrUid) {
         batch.set(
           FirebaseFirestore.instance
               .collection('unit_shares')
-              .doc(managerDocId)
+              .doc(mgrDocId)
               .collection('members')
               .doc(user.uid),
           memberPayload,
           SetOptions(merge: true),
         );
       }
-      if (managerEmp.isNotEmpty &&
-          managerEmp != managerUid &&
-          managerEmp != managerDocId) {
+      if (mgrEmp.isNotEmpty && mgrEmp != mgrUid && mgrEmp != mgrDocId) {
         batch.set(
           FirebaseFirestore.instance
               .collection('unit_shares')
-              .doc(managerEmp)
+              .doc(mgrEmp)
               .collection('members')
               .doc(user.uid),
           memberPayload,
@@ -16128,39 +17333,35 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
       await batch.commit();
 
       final prefs = await SharedPreferences.getInstance();
-      final cachePayload = Map<String, dynamic>.from(sharePayload);
-      cachePayload['updated_at'] = now.toIso8601String();
-      cachePayload['active_sharing_until'] = activeUntil.toIso8601String();
-      cachePayload['data_retention_until'] = retentionUntil.toIso8601String();
       await prefs.setString(
         'active_unit_share_cache_${user.uid}',
-        jsonEncode(cachePayload),
+        jsonEncode(_encodeSharesForCache(userSettingsDoc)),
       );
 
       if (mounted) {
         setState(() {
           _isSaving = false;
           _isUnitShareActive = true;
-          _isEditing = false;
-          _shareData = {
-            ...sharePayload,
-            'active_sharing_until': Timestamp.fromDate(activeUntil),
-            'data_retention_until': Timestamp.fromDate(retentionUntil),
-          };
+          _isConfiguringShare = false;
+          _editingManagerUid = null;
+          _selectedCandidate = null;
+          _activeShares = updatedShares;
+          _shareData = _encodeSharesForCache(userSettingsDoc);
+          _inspectingManagerUid = targetKey;
           _sharedShifts = sanitizedShifts;
         });
 
-        if (managerUid.isNotEmpty) {
-          _setupMemberListener(managerUid, user.uid);
+        if (mgrUid.isNotEmpty) {
+          _setupMemberListener(mgrUid, user.uid);
         }
+
+        final String successMessage = isUpdating
+            ? "Permisos actualizados con éxito."
+            : "Compartiendo asistencia con $mgrName.";
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              isUpdating
-                  ? "Permisos actualizados con éxito con $managerName"
-                  : "Compartiendo asistencia con $managerName",
-            ),
+            content: Text(successMessage),
             backgroundColor: Colors.teal,
             behavior: SnackBarBehavior.floating,
           ),
@@ -16180,94 +17381,294 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
     }
   }
 
-  Future<void> _removeSharedDate(Map<String, dynamic> shift) async {
+  void _startEditingShare(String mgrKey) {
+    final grant = _activeShares[mgrKey];
+    if (grant == null) return;
+
+    final mUid = (grant['manager_uid'] ?? mgrKey).toString();
+    final mDocId = (grant['manager_doc_id'] ?? '').toString();
+    final mName = (grant['manager_name'] ?? 'Ingeniero de Unidad').toString();
+    final mEmp = (grant['manager_emp'] ?? '').toString();
+
+    setState(() {
+      _editingManagerUid = mgrKey;
+      _selectedCandidate = {
+        'uid': mUid,
+        'doc_id': mDocId,
+        'name': mName,
+        'emp': mEmp,
+        'employee_number': mEmp,
+      };
+      _selectedMode =
+          (grant['mode'] ?? grant['duration'] ?? 'Esta Semana').toString();
+      _shareEntry = grant['share_entry'] ?? true;
+      _shareExit = grant['share_exit'] ?? true;
+      _shareRealEntry = grant['share_real_entry'] == true;
+      _shareNotes = grant['share_notes'] == true;
+      _customDates = parseUnitShareStringSet(grant['custom_dates']);
+      _excludedDates = parseUnitShareStringSet(grant['excluded_dates']);
+      _isConfiguringShare = true;
+      _searchController.clear();
+      _searchResults = [];
+      _searchError = null;
+    });
+  }
+
+  void _startNewShare() {
+    setState(() {
+      _editingManagerUid = null;
+      _selectedCandidate = null;
+      _isConfiguringShare = true;
+      _selectedMode = 'Esta Semana';
+      _shareEntry = true;
+      _shareExit = true;
+      _shareRealEntry = false;
+      _shareNotes = true;
+      _customDates = {};
+      _excludedDates = {};
+      _searchController.clear();
+      _searchResults = [];
+      _searchError = null;
+    });
+  }
+
+  void _cancelConfiguringShare() {
+    setState(() {
+      _isConfiguringShare = false;
+      _editingManagerUid = null;
+      _selectedCandidate = null;
+      _searchController.clear();
+      _searchResults = [];
+      _searchError = null;
+    });
+  }
+
+  Future<void> _confirmRevokeSingleShare(String mgrKey) async {
+    final grant = _activeShares[mgrKey];
+    final mgrName =
+        (grant?['manager_name'] ?? 'el Ingeniero de Unidad').toString();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor:
+            widget.isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.person_remove_rounded,
+                color: Colors.redAccent, size: 26),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "¿Dejar de compartir con este ingeniero?",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          "¿Estás seguro de que deseas revocar el acceso de $mgrName a tus registros de asistencia? Dejará de ver tus horarios inmediatamente.",
+          style: TextStyle(
+            color: widget.isDarkMode ? Colors.white70 : const Color(0xFF475569),
+            fontSize: 14,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              "CANCELAR",
+              style: TextStyle(
+                color: widget.isDarkMode ? Colors.white60 : Colors.black54,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              "REVOCAR ACCESO",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _revokeSingleShare(mgrKey);
+    }
+  }
+
+  Future<void> _revokeSingleShare(String mgrKey) async {
     final user = FirebaseAuth.instance.currentUser;
-    if (user == null || _shareData == null) return;
+    if (user == null) return;
 
-    final String targetDate = (shift['date'] ?? '').toString();
-    final String targetId = (shift['id'] ?? '').toString();
-    if (targetDate.isEmpty && targetId.isEmpty) return;
+    final grant = _activeShares[mgrKey];
+    final mgrName =
+        (grant?['manager_name'] ?? 'el Ingeniero de Unidad').toString();
+    final mUid = (grant?['manager_uid'] ?? mgrKey).toString().trim();
+    final mDocId = (grant?['manager_doc_id'] ?? '').toString().trim();
+    final mEmp = (grant?['manager_emp'] ?? '').toString().trim();
 
-    final String managerUid =
-        (_shareData!['manager_uid'] ?? _shareData!['uid'] ?? '')
-            .toString()
-            .trim();
-    final String managerDocId =
-        (_shareData!['manager_doc_id'] ?? '').toString().trim();
-    final String managerEmp =
-        (_shareData!['manager_emp'] ?? '').toString().trim();
+    setState(() => _isSaving = true);
 
     try {
-      final updatedShifts = _sharedShifts.where((s) {
-        final sDate = (s['date'] ?? '').toString();
-        final sId = (s['id'] ?? '').toString();
-        if (targetId.isNotEmpty && sId == targetId) return false;
-        if (targetDate.isNotEmpty && sDate == targetDate) return false;
-        return true;
-      }).toList();
-
       final batch = FirebaseFirestore.instance.batch();
 
-      final dateKey = targetDate.isNotEmpty ? targetDate : targetId;
-      _excludedDates.add(dateKey);
-
-      final userSettingsRef = FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .collection('settings')
-          .doc('unit_share');
-
-      batch.set(userSettingsRef, {
-        'excluded_dates': FieldValue.arrayUnion([dateKey]),
-      }, SetOptions(merge: true));
-
-      if (managerUid.isNotEmpty) {
-        final ref = FirebaseFirestore.instance
+      if (mUid.isNotEmpty) {
+        batch.delete(FirebaseFirestore.instance
             .collection('unit_shares')
-            .doc(managerUid)
+            .doc(mUid)
             .collection('members')
-            .doc(user.uid);
-        batch.update(ref, {'shifts': updatedShifts});
+            .doc(user.uid));
       }
-      if (managerDocId.isNotEmpty && managerDocId != managerUid) {
-        final ref = FirebaseFirestore.instance
+      if (mDocId.isNotEmpty && mDocId != mUid) {
+        batch.delete(FirebaseFirestore.instance
             .collection('unit_shares')
-            .doc(managerDocId)
+            .doc(mDocId)
             .collection('members')
-            .doc(user.uid);
-        batch.update(ref, {'shifts': updatedShifts});
+            .doc(user.uid));
       }
-      if (managerEmp.isNotEmpty &&
-          managerEmp != managerUid &&
-          managerEmp != managerDocId) {
-        final ref = FirebaseFirestore.instance
+      if (mEmp.isNotEmpty && mEmp != mUid && mEmp != mDocId) {
+        batch.delete(FirebaseFirestore.instance
             .collection('unit_shares')
-            .doc(managerEmp)
+            .doc(mEmp)
             .collection('members')
-            .doc(user.uid);
-        batch.update(ref, {'shifts': updatedShifts});
+            .doc(user.uid));
       }
 
-      await batch.commit();
+      final Map<String, Map<String, dynamic>> rawUpdatedShares =
+          Map.from(_activeShares);
+      rawUpdatedShares.remove(mgrKey);
+      final Map<String, Map<String, dynamic>> updatedShares =
+          sanitizeSharesMapForFirestore(rawUpdatedShares);
 
-      if (mounted) {
-        setState(() {
-          _sharedShifts = updatedShifts;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                "Fecha ${_formatDayNameAndDate(targetDate)} eliminada de los registros compartidos."),
-            backgroundColor: Colors.teal,
-            behavior: SnackBarBehavior.floating,
-          ),
+      final prefs = await SharedPreferences.getInstance();
+
+      if (updatedShares.isEmpty) {
+        batch.delete(FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('settings')
+            .doc('unit_share'));
+        await batch.commit();
+
+        await prefs.remove('active_unit_share_cache_${user.uid}');
+        _memberSubscription?.cancel();
+
+        if (mounted) {
+          setState(() {
+            _isSaving = false;
+            _isUnitShareActive = false;
+            _activeShares = {};
+            _shareData = null;
+            _isConfiguringShare = false;
+            _editingManagerUid = null;
+            _selectedCandidate = null;
+            _inspectingManagerUid = null;
+            _sharedShifts = [];
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Se ha dejado de compartir datos con $mgrName."),
+              backgroundColor: Colors.amber.shade800,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        final primaryGrant = updatedShares.values.first;
+        final String primaryUid =
+            (primaryGrant['manager_uid'] ?? '').toString().trim();
+        final String primaryDocId =
+            (primaryGrant['manager_doc_id'] ?? '').toString().trim();
+        final String primaryName =
+            (primaryGrant['manager_name'] ?? 'Ingeniero de Unidad')
+                .toString()
+                .trim();
+        final String primaryEmp =
+            (primaryGrant['manager_emp'] ?? '').toString().trim();
+
+        final updatedDoc = {
+          'shares': updatedShares,
+          'managers': updatedShares.values.toList(),
+          'manager_uid': primaryUid,
+          'manager_doc_id': primaryDocId,
+          'manager_name': primaryName,
+          'manager_emp': primaryEmp,
+          'is_active': true,
+          'mode': primaryGrant['mode'] ?? 'Esta Semana',
+          'duration': primaryGrant['mode'] ?? 'Esta Semana',
+          'timeframe': primaryGrant['mode'] ?? 'Esta Semana',
+          'active_sharing_until': primaryGrant['active_sharing_until'],
+          'data_retention_until': primaryGrant['data_retention_until'],
+          'share_real_entry': primaryGrant['share_real_entry'] ?? false,
+          'share_entry': primaryGrant['share_entry'] ?? true,
+          'share_exit': primaryGrant['share_exit'] ?? true,
+          'share_notes': primaryGrant['share_notes'] ?? false,
+          'excluded_dates': primaryGrant['excluded_dates'] ?? [],
+          'custom_dates': primaryGrant['custom_dates'] ?? [],
+          'updated_at': FieldValue.serverTimestamp(),
+        };
+
+        batch.set(
+          FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .collection('settings')
+              .doc('unit_share'),
+          updatedDoc,
+          SetOptions(merge: true),
         );
+
+        await batch.commit();
+
+        await prefs.setString(
+          'active_unit_share_cache_${user.uid}',
+          jsonEncode(_encodeSharesForCache(updatedDoc)),
+        );
+
+        final nextInspectingUid =
+            updatedShares.containsKey(_inspectingManagerUid)
+                ? _inspectingManagerUid
+                : updatedShares.keys.first;
+
+        if (mounted) {
+          setState(() {
+            _isSaving = false;
+            _activeShares = updatedShares;
+            _shareData = _encodeSharesForCache(updatedDoc);
+            _inspectingManagerUid = nextInspectingUid;
+          });
+
+          if (nextInspectingUid != null && nextInspectingUid.isNotEmpty) {
+            _setupMemberListener(nextInspectingUid, user.uid);
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Se ha dejado de compartir datos con $mgrName."),
+              backgroundColor: Colors.amber.shade800,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Error al eliminar fecha: $e"),
+            content: Text("Error al revocar acceso: $e"),
             backgroundColor: Colors.redAccent,
             behavior: SnackBarBehavior.floating,
           ),
@@ -16277,9 +17678,6 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
   }
 
   Future<void> _confirmRevokeAll() async {
-    final managerName =
-        _shareData?['manager_name'] ?? 'el Ingeniero de Unidad';
-
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -16299,7 +17697,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
           ],
         ),
         content: Text(
-          "¿Estás seguro de que deseas revocar el acceso de $managerName a todos tus registros de asistencia? Dejará de ver tus horarios inmediatamente.",
+          "¿Estás seguro de que deseas revocar el acceso a todos los Ingenieros de Unidad? Dejarán de ver tus horarios inmediatamente.",
           style: TextStyle(
             color: widget.isDarkMode
                 ? Colors.white70
@@ -16340,14 +17738,18 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
 
-    final String managerUid =
-        (_shareData?['manager_uid'] ?? _shareData?['uid'] ?? '')
-            .toString()
-            .trim();
-    final String managerDocId =
-        (_shareData?['manager_doc_id'] ?? '').toString().trim();
-    final String managerEmp =
-        (_shareData?['manager_emp'] ?? '').toString().trim();
+    final Set<String> targetUids = {};
+    for (final grant in _activeShares.values) {
+      final u = (grant['manager_uid'] ?? '').toString().trim();
+      final d = (grant['manager_doc_id'] ?? '').toString().trim();
+      final e = (grant['manager_emp'] ?? '').toString().trim();
+      if (u.isNotEmpty) targetUids.add(u);
+      if (d.isNotEmpty) targetUids.add(d);
+      if (e.isNotEmpty) targetUids.add(e);
+    }
+    final legacyUid =
+        (_shareData?['manager_uid'] ?? _shareData?['uid'] ?? '').toString().trim();
+    if (legacyUid.isNotEmpty) targetUids.add(legacyUid);
 
     try {
       final batch = FirebaseFirestore.instance.batch();
@@ -16359,31 +17761,11 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             .doc('unit_share'),
       );
 
-      if (managerUid.isNotEmpty) {
+      for (final tUid in targetUids) {
         batch.delete(
           FirebaseFirestore.instance
               .collection('unit_shares')
-              .doc(managerUid)
-              .collection('members')
-              .doc(user.uid),
-        );
-      }
-      if (managerDocId.isNotEmpty && managerDocId != managerUid) {
-        batch.delete(
-          FirebaseFirestore.instance
-              .collection('unit_shares')
-              .doc(managerDocId)
-              .collection('members')
-              .doc(user.uid),
-        );
-      }
-      if (managerEmp.isNotEmpty &&
-          managerEmp != managerUid &&
-          managerEmp != managerDocId) {
-        batch.delete(
-          FirebaseFirestore.instance
-              .collection('unit_shares')
-              .doc(managerEmp)
+              .doc(tUid)
               .collection('members')
               .doc(user.uid),
         );
@@ -16399,16 +17781,20 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
       if (mounted) {
         setState(() {
           _isUnitShareActive = false;
+          _activeShares = {};
           _shareData = null;
-          _isEditing = false;
-          _selectedManager = null;
+          _isConfiguringShare = false;
+          _editingManagerUid = null;
+          _selectedCandidate = null;
           _sharedShifts = [];
+          _inspectingManagerUid = null;
           _searchController.clear();
         });
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Se ha dejado de compartir datos con $managerName"),
+            content: const Text(
+                "Se ha dejado de compartir datos con todos los supervisores."),
             backgroundColor: Colors.amber.shade800,
             behavior: SnackBarBehavior.floating,
           ),
@@ -16427,6 +17813,729 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
     }
   }
 
+  Future<void> _removeSharedDate(Map<String, dynamic> shift) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _activeShares.isEmpty) return;
+
+    final String targetDate = (shift['date'] ?? '').toString();
+    final String targetId = (shift['id'] ?? '').toString();
+    if (targetDate.isEmpty && targetId.isEmpty) return;
+
+    final dateKey = targetDate.isNotEmpty ? targetDate : targetId;
+    final mgrKey = _inspectingManagerUid ?? _activeShares.keys.first;
+    final grant = _activeShares[mgrKey];
+    if (grant == null) return;
+
+    final mUid = (grant['manager_uid'] ?? mgrKey).toString().trim();
+    final mDocId = (grant['manager_doc_id'] ?? '').toString().trim();
+    final mEmp = (grant['manager_emp'] ?? '').toString().trim();
+
+    try {
+      final updatedShifts = _sharedShifts.where((s) {
+        final sDate = (s['date'] ?? '').toString();
+        final sId = (s['id'] ?? '').toString();
+        if (targetId.isNotEmpty && sId == targetId) return false;
+        if (targetDate.isNotEmpty && sDate == targetDate) return false;
+        return true;
+      }).toList();
+
+      final currentExcluded = parseUnitShareStringSet(grant['excluded_dates']);
+      currentExcluded.add(dateKey);
+
+      final updatedGrant = Map<String, dynamic>.from(grant);
+      updatedGrant['excluded_dates'] = currentExcluded.toList();
+      updatedGrant['updated_at'] = Timestamp.fromDate(DateTime.now());
+
+      final Map<String, Map<String, dynamic>> rawUpdatedShares =
+          Map.from(_activeShares);
+      rawUpdatedShares[mgrKey] = updatedGrant;
+      final Map<String, Map<String, dynamic>> updatedShares =
+          sanitizeSharesMapForFirestore(rawUpdatedShares);
+
+      final batch = FirebaseFirestore.instance.batch();
+
+      batch.set(
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('settings')
+            .doc('unit_share'),
+        {
+          'shares': updatedShares,
+          'managers': updatedShares.values.toList(),
+          'updated_at': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      final memberTargets = {mUid, mDocId, mEmp}..removeWhere((s) => s.isEmpty);
+      for (final t in memberTargets) {
+        batch.update(
+          FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(t)
+              .collection('members')
+              .doc(user.uid),
+          {
+            'shifts': updatedShifts,
+            'last_synced_at': FieldValue.serverTimestamp(),
+          },
+        );
+      }
+
+      await batch.commit();
+
+      if (mounted) {
+        setState(() {
+          _activeShares = updatedShares;
+          _sharedShifts = updatedShifts;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                "Fecha ${_formatDayNameAndDate(targetDate)} excluida para ${grant['manager_name'] ?? 'el supervisor'}."),
+            backgroundColor: Colors.teal,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al excluir fecha: $e"),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _saveSpecificDaysSelection(
+    String managerKey,
+    String managerName,
+    Set<String> selectedDateKeys,
+  ) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || !_activeShares.containsKey(managerKey)) return;
+
+    final grant = _activeShares[managerKey]!;
+    final mUid = (grant['manager_uid'] ?? managerKey).toString().trim();
+    final mDocId = (grant['manager_doc_id'] ?? '').toString().trim();
+    final mEmp = (grant['manager_emp'] ?? '').toString().trim();
+
+    final now = DateTime.now();
+    final updatedGrant = Map<String, dynamic>.from(grant);
+    updatedGrant['mode'] = 'Yo Decido';
+    updatedGrant['duration'] = 'Yo Decido';
+    updatedGrant['custom_dates'] = selectedDateKeys.toList();
+    updatedGrant['excluded_dates'] = <String>[];
+    updatedGrant['active_sharing_until'] = null; // Unlimited vigencia
+    updatedGrant['updated_at'] = Timestamp.fromDate(now);
+
+    final bool shareEntry = updatedGrant['share_entry'] ?? true;
+    final bool shareExit = updatedGrant['share_exit'] ?? true;
+    final bool shareRealEntry = updatedGrant['share_real_entry'] == true;
+    final bool shareNotes = updatedGrant['share_notes'] == true;
+
+    final List<WorkDay> relevantShifts = filterWorkDaysForUnitShare(
+      _userWorkDays,
+      mode: 'Yo Decido',
+      activeUntil: null,
+      customDates: selectedDateKeys,
+      excludedDates: {},
+      now: now,
+    );
+
+    final List<Map<String, dynamic>> sanitizedShifts =
+        sanitizeWorkDaysForUnitShare(
+      relevantShifts,
+      shareEntry: shareEntry,
+      shareExit: shareExit,
+      shareRealEntry: shareRealEntry,
+      shareNotes: shareNotes,
+    );
+
+    final Map<String, Map<String, dynamic>> rawUpdatedShares =
+        Map.from(_activeShares);
+    rawUpdatedShares[managerKey] = updatedGrant;
+    final Map<String, Map<String, dynamic>> updatedShares =
+        sanitizeSharesMapForFirestore(rawUpdatedShares);
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      batch.set(
+        FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('settings')
+            .doc('unit_share'),
+        {
+          'shares': updatedShares,
+          'managers': updatedShares.values.toList(),
+          'updated_at': FieldValue.serverTimestamp(),
+        },
+        SetOptions(merge: true),
+      );
+
+      final memberTargets = {mUid, mDocId, mEmp}..removeWhere((s) => s.isEmpty);
+      for (final t in memberTargets) {
+        batch.set(
+          FirebaseFirestore.instance
+              .collection('unit_shares')
+              .doc(t)
+              .collection('members')
+              .doc(user.uid),
+          {
+            'shifts': sanitizedShifts,
+            'active_sharing_until': null,
+            'mode': 'Yo Decido',
+            'last_synced_at': FieldValue.serverTimestamp(),
+          },
+          SetOptions(merge: true),
+        );
+      }
+
+      await batch.commit();
+
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = 'active_unit_share_cache_${user.uid}';
+      final cachedStr = prefs.getString(cacheKey);
+      if (cachedStr != null) {
+        try {
+          final Map<String, dynamic> c = jsonDecode(cachedStr);
+          c['shares'] = _encodeSharesForCache(updatedShares);
+          c['managers'] = c['shares'].values.toList();
+          await prefs.setString(cacheKey, jsonEncode(c));
+        } catch (_) {}
+      }
+
+      if (mounted) {
+        setState(() {
+          _activeShares = updatedShares;
+          if (_inspectingManagerUid == managerKey ||
+              _inspectingManagerUid == null) {
+            _sharedShifts = sanitizedShifts;
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Se guardaron ${selectedDateKeys.length} fechas específicas para $managerName.",
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al guardar días específicos: $e"),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  int _getWeekNumber(DateTime date) {
+    if (date.year == 2027 && date.month == 1 && date.day <= 3) {
+      return 53;
+    }
+    int dayOfYear = int.parse(DateFormat("D").format(date));
+    int week = ((dayOfYear - date.weekday + 10) / 7).floor();
+    if (week == 0) {
+      DateTime prevYearEnd = DateTime(date.year - 1, 12, 31);
+      int prevDayOfYear = int.parse(DateFormat("D").format(prevYearEnd));
+      return ((prevDayOfYear - prevYearEnd.weekday + 10) / 7).floor();
+    }
+    return week;
+  }
+
+  Future<void> _openSpecificDaysPicker(
+    String managerKey,
+    String managerName,
+  ) async {
+    final now = DateTime.now();
+    final DateTime currentMonday = DateTime(now.year, now.month, now.day)
+        .subtract(Duration(days: now.weekday - 1));
+
+    final Set<DateTime> mondaySet = {};
+    for (int i = 0; i < 8; i++) {
+      mondaySet.add(currentMonday.subtract(Duration(days: i * 7)));
+    }
+    for (final day in _userWorkDays) {
+      final m = DateTime(day.entrada.year, day.entrada.month, day.entrada.day)
+          .subtract(Duration(days: day.entrada.weekday - 1));
+      mondaySet.add(m);
+    }
+    final List<DateTime> sortedMondays = mondaySet.toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    final Set<String> loggedShiftDays = {};
+    for (final day in _userWorkDays) {
+      loggedShiftDays.add(DateFormat('yyyy-MM-dd').format(day.entrada));
+    }
+
+    final grant = _activeShares[managerKey];
+    final Set<String> tempSelected = {};
+    if (grant != null) {
+      final custom = parseUnitShareStringSet(grant['custom_dates']);
+      final excluded = parseUnitShareStringSet(grant['excluded_dates']);
+      final mode = (grant['mode'] ?? grant['duration'] ?? '').toString();
+
+      if (mode == 'Yo Decido' && custom.isNotEmpty) {
+        tempSelected.addAll(custom);
+      } else {
+        for (final s in _sharedShifts) {
+          final d = (s['date'] ?? '').toString();
+          if (d.isNotEmpty && !excluded.contains(d)) {
+            tempSelected.add(d);
+          }
+        }
+      }
+    }
+
+    final isDark = widget.isDarkMode;
+    final Color unitColor =
+        isDark ? Colors.cyanAccent : const Color(0xFF0284C7);
+    final Color cardBg =
+        isDark ? const Color(0xFF1E293B) : Colors.white;
+    final Color itemBg =
+        isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+    final Color borderColor =
+        isDark ? Colors.white12 : const Color(0xFFE2E8F0);
+    final Color textColor =
+        isDark ? Colors.white : const Color(0xFF0F172A);
+    final Color subtextColor =
+        isDark ? Colors.white60 : const Color(0xFF64748B);
+
+    final weekdayNames = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+
+    await showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dialogCtx, setPickerState) {
+            return Dialog(
+              backgroundColor: cardBg,
+              surfaceTintColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: borderColor),
+              ),
+              insetPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+              child: ConstrainedBox(
+                constraints:
+                    const BoxConstraints(maxWidth: 520, maxHeight: 680),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: unitColor.withAlpha(isDark ? 40 : 25),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.calendar_month_rounded,
+                              color: unitColor,
+                              size: 22,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Compartir días específicos",
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  "Para: $managerName",
+                                  style: TextStyle(
+                                    color: subtextColor,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 20),
+                            color: subtextColor,
+                            onPressed: () => Navigator.pop(ctx),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Quick Selection Bar
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: itemBg,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "${tempSelected.length} días seleccionados",
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            if (tempSelected.isNotEmpty)
+                              TextButton(
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                onPressed: () {
+                                  setPickerState(() {
+                                    tempSelected.clear();
+                                  });
+                                },
+                                child: Text(
+                                  "Limpiar todo",
+                                  style: TextStyle(
+                                    color: isDark
+                                        ? Colors.redAccent
+                                        : const Color(0xFFDC2626),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Weeks list
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: sortedMondays.length,
+                          itemBuilder: (listCtx, idx) {
+                            final monday = sortedMondays[idx];
+                            final weekDays = List.generate(
+                                7, (i) => monday.add(Duration(days: i)));
+                            final weekDateKeys = weekDays
+                                .map((d) => DateFormat('yyyy-MM-dd').format(d))
+                                .toList();
+                            final int selectedInWeek = weekDateKeys
+                                .where((k) => tempSelected.contains(k))
+                                .length;
+                            final bool allSelected = selectedInWeek == 7;
+                            final bool someSelected =
+                                selectedInWeek > 0 && !allSelected;
+
+                            final weekNum = _getWeekNumber(monday);
+                            final weekLabel =
+                                "Semana $weekNum (${DateFormat('d MMM', 'es').format(monday)} - ${DateFormat('d MMM', 'es').format(weekDays.last)})";
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: itemBg,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: selectedInWeek > 0
+                                      ? unitColor.withAlpha(isDark ? 80 : 100)
+                                      : borderColor,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Week toggle header
+                                  InkWell(
+                                    borderRadius: BorderRadius.circular(8),
+                                    onTap: () {
+                                      setPickerState(() {
+                                        if (allSelected) {
+                                          tempSelected.removeAll(weekDateKeys);
+                                        } else {
+                                          tempSelected.addAll(weekDateKeys);
+                                        }
+                                      });
+                                    },
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 4),
+                                      child: Row(
+                                        children: [
+                                          SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: Checkbox(
+                                              value: allSelected
+                                                  ? true
+                                                  : (someSelected
+                                                      ? null
+                                                      : false),
+                                              tristate: true,
+                                              activeColor: unitColor,
+                                              checkColor: isDark
+                                                  ? Colors.black
+                                                  : Colors.white,
+                                              onChanged: (val) {
+                                                setPickerState(() {
+                                                  if (allSelected) {
+                                                    tempSelected
+                                                        .removeAll(weekDateKeys);
+                                                  } else {
+                                                    tempSelected
+                                                        .addAll(weekDateKeys);
+                                                  }
+                                                });
+                                              },
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Expanded(
+                                            child: Text(
+                                              weekLabel,
+                                              style: TextStyle(
+                                                color: textColor,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12.5,
+                                              ),
+                                            ),
+                                          ),
+                                          if (selectedInWeek > 0)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: unitColor.withAlpha(
+                                                    isDark ? 35 : 20),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
+                                              ),
+                                              child: Text(
+                                                "$selectedInWeek/7",
+                                                style: TextStyle(
+                                                  color: unitColor,
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+
+                                  // Day cells row (L - D)
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children:
+                                        List.generate(7, (dayIdx) {
+                                      final dayDate = weekDays[dayIdx];
+                                      final dayKey = weekDateKeys[dayIdx];
+                                      final isSelected =
+                                          tempSelected.contains(dayKey);
+                                      final hasShift =
+                                          loggedShiftDays.contains(dayKey);
+
+                                      return Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 2),
+                                          child: InkWell(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            onTap: () {
+                                              setPickerState(() {
+                                                if (isSelected) {
+                                                  tempSelected.remove(dayKey);
+                                                } else {
+                                                  tempSelected.add(dayKey);
+                                                }
+                                              });
+                                            },
+                                            child: Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      vertical: 6),
+                                              decoration: BoxDecoration(
+                                                color: isSelected
+                                                    ? unitColor.withAlpha(
+                                                        isDark ? 45 : 30)
+                                                    : (isDark
+                                                        ? Colors.white.withAlpha(8)
+                                                        : Colors.white),
+                                                borderRadius:
+                                                    BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: isSelected
+                                                      ? unitColor
+                                                      : borderColor,
+                                                  width: isSelected ? 1.5 : 1.0,
+                                                ),
+                                              ),
+                                              child: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Text(
+                                                    weekdayNames[dayIdx],
+                                                    style: TextStyle(
+                                                      color: isSelected
+                                                          ? unitColor
+                                                          : subtextColor,
+                                                      fontSize: 10,
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    "${dayDate.day}",
+                                                    style: TextStyle(
+                                                      color: isSelected
+                                                          ? (isDark
+                                                              ? Colors.white
+                                                              : Colors.black87)
+                                                          : textColor,
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          isSelected || hasShift
+                                                              ? FontWeight.bold
+                                                              : FontWeight
+                                                                  .normal,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Container(
+                                                    width: 4,
+                                                    height: 4,
+                                                    decoration: BoxDecoration(
+                                                      shape: BoxShape.circle,
+                                                      color: hasShift
+                                                          ? Colors.greenAccent
+                                                          : Colors.transparent,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Footer Action Buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                side: BorderSide(
+                                    color: isDark
+                                        ? Colors.white24
+                                        : const Color(0xFFCBD5E1)),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              onPressed: () => Navigator.pop(ctx),
+                              child: Text(
+                                "Cancelar",
+                                style: TextStyle(
+                                  color: subtextColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: unitColor,
+                                foregroundColor:
+                                    isDark ? Colors.black : Colors.white,
+                                elevation: 0,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              icon: const Icon(Icons.check_rounded, size: 18),
+                              label: Text(
+                                "Guardar (${tempSelected.length} días)",
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold),
+                              ),
+                              onPressed: () async {
+                                Navigator.pop(ctx);
+                                await _saveSpecificDaysSelection(
+                                  managerKey,
+                                  managerName,
+                                  tempSelected,
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = widget.isDarkMode;
@@ -16441,12 +18550,19 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
     final Color subtextColor =
         isDark ? Colors.white54 : const Color(0xFF64748B);
 
+    final bool showActiveDashboard =
+        (_activeShares.isNotEmpty || _isUnitShareActive) && !_isConfiguringShare;
+
     return Scaffold(
       backgroundColor:
           isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text(
-          "Compartir con Ingeniero",
+          showActiveDashboard
+              ? "Compartir con Ingeniero"
+              : (_editingManagerUid != null
+                  ? "Editar Compartición"
+                  : "Compartir con Ingeniero"),
           style: TextStyle(
             color: textColor,
             fontWeight: FontWeight.bold,
@@ -16454,8 +18570,25 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
           ),
         ),
         backgroundColor: cardBg,
-        leading: BackButton(color: textColor),
+        leading: BackButton(
+          color: textColor,
+          onPressed: () {
+            if (_isConfiguringShare && _activeShares.isNotEmpty) {
+              _cancelConfiguringShare();
+            } else {
+              Navigator.of(context).pop();
+            }
+          },
+        ),
         elevation: 0.5,
+        actions: [
+          if (showActiveDashboard)
+            IconButton(
+              icon: Icon(Icons.refresh_rounded, color: textColor),
+              tooltip: "Actualizar",
+              onPressed: _loadInitialData,
+            ),
+        ],
       ),
       body: _isLoading
           ? Center(
@@ -16466,18 +18599,28 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (_isUnitShareActive && !_isEditing) ...[
-                    // Active Manager Header & Status
-                    _buildActiveManagerHeader(unitColor, textColor,
-                        subtextColor, cardBg, borderColor),
+                  if (showActiveDashboard) ...[
+                    // Active Manager Cards List & Management
+                    _buildActiveSharesView(
+                      unitColor,
+                      textColor,
+                      subtextColor,
+                      cardBg,
+                      borderColor,
+                    ),
                     const SizedBox(height: 24),
 
-                    // Active Shared Dates Manager
-                    _buildActiveSharedDatesManager(unitColor, textColor,
-                        subtextColor, cardBg, borderColor),
+                    // Active Shared Dates Manager with Manager Switcher
+                    _buildActiveSharedDatesManager(
+                      unitColor,
+                      textColor,
+                      subtextColor,
+                      cardBg,
+                      borderColor,
+                    ),
                     const SizedBox(height: 24),
 
-                    // Revoke Button
+                    // Global Revoke Button
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
@@ -16520,8 +18663,13 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                           ),
                         ],
                       ),
-                      child: _buildShareForm(unitColor, textColor,
-                          subtextColor, accentColor, borderColor),
+                      child: _buildShareForm(
+                        unitColor,
+                        textColor,
+                        subtextColor,
+                        accentColor,
+                        borderColor,
+                      ),
                     ),
                     const SizedBox(height: 30),
                   ],
@@ -16531,280 +18679,314 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
     );
   }
 
-  Widget _buildActiveManagerHeader(Color unitColor, Color textColor,
+  Widget _buildActiveSharesView(Color unitColor, Color textColor,
       Color subtextColor, Color cardBg, Color borderColor) {
-    final data = _shareData ?? {};
-    final managerName =
-        (data['manager_name'] ?? 'Ingeniero de Unidad').toString();
-    final managerEmp = (data['manager_emp'] ?? '').toString();
-
-    DateTime? activeUntil;
-    if (data['active_sharing_until'] is Timestamp) {
-      activeUntil = (data['active_sharing_until'] as Timestamp).toDate();
-    } else if (data['active_sharing_until'] is String) {
-      activeUntil = DateTime.tryParse(data['active_sharing_until']);
-    }
-
-    final bool shareRealEntry = data['share_real_entry'] == true;
-    final bool shareEntry = data['share_entry'] ?? true;
-    final bool shareExit = data['share_exit'] ?? true;
-    final bool shareNotes = data['share_notes'] == true;
-    final String mode = (data['mode'] ?? data['duration'] ?? 'Esta Semana')
-        .toString();
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: unitColor.withAlpha(widget.isDarkMode ? 100 : 120),
-          width: 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(widget.isDarkMode ? 30 : 10),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green
-                      .withAlpha(widget.isDarkMode ? 40 : 25),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.green.withAlpha(90)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.check_circle_rounded,
-                        color: Colors.greenAccent, size: 14),
-                    SizedBox(width: 6),
-                    Text(
-                      "COMPARTICIÓN ACTIVA",
-                      style: TextStyle(
-                        color: Colors.greenAccent,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (activeUntil != null)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: unitColor.withAlpha(widget.isDarkMode ? 30 : 20),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    _formatCountdown(activeUntil),
-                    style: TextStyle(
-                      color: unitColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // Manager Info
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor:
-                    unitColor.withAlpha(widget.isDarkMode ? 45 : 35),
-                child: Text(
-                  managerName.isNotEmpty
-                      ? managerName.substring(0, 1).toUpperCase()
-                      : 'I',
-                  style: TextStyle(
-                    color: unitColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            managerName,
-                            style: TextStyle(
-                              color: textColor,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: unitColor
-                                .withAlpha(widget.isDarkMode ? 35 : 25),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(
-                                color: unitColor.withAlpha(120)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.shield_rounded,
-                                  size: 11, color: unitColor),
-                              const SizedBox(width: 4),
-                              Text(
-                                "ING. DE UNIDAD",
-                                style: TextStyle(
-                                  color: unitColor,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (managerEmp.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        "No. Empleado: $managerEmp",
-                        style: TextStyle(color: subtextColor, fontSize: 13),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          // Expiration & Mode Box
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: widget.isDarkMode
-                  ? Colors.black.withAlpha(40)
-                  : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: borderColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header Row
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.timer_outlined, color: unitColor, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        activeUntil != null
-                            ? "Vence: ${DateFormat('dd/MM/yyyy - hh:mm a').format(activeUntil)}"
-                            : "Vigencia activa",
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Padding(
-                  padding: const EdgeInsets.only(left: 26),
-                  child: Text(
-                    "Modo de alcance: $mode",
-                    style: TextStyle(
-                      color: unitColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
+                const Icon(Icons.verified_user_rounded,
+                    color: Colors.greenAccent, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  "INGENIEROS CON ACCESO ACTIVO",
+                  style: TextStyle(
+                    color: textColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    letterSpacing: 0.3,
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 14),
-
-          // Active Permissions
-          Text(
-            "DATOS Y PERMISOS COMPARTIDOS:",
-            style: TextStyle(
-              color: subtextColor,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.green.withAlpha(widget.isDarkMode ? 35 : 20),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.green.withAlpha(90)),
+              ),
+              child: Text(
+                "${_activeShares.length} ${_activeShares.length == 1 ? 'activo' : 'activos'}",
+                style: const TextStyle(
+                  color: Colors.greenAccent,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 11,
+                ),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              if (shareEntry)
-                _buildActiveBadge(
-                    "Hora Entrada", Icons.login_rounded, Colors.green),
-              if (shareExit)
-                _buildActiveBadge(
-                    "Hora Salida", Icons.logout_rounded, Colors.green),
-              if (shareRealEntry)
-                _buildActiveBadge("Hora Entrada Real",
-                    Icons.fingerprint_rounded, Colors.blue),
-              if (shareNotes)
-                _buildActiveBadge(
-                    "Notas", Icons.note_alt_outlined, Colors.amber),
-              _buildActiveBadge(
-                mode,
-                Icons.calendar_today_rounded,
-                Colors.purpleAccent,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          "Cada ingeniero cuenta con vigencia y permisos independientes. Puedes editar o revocar el acceso de cada uno por separado.",
+          style: TextStyle(color: subtextColor, fontSize: 12),
+        ),
+        const SizedBox(height: 14),
 
-          // Edit Permissions/Mode Button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.tune_rounded, size: 18),
-              label: const Text("EDITAR PERMISOS O MODO"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: widget.isDarkMode
-                    ? Colors.orangeAccent
-                    : const Color(0xFFEA580C),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(vertical: 12),
+        // List of Active Share Cards
+        ..._activeShares.entries.map((entry) {
+          final mgrKey = entry.key;
+          final grant = entry.value;
+          final mName =
+              (grant['manager_name'] ?? 'Ingeniero de Unidad').toString();
+          final mEmp = (grant['manager_emp'] ?? '').toString();
+          final mode = (grant['mode'] ?? 'Esta Semana').toString();
+          final activeUntil = parseUnitShareDate(grant['active_sharing_until']);
+          final bool isUnlimited = activeUntil == null ||
+              mode == 'Yo Decido' ||
+              mode == 'Todos Mis Registros';
+          final countdown = _formatCountdown(isUnlimited ? null : activeUntil);
+
+          final bool shareEntry = grant['share_entry'] ?? true;
+          final bool shareExit = grant['share_exit'] ?? true;
+          final bool shareRealEntry = grant['share_real_entry'] == true;
+          final bool shareNotes = grant['share_notes'] == true;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: unitColor.withAlpha(widget.isDarkMode ? 70 : 100),
+                width: 1.3,
               ),
-              onPressed: () {
-                setState(() => _isEditing = true);
-              },
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withAlpha(widget.isDarkMode ? 30 : 10),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top row: Avatar + Name & Emp
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 20,
+                      backgroundColor: unitColor.withAlpha(40),
+                      child: Text(
+                        mName.isNotEmpty ? mName.substring(0, 1).toUpperCase() : 'I',
+                        style: TextStyle(
+                          color: unitColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            mName,
+                            style: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Row(
+                            children: [
+                              Text(
+                                "Ingeniero de Unidad",
+                                style: TextStyle(color: subtextColor, fontSize: 12),
+                              ),
+                              if (mEmp.isNotEmpty) ...[
+                                Text(" • ",
+                                    style: TextStyle(
+                                        color: subtextColor, fontSize: 12)),
+                                Text(
+                                  "No. $mEmp",
+                                  style: TextStyle(
+                                    color: textColor.withAlpha(180),
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Divider(
+                  height: 1,
+                  color: widget.isDarkMode
+                      ? Colors.white10
+                      : const Color(0xFFE2E8F0),
+                ),
+                const SizedBox(height: 10),
+
+                // Badges: Mode & Vigencia
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    _buildActiveBadge(
+                      mode,
+                      Icons.schedule_rounded,
+                      unitColor,
+                    ),
+                    _buildActiveBadge(
+                      countdown,
+                      isUnlimited
+                          ? Icons.all_inclusive_rounded
+                          : Icons.timer_outlined,
+                      isUnlimited ? Colors.greenAccent : Colors.orangeAccent,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+
+                // Permissions Chips
+                Text(
+                  "Datos visibles:",
+                  style: TextStyle(
+                    color: subtextColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    if (shareEntry)
+                      _buildChipBadge("Entrada", Icons.login_rounded, Colors.green),
+                    if (shareExit)
+                      _buildChipBadge(
+                          "Salida", Icons.logout_rounded, Colors.orangeAccent),
+                    if (shareRealEntry)
+                      _buildChipBadge("Entrada Real",
+                          Icons.fingerprint_rounded, Colors.blueAccent),
+                    if (shareNotes)
+                      _buildChipBadge(
+                          "Notas", Icons.notes_rounded, Colors.purpleAccent),
+                    if (!shareEntry &&
+                        !shareExit &&
+                        !shareRealEntry &&
+                        !shareNotes)
+                      _buildChipBadge("Asistencia básica",
+                          Icons.check_circle_outline, subtextColor),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Divider(
+                  height: 1,
+                  color: widget.isDarkMode
+                      ? Colors.white10
+                      : const Color(0xFFE2E8F0),
+                ),
+                const SizedBox(height: 8),
+
+                // Action buttons: Editar & Dejar de compartir
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton.icon(
+                      icon: const Icon(Icons.tune_rounded, size: 16),
+                      label: const Text(
+                        "Editar",
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: unitColor,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                      ),
+                      onPressed: () => _startEditingShare(mgrKey),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      icon: const Icon(Icons.person_remove_outlined, size: 16),
+                      label: const Text(
+                        "Dejar de compartir",
+                        style: TextStyle(
+                            fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                      ),
+                      onPressed: () => _confirmRevokeSingleShare(mgrKey),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }),
+
+        const SizedBox(height: 8),
+        // Button: Compartir con otro Ingeniero
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            icon: Icon(Icons.person_add_alt_1_rounded,
+                color: unitColor, size: 18),
+            label: Text(
+              "Compartir con otro Ingeniero",
+              style: TextStyle(
+                color: unitColor,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: unitColor, width: 1.3),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+            ),
+            onPressed: _startNewShare,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChipBadge(String label, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withAlpha(widget.isDarkMode ? 35 : 20),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withAlpha(80)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -16814,6 +18996,13 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
 
   Widget _buildActiveSharedDatesManager(Color unitColor, Color textColor,
       Color subtextColor, Color cardBg, Color borderColor) {
+    final activeManagerKey = _inspectingManagerUid ??
+        (_activeShares.isNotEmpty ? _activeShares.keys.first : null);
+    final activeManagerData =
+        activeManagerKey != null ? _activeShares[activeManagerKey] : null;
+    final activeManagerName =
+        (activeManagerData?['manager_name'] ?? 'Ingeniero de Unidad').toString();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -16855,10 +19044,119 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
         ),
         const SizedBox(height: 6),
         Text(
-          "Listado de turnos que tu Ingeniero de Unidad puede visualizar actualmente. Pulsa la 'X' en cualquier día para excluirlo de la compartición.",
+          "Listado de turnos que $activeManagerName puede visualizar actualmente. Pulsa la 'X' en cualquier día para excluirlo de la compartición.",
           style: TextStyle(color: subtextColor, fontSize: 13),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
+
+        // Supervisor switch chips if multiple
+        if (_activeShares.length > 1) ...[
+          Text(
+            "Ver datos visibles para:",
+            style: TextStyle(
+              color: subtextColor,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _activeShares.entries.map((e) {
+                final isSelected = activeManagerKey == e.key;
+                final name =
+                    (e.value['manager_name'] ?? 'Ingeniero').toString();
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(
+                      name,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected
+                            ? (widget.isDarkMode ? Colors.black : Colors.white)
+                            : (widget.isDarkMode
+                                ? const Color(0xFFCBD5E1)
+                                : const Color(0xFF334155)),
+                      ),
+                    ),
+                    selected: isSelected,
+                    checkmarkColor:
+                        widget.isDarkMode ? Colors.black : Colors.white,
+                    color: WidgetStateProperty.resolveWith<Color?>((states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return unitColor;
+                      }
+                      return widget.isDarkMode
+                          ? const Color(0xFF0F172A)
+                          : const Color(0xFFF1F5F9);
+                    }),
+                    side: WidgetStateBorderSide.resolveWith((states) {
+                      if (states.contains(WidgetState.selected)) {
+                        return BorderSide(color: unitColor, width: 1.5);
+                      }
+                      return BorderSide(color: borderColor, width: 1.0);
+                    }),
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() {
+                          _inspectingManagerUid = e.key;
+                          final u = FirebaseAuth.instance.currentUser;
+                          if (u != null) {
+                            _setupMemberListener(e.key, u.uid);
+                          }
+                        });
+                      }
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+
+        if (activeManagerKey != null) ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Turnos Visibles (${_sharedShifts.length})",
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                ),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: unitColor,
+                  foregroundColor:
+                      widget.isDarkMode ? Colors.black : Colors.white,
+                  elevation: 0,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                icon: const Icon(Icons.calendar_month_rounded, size: 16),
+                label: const Text(
+                  "Compartir días específicos",
+                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  _openSpecificDaysPicker(
+                      activeManagerKey, activeManagerName);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+        ],
 
         if (_sharedShifts.isEmpty)
           Container(
@@ -16871,8 +19169,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             ),
             child: Column(
               children: [
-                Icon(Icons.event_busy_rounded,
-                    color: subtextColor, size: 36),
+                Icon(Icons.event_busy_rounded, color: subtextColor, size: 36),
                 const SizedBox(height: 8),
                 Text(
                   "No hay turnos compartidos actualmente para el periodo seleccionado.",
@@ -16889,8 +19186,14 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             itemCount: _sharedShifts.length,
             itemBuilder: (context, index) {
               final shift = _sharedShifts[index];
-              return _buildSharedDateItem(shift, unitColor, textColor,
-                  subtextColor, cardBg, borderColor);
+              return _buildSharedDateItem(
+                shift,
+                unitColor,
+                textColor,
+                subtextColor,
+                cardBg,
+                borderColor,
+              );
             },
           ),
       ],
@@ -16946,8 +19249,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: badgeColor
-                  .withAlpha(widget.isDarkMode ? 35 : 25),
+              color: badgeColor.withAlpha(widget.isDarkMode ? 35 : 25),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(badgeIcon, color: badgeColor, size: 20),
@@ -17065,10 +19367,21 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
 
   Widget _buildShareForm(Color unitColor, Color textColor, Color subtextColor,
       Color accentColor, Color borderColor) {
+    final bool isEditing = _editingManagerUid != null;
+    final candidateName =
+        (_selectedCandidate?['name'] ?? 'Ingeniero de Unidad').toString();
+    final candidateEmp =
+        (_selectedCandidate?['emp'] ?? _selectedCandidate?['employee_number'] ?? '').toString();
+
+    DateTime? previewActiveUntil;
+    if (_selectedMode != 'Todos Mis Registros' && _selectedMode != 'Yo Decido') {
+      previewActiveUntil = _calculateActiveUntil(_selectedMode, DateTime.now());
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (_isEditing) ...[
+        if (isEditing) ...[
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
@@ -17082,7 +19395,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    "Editando permisos y alcance de compartición con ${_shareData?['manager_name'] ?? 'Ingeniero de Unidad'}",
+                    "Editando permisos y alcance de compartición con $candidateName",
                     style: TextStyle(
                       color: textColor,
                       fontSize: 13,
@@ -17105,125 +19418,27 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             ),
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: _searchController,
-            keyboardType: TextInputType.text,
-            style: TextStyle(color: textColor, fontSize: 15),
-            decoration: InputDecoration(
-              labelText: "No. Empleado o Nombre del Ingeniero",
-              labelStyle: TextStyle(
-                color: widget.isDarkMode
-                    ? const Color(0xFF94A3B8)
-                    : const Color(0xFF475569),
-                fontSize: 14,
-              ),
-              hintText: "Ej. 1043577 o Diego Merck",
-              hintStyle: TextStyle(
-                color: widget.isDarkMode
-                    ? const Color(0xFF64748B)
-                    : const Color(0xFF94A3B8),
-                fontSize: 14,
-              ),
-              prefixIcon: Icon(Icons.badge_rounded, color: unitColor),
-              suffixIcon: _isSearching
-                  ? Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: unitColor,
-                        ),
-                      ),
-                    )
-                  : (_searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(Icons.clear_rounded, color: subtextColor),
-                          onPressed: () {
-                            _searchController.clear();
-                            setState(() {
-                              _selectedManager = null;
-                              _searchError = null;
-                            });
-                          },
-                        )
-                      : null),
-              filled: true,
-              fillColor: widget.isDarkMode
-                  ? const Color(0xFF0F172A)
-                  : const Color(0xFFF8FAFC),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: borderColor),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: borderColor),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: unitColor, width: 1.5),
-              ),
-            ),
-            onChanged: _onSearchChanged,
-            onSubmitted: _searchUnitManager,
-          ),
-          if (_searchError != null) ...[
-            const SizedBox(height: 8),
+
+          // If a candidate is already selected, show explicit confirmation card:
+          if (_selectedCandidate != null) ...[
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.redAccent
-                    .withAlpha(widget.isDarkMode ? 35 : 25),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.redAccent.withAlpha(80)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.error_outline_rounded,
-                      color: Colors.redAccent, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _searchError!,
-                      style: TextStyle(
-                        color: widget.isDarkMode
-                            ? Colors.white
-                            : Colors.red.shade900,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (_selectedManager != null) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: unitColor.withAlpha(widget.isDarkMode ? 35 : 20),
+                color: Colors.green.withAlpha(widget.isDarkMode ? 35 : 20),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: unitColor.withAlpha(90)),
+                border: Border.all(color: Colors.green.withAlpha(120), width: 1.2),
               ),
               child: Row(
                 children: [
                   CircleAvatar(
                     radius: 20,
-                    backgroundColor: unitColor.withAlpha(50),
+                    backgroundColor: Colors.green.withAlpha(50),
                     child: Text(
-                      _selectedManager!['name'].toString().isNotEmpty
-                          ? _selectedManager!['name']
-                              .toString()
-                              .substring(0, 1)
-                              .toUpperCase()
+                      candidateName.isNotEmpty
+                          ? candidateName.substring(0, 1).toUpperCase()
                           : 'I',
-                      style: TextStyle(
-                        color: unitColor,
+                      style: const TextStyle(
+                        color: Colors.greenAccent,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
@@ -17238,7 +19453,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                           children: [
                             Flexible(
                               child: Text(
-                                _selectedManager!['name'].toString(),
+                                candidateName,
                                 style: TextStyle(
                                   color: textColor,
                                   fontWeight: FontWeight.bold,
@@ -17250,23 +19465,25 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                             const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                                  horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: unitColor
-                                    .withAlpha(widget.isDarkMode ? 40 : 30),
-                                borderRadius: BorderRadius.circular(6),
+                                color: Colors.green
+                                    .withAlpha(widget.isDarkMode ? 45 : 30),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: Colors.green.withAlpha(120)),
                               ),
-                              child: Row(
+                              child: const Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.shield_rounded,
-                                      size: 11, color: unitColor),
-                                  const SizedBox(width: 4),
+                                  Icon(Icons.check_circle_rounded,
+                                      size: 12, color: Colors.greenAccent),
+                                  SizedBox(width: 4),
                                   Text(
-                                    "ING. DE UNIDAD",
+                                    "✓ Seleccionado",
                                     style: TextStyle(
-                                      color: unitColor,
-                                      fontSize: 10,
+                                      color: Colors.greenAccent,
+                                      fontSize: 11,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -17275,26 +19492,209 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          "No. Empleado: ${_selectedManager!['emp'] ?? _selectedManager!['employee_number'] ?? ''}",
-                          style: TextStyle(color: subtextColor, fontSize: 13),
-                        ),
+                        if (candidateEmp.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            "No. Empleado: $candidateEmp",
+                            style: TextStyle(color: subtextColor, fontSize: 13),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: Icon(Icons.close_rounded,
-                        color: subtextColor, size: 20),
+                    icon: const Icon(Icons.close_rounded,
+                        color: Colors.redAccent, size: 20),
                     tooltip: "Cambiar Ingeniero",
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() => _selectedManager = null);
-                    },
+                    onPressed: _removeSelectedCandidate,
                   ),
                 ],
               ),
             ),
+          ] else ...[
+            // Search Input Field
+            TextField(
+              controller: _searchController,
+              keyboardType: TextInputType.text,
+              style: TextStyle(color: textColor, fontSize: 15),
+              decoration: InputDecoration(
+                labelText: "No. Empleado o Nombre del Ingeniero",
+                labelStyle: TextStyle(
+                  color: widget.isDarkMode
+                      ? const Color(0xFF94A3B8)
+                      : const Color(0xFF475569),
+                  fontSize: 14,
+                ),
+                hintText: "Ej. 1043577 o Diego Merck",
+                hintStyle: TextStyle(
+                  color: widget.isDarkMode
+                      ? const Color(0xFF64748B)
+                      : const Color(0xFF94A3B8),
+                  fontSize: 14,
+                ),
+                prefixIcon: Icon(Icons.search_rounded, color: unitColor),
+                suffixIcon: _isSearching
+                    ? Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: unitColor,
+                          ),
+                        ),
+                      )
+                    : (_searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.clear_rounded,
+                                color: subtextColor),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() {
+                                _searchResults = [];
+                                _searchError = null;
+                              });
+                            },
+                          )
+                        : null),
+                filled: true,
+                fillColor: widget.isDarkMode
+                    ? const Color(0xFF0F172A)
+                    : const Color(0xFFF8FAFC),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: borderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: borderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: unitColor, width: 1.5),
+                ),
+              ),
+              onChanged: _onSearchChanged,
+              onSubmitted: _searchUnitManager,
+            ),
+            if (_searchError != null) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent
+                      .withAlpha(widget.isDarkMode ? 35 : 25),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.redAccent.withAlpha(80)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline_rounded,
+                        color: Colors.redAccent, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _searchError!,
+                        style: TextStyle(
+                          color: widget.isDarkMode
+                              ? Colors.white
+                              : Colors.red.shade900,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            if (_searchResults.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: widget.isDarkMode
+                      ? const Color(0xFF0F172A)
+                      : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _searchResults.length,
+                  separatorBuilder: (_, __) => Divider(
+                    height: 1,
+                    color: widget.isDarkMode
+                        ? Colors.white10
+                        : const Color(0xFFE2E8F0),
+                  ),
+                  itemBuilder: (context, i) {
+                    final item = _searchResults[i];
+                    final itemUid = (item['uid'] ?? '').toString();
+                    final isAlreadyShared = _activeShares.containsKey(itemUid);
+
+                    return ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 4),
+                      leading: CircleAvatar(
+                        radius: 18,
+                        backgroundColor: unitColor.withAlpha(40),
+                        child: Text(
+                          item['name'].toString().isNotEmpty
+                              ? item['name']
+                                  .toString()
+                                  .substring(0, 1)
+                                  .toUpperCase()
+                              : 'I',
+                          style: TextStyle(
+                            color: unitColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        item['name'].toString(),
+                        style: TextStyle(
+                          color: textColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      subtitle: Text(
+                        "No. Empleado: ${item['emp']}",
+                        style: TextStyle(color: subtextColor, fontSize: 12),
+                      ),
+                      trailing: isAlreadyShared
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.green
+                                    .withAlpha(widget.isDarkMode ? 35 : 20),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Text(
+                                "Ya activo",
+                                style: TextStyle(
+                                  color: Colors.greenAccent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            )
+                          : Icon(Icons.add_circle_outline_rounded,
+                              color: unitColor, size: 22),
+                      onTap: () => _selectCandidate(item),
+                    );
+                  },
+                ),
+              ),
+            ],
           ],
           const SizedBox(height: 20),
         ],
@@ -17373,8 +19773,13 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.info_outline_rounded,
-                      color: unitColor, size: 16),
+                  Icon(
+                    previewActiveUntil == null
+                        ? Icons.all_inclusive_rounded
+                        : Icons.info_outline_rounded,
+                    color: unitColor,
+                    size: 16,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
@@ -17392,8 +19797,18 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
               Padding(
                 padding: const EdgeInsets.only(left: 22),
                 child: Text(
-                  "Vigencia activa hasta: ${DateFormat('dd/MM/yyyy').format(_calculateActiveUntil(_selectedMode))} (con 2 semanas de consulta adicional)",
-                  style: TextStyle(color: subtextColor, fontSize: 11),
+                  previewActiveUntil == null
+                      ? "Vigencia: Ilimitada (activo hasta revocar manualmente)"
+                      : "Vigencia activa hasta: ${DateFormat('dd/MM/yyyy').format(previewActiveUntil)} (con 2 semanas de consulta adicional)",
+                  style: TextStyle(
+                    color: previewActiveUntil == null
+                        ? Colors.greenAccent
+                        : subtextColor,
+                    fontSize: 11,
+                    fontWeight: previewActiveUntil == null
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
                 ),
               ),
             ],
@@ -17451,12 +19866,12 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
         const SizedBox(height: 22),
 
         // Action Buttons
-        if (_isEditing) ...[
+        if (isEditing) ...[
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: () => setState(() => _isEditing = false),
+                  onPressed: _cancelConfiguringShare,
                   style: OutlinedButton.styleFrom(
                     foregroundColor: subtextColor,
                     side: BorderSide(color: borderColor),
@@ -17473,7 +19888,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                 child: ElevatedButton(
                   onPressed: _isSaving
                       ? null
-                      : () => _saveSettings(isUpdating: true),
+                      : () => _saveShareInstance(isUpdating: true),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: unitColor,
                     foregroundColor:
@@ -17496,40 +19911,95 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             ],
           ),
         ] else ...[
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              icon: _isSaving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.share_rounded, size: 20),
-              label: Text(
-                _isSaving ? "GUARDANDO..." : "COMENZAR A COMPARTIR",
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: widget.isDarkMode
-                    ? Colors.orangeAccent
-                    : const Color(0xFFEA580C),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                disabledBackgroundColor: widget.isDarkMode
-                    ? Colors.white12
-                    : const Color(0xFFE2E8F0),
-                disabledForegroundColor: subtextColor,
-              ),
-              onPressed: (_selectedManager == null || _isSaving)
-                  ? null
-                  : () => _saveSettings(isUpdating: false),
+          if (_activeShares.isNotEmpty) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _cancelConfiguringShare,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: subtextColor,
+                      side: BorderSide(color: borderColor),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text("CANCELAR",
+                        style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    icon: _isSaving
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.share_rounded, size: 20),
+                    label: Text(
+                      _isSaving ? "GUARDANDO..." : "COMPARTIR",
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: widget.isDarkMode
+                          ? Colors.orangeAccent
+                          : const Color(0xFFEA580C),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      disabledBackgroundColor: widget.isDarkMode
+                          ? Colors.white12
+                          : const Color(0xFFE2E8F0),
+                      disabledForegroundColor: subtextColor,
+                    ),
+                    onPressed: (_selectedCandidate == null || _isSaving)
+                        ? null
+                        : () => _saveShareInstance(isUpdating: false),
+                  ),
+                ),
+              ],
             ),
-          ),
+          ] else ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                icon: _isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.share_rounded, size: 20),
+                label: Text(
+                  _isSaving ? "GUARDANDO..." : "COMENZAR A COMPARTIR",
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: widget.isDarkMode
+                      ? Colors.orangeAccent
+                      : const Color(0xFFEA580C),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  disabledBackgroundColor: widget.isDarkMode
+                      ? Colors.white12
+                      : const Color(0xFFE2E8F0),
+                  disabledForegroundColor: subtextColor,
+                ),
+                onPressed: (_selectedCandidate == null || _isSaving)
+                    ? null
+                    : () => _saveShareInstance(isUpdating: false),
+              ),
+            ),
+          ],
         ],
       ],
     );
@@ -17694,6 +20164,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
     );
   }
 }
+
 
 class ParameterHistoryResult {
   final List<Map<String, dynamic>> history;
@@ -24546,7 +27017,7 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildInfoRow("Versión Aplicación", "v.23.15.0 28/10/26"),
+                _buildInfoRow("Versión Aplicación", "v.23.16.0 03/11/26"),
                 const Divider(height: 20),
                 _buildInfoRow("Entorno", "Firebase Production (Hosting & Firestore)"),
                 const Divider(height: 20),
