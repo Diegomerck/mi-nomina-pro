@@ -18,8 +18,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'web_reload_stub.dart' if (dart.library.html) 'web_reload.dart';
 
 final Map<String, String> _changelogTitles = {
-  "23.16.0": "📅 Versión 23.16.0 (03/11/26) — Adelanto de Nómina 2027 y Selector de Año",
-  "23.15.0": "⚡ Versión 23.15.0 (28/10/26) — Optimización de Cuentas, Seguridad y Rendimiento",
+  "23.16.0": "🤝 Versión 23.16.0 (03/11/26) — Compartir Horarios, Nómina 2027 y Soporte de Cuenta",
+  "23.15.0": "🛠️ Versión 23.15.0 (28/10/26) — Herramientas de Soporte y Fusión de Cuentas",
   "23.14.0": "⏱️ Versión 23.14.0 (27/10/26) — Edición de Turnos Renovada y Mejoras de Rendimiento",
   "23.13.1": "🔑 Versión 23.13.1 (16/10/26) — Acceso con Empleado o Correo y Recuperación",
   "23.12.1": "🎉 Versión 23.12.1 (15/10/26) — Días de Descanso & Historial de Cambios",
@@ -28,16 +28,15 @@ final Map<String, String> _changelogTitles = {
 
 final Map<String, List<String>> _changelogByVersion = {
   "23.16.0": [
+    "🤝 Comparte tus horarios con más de una persona: En Ajustes ahora puedes compartir tus entradas y salidas con varios Ingenieros de Unidad al mismo tiempo, configurando permisos por separado para cada uno (tu sueldo y pagos nunca se comparten).",
+    "📆 Elige días específicos o semanas completas: Puedes decidir exactamente qué días o qué semanas completas quieres compartir con cada ingeniero desde un calendario rápido, o elegir 'Solo Hoy' cuando trabajes en una unidad por un día.",
     "📅 Adelanto de pagos de 2027: Ya puedes ver cuándo se pagarán tus horas extra de diciembre en las primeras quincenas de enero y febrero de 2027.",
-    "🔄 Botón para cambiar entre 2026 y 2027: En las pestañas de Nómina y Año ahora tienes un botón arriba para saltar de un año a otro en un toque, sin tener que bajar por toda la lista.",
-    "✨ Vista del Año más amplia: Redujimos el tamaño del encabezado en la pestaña Año para que quepan más semanas en tu pantalla.",
-    "🎉 Días festivos al triple: Si marcas un día como festivo trabajado, tu pago diario ahora se calcula al triple automáticamente.",
-    "☀️ Mejor lectura en Modo Claro: Ajustamos los colores y ventanas emergentes para que todo se lea con total claridad.",
+    "🔄 Botón para cambiar entre 2026 y 2027: En las pestañas de Nómina y Año ahora tienes un botón arriba para saltar de un año a otro en un toque.",
+    "🎉 Días festivos al triple y mejoras en Modo Claro: Los días festivos trabajados ahora se calculan al triple automáticamente y mejoramos la lectura en pantallas claras y oscuras.",
   ],
   "23.15.0": [
-    "⚡ Sincronización y consistencia de cuentas: Mejoras internas en la gestión de credenciales y registros del sistema.",
-    "🔑 Asistencia en restablecimiento de contraseña: Optimizaciones en los flujos de recuperación para cuentas con correo verificado.",
-    "🛡️ Limpieza y rendimiento: Depuración automática de registros obsoletos y mayor fluidez general en la aplicación.",
+    "🆘 Ayuda del Administrador para recuperar tu cuenta: Si olvidaste con qué correo te registraste o no puedes entrar, el administrador ahora puede consultar tu correo, enviarte un enlace para cambiar tu contraseña o actualizar tu correo registrado.",
+    "🔗 Unificación limpia de cuentas duplicadas: Si tenías dos cuentas por error, el administrador puede unir todos tus turnos y ajustes en una sola cuenta limpia y eliminar la cuenta repetida.",
   ],
   "23.14.0": [
     "✨ Nueva ventana unificada para editar turnos: Modifica tu hora de entrada, salida, entrada real y notas en una sola pantalla ágil y moderna.",
