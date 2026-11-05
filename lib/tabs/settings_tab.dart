@@ -859,7 +859,7 @@ extension _SettingsTabExt on _TelevisaAppState {
 
       return Container(
         width: double.infinity,
-        margin: const EdgeInsets.only(top: 14, bottom: 6),
+        margin: const EdgeInsets.symmetric(vertical: 6),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: cardBg,
@@ -969,7 +969,7 @@ extension _SettingsTabExt on _TelevisaAppState {
     // Multiple active managers
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(top: 14, bottom: 6),
+      margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: cardBg,

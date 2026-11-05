@@ -1797,7 +1797,6 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                     child: const Text("NO")),
                 TextButton(
                     onPressed: () async {
-                      final messenger = ScaffoldMessenger.of(context);
                       final navigator = Navigator.of(context);
                       final dayToDelete = _weeklyHistory[index];
                       final bool isCurrentShift = dayToDelete.id == _currentShiftId ||
@@ -1836,9 +1835,6 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                       await _userHistory.doc(dayToDelete.id).delete();
                       await _saveData();
                       navigator.pop();
-                      messenger.showSnackBar(const SnackBar(
-                          content: Text(" Registro eliminado"),
-                          backgroundColor: Colors.redAccent));
                     },
                     child:
                         const Text("SÍ", style: TextStyle(color: Colors.red)))

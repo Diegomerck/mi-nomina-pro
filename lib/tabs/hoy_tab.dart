@@ -20,25 +20,25 @@ extension _HoyTabExt on _TelevisaAppState {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Column(
           children: [
-            const SizedBox(height: 30),
+            const SizedBox(height: 10),
             Text(_dateString,
                 style: TextStyle(
                     color:
                         _isDarkMode ? Colors.white70 : Colors.black,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600)),
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold)),
             Text(_timeString,
                 style: TextStyle(
                     color:
                         _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
-                    fontSize: 32,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold)),
-            const SizedBox(height: 20),
+            const SizedBox(height: 10),
             _buildTodaySummaryCard(todayRecord),
             if (_isUnitShareActive)
               _buildHoyManagerShareTile(DateTime.now(),
                   shiftId: todayRecord.id),
-            const SizedBox(height: 30),
+            const SizedBox(height: 12),
           ],
         ),
       );
@@ -93,23 +93,23 @@ extension _HoyTabExt on _TelevisaAppState {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
         children: [
-          const SizedBox(height: 30),
+          const SizedBox(height: 10),
           Text(_dateString,
               style: TextStyle(
                   color:
                       _isDarkMode ? Colors.white70 : Colors.black,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600)),
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold)),
           Text(_timeString,
               style: TextStyle(
                   color:
                       _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
-                  fontSize: 32,
+                  fontSize: 28,
                   fontWeight: FontWeight.bold)),
-          const SizedBox(height: 20),
+          const SizedBox(height: 10),
           // Consolidated side-by-side ENTRADA and SALIDA container
           Container(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: _isDarkMode ? Colors.white.withAlpha(20) : Colors.white,
               borderRadius: BorderRadius.circular(18),
@@ -136,7 +136,7 @@ extension _HoyTabExt on _TelevisaAppState {
                     child: hasRegisteredEntrada
                         ? Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 16),
+                                horizontal: 12, vertical: 12),
                             decoration: BoxDecoration(
                               color: _isDarkMode
                                   ? Colors.green.withAlpha(25)
@@ -191,7 +191,7 @@ extension _HoyTabExt on _TelevisaAppState {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 10),
+                                const SizedBox(height: 6),
                                 FittedBox(
                                   fit: BoxFit.scaleDown,
                                   alignment: Alignment.centerLeft,
@@ -258,9 +258,9 @@ extension _HoyTabExt on _TelevisaAppState {
                                       ? Colors.green.shade700
                                       : const Color(0xFF2E7D32),
                                   foregroundColor: Colors.white,
-                                  minimumSize: const Size(double.infinity, 58),
+                                  minimumSize: const Size(double.infinity, 48),
                                   padding: const EdgeInsets.symmetric(
-                                      vertical: 14, horizontal: 8),
+                                      vertical: 10, horizontal: 8),
                                   shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12)),
                                   elevation: 2,
@@ -272,26 +272,26 @@ extension _HoyTabExt on _TelevisaAppState {
                                     ? null
                                     : () => _processRecord(
                                         "ENTRADA", DateTime.now()),
-                                icon: const Icon(Icons.login, size: 22),
+                                icon: const Icon(Icons.login, size: 20),
                                 label: const FittedBox(
                                   fit: BoxFit.scaleDown,
                                   child: Text(
                                     "ENTRADA AHORA",
                                     style: TextStyle(
-                                      fontSize: 16.5,
+                                      fontSize: 15,
                                       fontWeight: FontWeight.bold,
                                       letterSpacing: 0.5,
                                     ),
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 8),
                               OutlinedButton.icon(
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: _isDarkMode
                                       ? Colors.greenAccent
                                       : const Color(0xFF2E7D32),
-                                  minimumSize: const Size(double.infinity, 58),
+                                  minimumSize: const Size(double.infinity, 48),
                                   side: BorderSide(
                                     color: (_isProcessing ||
                                             hasTodayFalta ||
@@ -306,7 +306,7 @@ extension _HoyTabExt on _TelevisaAppState {
                                     width: 1.2,
                                   ),
                                   padding: const EdgeInsets.symmetric(
-                                      vertical: 14, horizontal: 8),
+                                      vertical: 10, horizontal: 8),
                                   shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12)),
                                 ),
@@ -336,7 +336,7 @@ extension _HoyTabExt on _TelevisaAppState {
                                         }
                                       },
                                 icon: Icon(Icons.edit,
-                                    size: 22,
+                                    size: 20,
                                     color: _isDarkMode
                                         ? Colors.greenAccent
                                         : const Color(0xFF2E7D32)),
@@ -345,7 +345,7 @@ extension _HoyTabExt on _TelevisaAppState {
                                   child: Text(
                                     "ENTRADA MANUAL",
                                     style: TextStyle(
-                                      fontSize: 16.5,
+                                      fontSize: 15,
                                       fontWeight: FontWeight.bold,
                                       letterSpacing: 0.5,
                                     ),
@@ -363,7 +363,7 @@ extension _HoyTabExt on _TelevisaAppState {
                     child: hasRegisteredSalida
                         ? Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 16),
+                                horizontal: 12, vertical: 12),
                             decoration: BoxDecoration(
                               color: _isDarkMode
                                   ? Colors.red.withAlpha(25)
@@ -418,7 +418,7 @@ extension _HoyTabExt on _TelevisaAppState {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 10),
+                                const SizedBox(height: 6),
                                 FittedBox(
                                   fit: BoxFit.scaleDown,
                                   alignment: Alignment.centerLeft,
@@ -463,9 +463,9 @@ extension _HoyTabExt on _TelevisaAppState {
                                           : const Color(0xFFC62828),
                                       foregroundColor: Colors.white,
                                       minimumSize:
-                                          const Size(double.infinity, 58),
+                                          const Size(double.infinity, 48),
                                       padding: const EdgeInsets.symmetric(
-                                          vertical: 14, horizontal: 8),
+                                          vertical: 10, horizontal: 8),
                                       shape: RoundedRectangleBorder(
                                           borderRadius:
                                               BorderRadius.circular(12)),
@@ -475,27 +475,27 @@ extension _HoyTabExt on _TelevisaAppState {
                                         ? null
                                         : () =>
                                             _executeSalida(DateTime.now()),
-                                    icon: const Icon(Icons.logout, size: 22),
+                                    icon: const Icon(Icons.logout, size: 20),
                                     label: const FittedBox(
                                       fit: BoxFit.scaleDown,
                                       child: Text(
                                         "SALIDA AHORA",
                                         style: TextStyle(
-                                          fontSize: 16.5,
+                                          fontSize: 15,
                                           fontWeight: FontWeight.bold,
                                           letterSpacing: 0.5,
                                         ),
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 8),
                                   OutlinedButton.icon(
                                     style: OutlinedButton.styleFrom(
                                       foregroundColor: _isDarkMode
                                           ? Colors.redAccent
                                           : const Color(0xFFB91C1C),
                                       minimumSize:
-                                          const Size(double.infinity, 58),
+                                          const Size(double.infinity, 48),
                                       side: BorderSide(
                                         color: _isProcessing
                                             ? (_isDarkMode
@@ -508,7 +508,7 @@ extension _HoyTabExt on _TelevisaAppState {
                                         width: _isDarkMode ? 1.2 : 1.8,
                                       ),
                                       padding: const EdgeInsets.symmetric(
-                                          vertical: 14, horizontal: 8),
+                                          vertical: 10, horizontal: 8),
                                       shape: RoundedRectangleBorder(
                                           borderRadius:
                                               BorderRadius.circular(12)),
@@ -536,7 +536,7 @@ extension _HoyTabExt on _TelevisaAppState {
                                             }
                                           },
                                     icon: Icon(Icons.edit,
-                                        size: 22,
+                                        size: 20,
                                         color: _isDarkMode
                                             ? Colors.redAccent
                                             : const Color(0xFFB91C1C)),
@@ -545,7 +545,7 @@ extension _HoyTabExt on _TelevisaAppState {
                                       child: Text(
                                         "SALIDA MANUAL",
                                         style: TextStyle(
-                                          fontSize: 16.5,
+                                          fontSize: 15,
                                           fontWeight: FontWeight.bold,
                                           letterSpacing: 0.5,
                                           color: _isDarkMode
@@ -559,7 +559,7 @@ extension _HoyTabExt on _TelevisaAppState {
                               )
                             : Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 14, vertical: 16),
+                                    horizontal: 12, vertical: 12),
                                 decoration: BoxDecoration(
                                   color: _isDarkMode
                                       ? Colors.white.withAlpha(8)
@@ -598,7 +598,7 @@ extension _HoyTabExt on _TelevisaAppState {
                                         ),
                                       ],
                                     ),
-                                    const SizedBox(height: 10),
+                                    const SizedBox(height: 6),
                                     FittedBox(
                                       fit: BoxFit.scaleDown,
                                       alignment: Alignment.centerLeft,
@@ -854,12 +854,12 @@ extension _HoyTabExt on _TelevisaAppState {
           ],
           // Bottom quick actions (only when not clocked in and not completed today)
           if (!_isClockedIn && !_completedToday) ...[
-            const SizedBox(height: 24),
+            const SizedBox(height: 10),
             Divider(
                 color: _isDarkMode
                     ? Colors.white12
                     : const Color(0xFFD1D5DB)),
-            const SizedBox(height: 12),
+            const SizedBox(height: 6),
             Row(
               children: [
                 Expanded(
@@ -946,7 +946,7 @@ extension _HoyTabExt on _TelevisaAppState {
                       },
                 isCompact: true),
           ],
-          const SizedBox(height: 30),
+          const SizedBox(height: 12),
         ],
       ),
     );

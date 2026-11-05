@@ -32,6 +32,7 @@ part 'tabs/unit_manager_tab.dart';
 part 'tabs/day_dialogs_and_io.dart';
 
 final Map<String, String> _changelogTitles = {
+  "23.17.0": "🤝 Versión 23.17.0 (04/11/26) — Modo Sin Conexión, Estado en la Nube y Pantalla Más Cómoda",
   "23.16.0": "🤝 Versión 23.16.0 (03/11/26) — Compartir Horarios, Nómina 2027 y Soporte de Cuenta",
   "23.15.0": "🛠️ Versión 23.15.0 (28/10/26) — Herramientas de Soporte y Fusión de Cuentas",
   "23.14.0": "⏱️ Versión 23.14.0 (27/10/26) — Edición de Turnos Renovada y Mejoras de Rendimiento",
@@ -41,6 +42,11 @@ final Map<String, String> _changelogTitles = {
 };
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.17.0": [
+    "⚡ Úsala sin internet (Modo Fuera de Línea): Ahora puedes registrar tus turnos, entradas y salidas aunque no tengas señal ni internet. Tus datos se guardan en tu celular y se subirán solitos a la nube en cuanto vuelvas a tener conexión.",
+    "☁️ Barra de estado de conexión: Nueva barra arriba de la pantalla que te avisa con letras grandes y claras si tus datos ya están respaldados en la nube o si estás sin conexión, junto con la hora exacta del último respaldo. ¡Puedes tocarla cuando quieras para forzar el guardado!",
+    "📱 Pantalla Hoy más cómoda y visible: Ajustamos los espacios para que veas toda tu información de un solo vistazo en tu celular sin tener que deslizar la pantalla hacia abajo, con la fecha de hoy en letras grandes y legibles.",
+  ],
   "23.16.0": [
     "🤝 Comparte tus horarios con más de una persona: En Ajustes ahora puedes compartir tus entradas y salidas con varios Ingenieros de Unidad al mismo tiempo, configurando permisos por separado para cada uno (tu sueldo y pagos nunca se comparten).",
     "📆 Elige días específicos o semanas completas: Puedes decidir exactamente qué días o qué semanas completas quieres compartir con cada ingeniero desde un calendario rápido, o elegir 'Solo Hoy' cuando trabajes en una unidad por un día.",
@@ -135,6 +141,10 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: AuthWrapper(),
@@ -149,6 +159,16 @@ void main() async {
     ],
     locale: Locale('es', 'ES'),
   ));
+}
+
+// ---------------------------------------------------------------------------
+// CLOUD SYNC STATUS TRACKER
+// ---------------------------------------------------------------------------
+enum SyncStatus {
+  synced,
+  syncing,
+  offlinePending,
+  error,
 }
 
 // ---------------------------------------------------------------------------
@@ -430,6 +450,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
   bool _isProcessing = false;
   bool _isLoading = true; // Loading screen state
   String? _lastSeenVersion;
+  SyncStatus _syncStatus = SyncStatus.synced;
+  DateTime? _lastSyncTime;
 
   int get _unreadChangelogCount {
     final lastSeen = _lastSeenVersion ?? "0.0.0";
@@ -670,19 +692,27 @@ class _TelevisaAppState extends State<TelevisaApp> {
       setState(() => _isLoading = false);
     }
 
-    // Check if user needs onboarding (missing salary or base hours)
-    _checkAndShowOnboarding();
+    // Check if user needs Google employee number setup / Smart Account Merge
+    // and then check if user needs onboarding (missing salary or base hours)
+    await _checkAndShowOnboarding();
   }
 
-  void _checkAndShowOnboarding() {
-    // Check if salary or base hours are empty/default
+  Future<void> _checkAndShowOnboarding() async {
+    // 1. If the user signed in via Google and has no employee number yet,
+    // prompt for Employee Number & run Smart Account Merge check first.
+    await _checkAndHandleGoogleEmployeeSetup();
+    if (!mounted) return;
+
+    // 2. Check if salary or base hours are empty/default
     bool needsOnboarding = _salaryController.text.isEmpty ||
         double.tryParse(_salaryController.text) == 0.0;
 
     if (needsOnboarding && mounted) {
       // Small delay to ensure UI is ready
       Future.delayed(const Duration(milliseconds: 500), () {
-        _showOnboardingDialog();
+        if (mounted) {
+          _showOnboardingDialog();
+        }
       });
     }
   }
@@ -1338,48 +1368,54 @@ class _TelevisaAppState extends State<TelevisaApp> {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
 
-    // Check for salary change FIRST, before showing loading screen
+    // Check for salary change FIRST, before saving
     if (checkSalaryChange && user != null) {
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get()
+            .timeout(const Duration(seconds: 3));
 
-      if (userDoc.exists) {
-        final data = userDoc.data() as Map<String, dynamic>;
-        String? oldSalary = data['salary'] as String?;
-        String? newSalary = _salaryController.text;
+        if (userDoc.exists) {
+          final data = userDoc.data() as Map<String, dynamic>;
+          String? oldSalary = data['salary'] as String?;
+          String? newSalary = _salaryController.text;
 
-        if (oldSalary != null &&
-            oldSalary.isNotEmpty &&
-            newSalary.isNotEmpty &&
-            oldSalary != newSalary) {
-          // Salary has changed - prompt for effective date
-          // Check mounted before showing dialog
-          if (!mounted) return;
+          if (oldSalary != null &&
+              oldSalary.isNotEmpty &&
+              newSalary.isNotEmpty &&
+              oldSalary != newSalary) {
+            // Salary has changed - prompt for effective date
+            if (!mounted) return;
 
-          // Show dialog WITHOUT loading screen blocking it
-          final effectiveDate =
-              await _showSalaryChangeDialog(oldSalary, newSalary);
-          if (effectiveDate != null) {
-            // Add to salary history
-            _salaryHistory.add({
-              'salary': double.tryParse(newSalary) ?? 0.0,
-              'effective_date': DateFormat('yyyy-MM-dd').format(effectiveDate),
-              'previous_salary': double.tryParse(oldSalary) ?? 0.0,
-            });
-            // Save salary history locally
-            await prefs.setString('salary_history', jsonEncode(_salaryHistory));
+            final effectiveDate =
+                await _showSalaryChangeDialog(oldSalary, newSalary);
+            if (effectiveDate != null) {
+              // Add to salary history
+              _salaryHistory.add({
+                'salary': double.tryParse(newSalary) ?? 0.0,
+                'effective_date': DateFormat('yyyy-MM-dd').format(effectiveDate),
+                'previous_salary': double.tryParse(oldSalary) ?? 0.0,
+              });
+              // Save salary history locally
+              await prefs.setString('salary_history', jsonEncode(_salaryHistory));
+            }
           }
         }
+      } catch (e) {
+        debugPrint("Notice: remote salary check skipped (offline or timeout): $e");
       }
     }
 
-    // NOW start the loading screen for the actual save operation
     if (!mounted) return;
-    setState(() => _isProcessing = true);
+    setState(() {
+      _isProcessing = true;
+      _syncStatus = SyncStatus.syncing;
+    });
+
     try {
-      // 1. Save locally
+      // 1. Save locally to SharedPreferences first
       String jsonHistory =
           jsonEncode(_weeklyHistory.map((e) => e.toJson()).toList());
       await prefs.setString('history_v2', jsonHistory);
@@ -1471,28 +1507,46 @@ class _TelevisaAppState extends State<TelevisaApp> {
           );
         }
 
-        await batch.commit();
+        await batch.commit().timeout(const Duration(seconds: 8));
         _syncShiftsToUnitManager();
       }
 
+      await prefs.setBool('has_pending_sync', false);
+      final nowSync = DateTime.now();
+      _lastSyncTime = nowSync;
+      await prefs.setString('last_sync_time', nowSync.toIso8601String());
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text("Ajustes guardados con éxito"),
-              backgroundColor: Colors.green),
-        );
+        setState(() {
+          _syncStatus = SyncStatus.synced;
+        });
       }
     } catch (e) {
+      debugPrint("Notice: Cloud sync error or offline: $e");
+      await prefs.setBool('has_pending_sync', true);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-              content: Text("Error: Verifique su conexión a internet"),
-              backgroundColor: Colors.red),
-        );
+        setState(() {
+          if (e is TimeoutException ||
+              e.toString().contains('unavailable') ||
+              e.toString().contains('network') ||
+              e.toString().contains('offline') ||
+              e.toString().contains('SocketException')) {
+            _syncStatus = SyncStatus.offlinePending;
+          } else {
+            _syncStatus = SyncStatus.error;
+          }
+        });
       }
     } finally {
       if (mounted) setState(() => _isProcessing = false);
     }
+  }
+
+  Future<void> _triggerManualSync() async {
+    if (_syncStatus == SyncStatus.syncing) return;
+    setState(() {
+      _syncStatus = SyncStatus.syncing;
+    });
+    await _saveData(checkSalaryChange: false);
   }
 
   Future<void> _toggleTheme() async {
@@ -1506,6 +1560,41 @@ class _TelevisaAppState extends State<TelevisaApp> {
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
+
+    // Clear user-specific local cache if a different Firebase Auth UID signed in
+    if (user != null) {
+      final lastUid = prefs.getString('last_logged_in_uid');
+      if (lastUid != null && lastUid != user.uid) {
+        for (final key in [
+          'salary',
+          'base_hours',
+          'retention',
+          'fomento',
+          'cuota',
+          'first_name',
+          'last_name',
+          'user_emp',
+          'recovery_email',
+          'history_v2',
+          'salary_history',
+          'jornada_history',
+          'retention_history',
+          'fomento_history',
+          'cuota_history',
+          'rest_days_history',
+          'rest_days',
+          'is_unit_manager',
+          'pending_entrada',
+          'pending_entrada_real',
+          'pending_clocked_in',
+          'last_sync_time',
+        ]) {
+          await prefs.remove(key);
+        }
+        _lastSyncTime = null;
+      }
+      await prefs.setString('last_logged_in_uid', user.uid);
+    }
 
     final String? savedVersion = prefs.getString('last_seen_version');
     if (savedVersion == null) {
@@ -1648,115 +1737,150 @@ class _TelevisaAppState extends State<TelevisaApp> {
         _weeklyHistory.sort((a, b) => b.entrada.compareTo(a.entrada));
       }
       _syncWorkDayStatics();
+
+      final String? savedLastSync = prefs.getString('last_sync_time');
+      if (savedLastSync != null) {
+        try {
+          _lastSyncTime = DateTime.parse(savedLastSync);
+        } catch (_) {}
+      }
     });
 
+    final bool hasPendingSync = prefs.getBool('has_pending_sync') ?? false;
+    if (hasPendingSync && mounted) {
+      setState(() {
+        _syncStatus = SyncStatus.offlinePending;
+      });
+    }
+
     if (user != null) {
-      // 1. Load Settings from Cloud
-      final userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      if (userDoc.exists) {
-        final data = userDoc.data() as Map<String, dynamic>;
-        final String userEmp = (data['user_emp'] ??
-                data['employee_number'] ??
-                _userEmpNoController.text)
-            .toString()
-            .trim();
-        bool isMgr = data['is_unit_manager'] == true ||
-            data['role'] == 'ingeniero_de_unidad';
+      try {
+        // 1. Load Settings from Cloud
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get()
+            .timeout(const Duration(seconds: 4));
+        if (userDoc.exists) {
+          final data = userDoc.data() as Map<String, dynamic>;
+          final String userEmp = (data['user_emp'] ??
+                  data['employee_number'] ??
+                  _userEmpNoController.text)
+              .toString()
+              .trim();
+          bool isMgr = data['is_unit_manager'] == true ||
+              data['role'] == 'ingeniero_de_unidad';
 
-        if (!isMgr) {
-          isMgr = await _resolveIsUnitManager(user, userEmp);
+          if (!isMgr) {
+            isMgr = await _resolveIsUnitManager(user, userEmp);
+          } else {
+            await prefs.setBool('is_unit_manager', true);
+          }
+
+          _setupUnitManagerRealtimeListener(user, userEmp);
+
+          setState(() {
+            _isUnitManager = isMgr;
+            _salaryController.text = data['salary'] ?? _salaryController.text;
+
+            // Load history lists from cloud
+            if (data['salary_history'] != null) {
+              _salaryHistory = _normalizeHistoryList(data['salary_history']);
+              prefs.setString('salary_history', jsonEncode(_salaryHistory));
+            }
+            if (data['jornada_history'] != null) {
+              _jornadaHistory = _normalizeHistoryList(data['jornada_history']);
+              prefs.setString('jornada_history', jsonEncode(_jornadaHistory));
+            }
+            if (data['retention_history'] != null) {
+              _retentionHistory = _normalizeHistoryList(data['retention_history']);
+              prefs.setString('retention_history', jsonEncode(_retentionHistory));
+            }
+            if (data['fomento_history'] != null) {
+              _fomentoHistory = _normalizeHistoryList(data['fomento_history']);
+              prefs.setString('fomento_history', jsonEncode(_fomentoHistory));
+            }
+            if (data['cuota_history'] != null) {
+              _cuotaHistory = _normalizeHistoryList(data['cuota_history']);
+              prefs.setString('cuota_history', jsonEncode(_cuotaHistory));
+            }
+            if (data['rest_days_history'] != null) {
+              _restDaysHistory =
+                  _normalizeRestDaysHistoryList(data['rest_days_history']);
+              prefs.setString(
+                  'rest_days_history', jsonEncode(_restDaysHistory));
+            }
+            _syncWorkDayStatics();
+
+            if (data['rest_days'] != null) {
+              _restDays = List<int>.from(
+                  (data['rest_days'] as List).map((x) => (x as num).toInt()));
+              if (_restDays.isEmpty) _restDays = [6, 7];
+              prefs.setStringList(
+                  'rest_days', _restDays.map((e) => e.toString()).toList());
+              WorkDay.restDays = _restDays;
+            }
+
+            _baseHoursController.text = data['base_hours'] ?? "9.5";
+            _retentionController.text = data['retention'] ?? "15.22";
+            _fomentoController.text = data['fomento'] ?? "2.0";
+            _cuotaController.text = data['cuota'] ?? "2.0";
+            _firstNameController.text = data['first_name'] ?? "";
+            _lastNameController.text = data['last_name'] ?? "";
+            // Check both field names for backward compatibility
+            _userEmpNoController.text =
+                data['user_emp'] ?? data['employee_number'] ?? "";
+            _recoveryEmailController.text =
+                (data['recovery_email'] as String?)?.toLowerCase() ?? "";
+          });
         } else {
-          await prefs.setBool('is_unit_manager', true);
+          final String fallbackEmp = _userEmpNoController.text.trim();
+          final bool isMgr = await _resolveIsUnitManager(user, fallbackEmp);
+          if (isMgr) {
+            await prefs.setBool('is_unit_manager', true);
+            if (mounted) {
+              setState(() {
+                _isUnitManager = true;
+              });
+            }
+          }
+          _setupUnitManagerRealtimeListener(user, fallbackEmp);
         }
 
-        _setupUnitManagerRealtimeListener(user, userEmp);
-
-        setState(() {
-          _isUnitManager = isMgr;
-          _salaryController.text = data['salary'] ?? _salaryController.text;
-
-          // Load history lists from cloud
-          if (data['salary_history'] != null) {
-            _salaryHistory = _normalizeHistoryList(data['salary_history']);
-            prefs.setString('salary_history', jsonEncode(_salaryHistory));
-          }
-          if (data['jornada_history'] != null) {
-            _jornadaHistory = _normalizeHistoryList(data['jornada_history']);
-            prefs.setString('jornada_history', jsonEncode(_jornadaHistory));
-          }
-          if (data['retention_history'] != null) {
-            _retentionHistory = _normalizeHistoryList(data['retention_history']);
-            prefs.setString('retention_history', jsonEncode(_retentionHistory));
-          }
-          if (data['fomento_history'] != null) {
-            _fomentoHistory = _normalizeHistoryList(data['fomento_history']);
-            prefs.setString('fomento_history', jsonEncode(_fomentoHistory));
-          }
-          if (data['cuota_history'] != null) {
-            _cuotaHistory = _normalizeHistoryList(data['cuota_history']);
-            prefs.setString('cuota_history', jsonEncode(_cuotaHistory));
-          }
-          if (data['rest_days_history'] != null) {
-            _restDaysHistory =
-                _normalizeRestDaysHistoryList(data['rest_days_history']);
-            prefs.setString(
-                'rest_days_history', jsonEncode(_restDaysHistory));
-          }
-          _syncWorkDayStatics();
-
-          if (data['rest_days'] != null) {
-            _restDays = List<int>.from(
-                (data['rest_days'] as List).map((x) => (x as num).toInt()));
-            if (_restDays.isEmpty) _restDays = [6, 7];
-            prefs.setStringList(
-                'rest_days', _restDays.map((e) => e.toString()).toList());
-            WorkDay.restDays = _restDays;
-          }
-
-          _baseHoursController.text = data['base_hours'] ?? "9.5";
-          _retentionController.text = data['retention'] ?? "15.22";
-          _fomentoController.text = data['fomento'] ?? "2.0";
-          _cuotaController.text = data['cuota'] ?? "2.0";
-          _firstNameController.text = data['first_name'] ?? "";
-          _lastNameController.text = data['last_name'] ?? "";
-          // Check both field names for backward compatibility
-          _userEmpNoController.text =
-              data['user_emp'] ?? data['employee_number'] ?? "";
-          _recoveryEmailController.text =
-              (data['recovery_email'] as String?)?.toLowerCase() ?? "";
-        });
-      } else {
-        final String fallbackEmp = _userEmpNoController.text.trim();
-        final bool isMgr = await _resolveIsUnitManager(user, fallbackEmp);
-        if (isMgr) {
-          await prefs.setBool('is_unit_manager', true);
-          if (mounted) {
-            setState(() {
-              _isUnitManager = true;
-            });
-          }
+        // 2. Load History from Cloud
+        final snapshot =
+            await _userHistory.get().timeout(const Duration(seconds: 4));
+        if (snapshot.docs.isNotEmpty) {
+          setState(() {
+            _weeklyHistory = snapshot.docs
+                .map(
+                    (doc) => WorkDay.fromJson(doc.data() as Map<String, dynamic>))
+                .toList();
+            _weeklyHistory.sort((a, b) => b.entrada.compareTo(a.entrada));
+            _syncTodayStateFromHistory();
+          });
         }
-        _setupUnitManagerRealtimeListener(user, fallbackEmp);
-      }
 
-      // 2. Load History from Cloud
-      final snapshot = await _userHistory.get();
-      if (snapshot.docs.isNotEmpty) {
-        setState(() {
-          _weeklyHistory = snapshot.docs
-              .map(
-                  (doc) => WorkDay.fromJson(doc.data() as Map<String, dynamic>))
-              .toList();
-          _weeklyHistory.sort((a, b) => b.entrada.compareTo(a.entrada));
-          _syncTodayStateFromHistory();
-        });
-      }
+        // 3. Load Unit Share Settings
+        await _loadUnitShareSettings().timeout(const Duration(seconds: 4));
 
-      // 3. Load Unit Share Settings
-      await _loadUnitShareSettings();
+        if (!hasPendingSync && mounted) {
+          final nowSync = DateTime.now();
+          _lastSyncTime = nowSync;
+          await prefs.setString('last_sync_time', nowSync.toIso8601String());
+          setState(() {
+            _syncStatus = SyncStatus.synced;
+          });
+        }
+      } catch (e) {
+        debugPrint(
+            "Notice: Cloud load timed out or offline, using local data: $e");
+        if (mounted) {
+          setState(() {
+            _syncStatus = SyncStatus.offlinePending;
+          });
+        }
+      }
     }
   }
 
@@ -1938,7 +2062,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     _userRoleSubscription = FirebaseFirestore.instance
         .collection('users')
         .doc(user.uid)
-        .snapshots()
+        .snapshots(includeMetadataChanges: true)
         .listen((snap) {
       if (snap.exists && mounted) {
         final d = snap.data();
@@ -1952,7 +2076,33 @@ class _TelevisaAppState extends State<TelevisaApp> {
               .then((p) => p.setBool('is_unit_manager', isMgr));
         }
       }
-    }, onError: (e) => debugPrint("user role listener notice: $e"));
+      if (mounted) {
+        if (snap.metadata.hasPendingWrites) {
+          if (_syncStatus != SyncStatus.syncing) {
+            setState(() {
+              _syncStatus = SyncStatus.offlinePending;
+            });
+          }
+        } else {
+          if (_syncStatus != SyncStatus.syncing) {
+            final nowSync = DateTime.now();
+            _lastSyncTime = nowSync;
+            SharedPreferences.getInstance().then(
+                (p) => p.setString('last_sync_time', nowSync.toIso8601String()));
+            setState(() {
+              _syncStatus = SyncStatus.synced;
+            });
+          }
+        }
+      }
+    }, onError: (e) {
+      debugPrint("user role listener notice: $e");
+      if (mounted && _syncStatus != SyncStatus.syncing) {
+        setState(() {
+          _syncStatus = SyncStatus.offlinePending;
+        });
+      }
+    });
 
     _unitShareMembersSubscription = FirebaseFirestore.instance
         .collection('unit_shares')
@@ -2360,12 +2510,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
   }
 
   Future<void> _addAndSortHistory(WorkDay day) async {
-    setState(() => _isProcessing = true);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(" Subiendo datos a la nube..."),
-        duration: Duration(seconds: 1),
-        backgroundColor: Colors.blueAccent));
     setState(() {
+      _isProcessing = true;
       _weeklyHistory.removeWhere((item) =>
           item.entrada.year == day.entrada.year &&
           item.entrada.month == day.entrada.month &&
@@ -2377,16 +2523,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
     if (mounted) {
       setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      // Remove "Uploading"
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              " Jornada guardada: ${DateFormat('dd/MM').format(day.entrada)}"),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 2),
-        ),
-      );
     }
   }
 
@@ -2493,10 +2629,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
   Future<void> _executeEntrada(DateTime assignedTime,
       {DateTime? actualTime}) async {
     setState(() => _isProcessing = true);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(" Guardando entrada en la nube..."),
-        duration: Duration(seconds: 1),
-        backgroundColor: Colors.blueAccent));
 
     final double salaryForDate = _getSalaryForDate(assignedTime);
     final double bHrs = _getJornadaForDate(assignedTime);
@@ -2537,10 +2669,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
     if (mounted) {
       setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text(" Entrada registrada exitosamente"),
-          backgroundColor: Colors.green));
     }
   }
 
@@ -2600,10 +2728,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
     if (mounted) {
       setState(() => _isProcessing = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(" Salida registrada exitosamente"),
-        backgroundColor: Colors.green,
-      ));
     }
   }
 
@@ -2779,14 +2903,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
     await prefs.setBool('pending_clocked_in', false);
 
     await _saveData();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content:
-            Text("Turno anterior eliminado. Listo para registrar hoy."),
-        backgroundColor: Colors.green,
-      ));
-    }
   }
 
   Future<void> _deleteTodayShift() async {
@@ -2869,13 +2985,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
     await prefs.setBool('pending_clocked_in', false);
 
     await _saveData();
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Registro de hoy eliminado"),
-        backgroundColor: Colors.green,
-      ));
-    }
   }
 
   void _calculateEarnings(DateTime salida, {WorkDay? dayOverride}) {
@@ -3055,6 +3164,156 @@ class _TelevisaAppState extends State<TelevisaApp> {
     );
   }
 
+  String _formatLastSyncTime(DateTime dt) {
+    final now = DateTime.now();
+    final bool isToday =
+        dt.year == now.year && dt.month == now.month && dt.day == now.day;
+    final timeStr = DateFormat('hh:mm a').format(dt);
+    if (isToday) {
+      return "Hoy $timeStr";
+    }
+    return DateFormat('dd/MM hh:mm a').format(dt);
+  }
+
+  Widget _buildSyncStatusBanner() {
+    Color bgColor;
+    Color textColor;
+    Color borderColor;
+    Widget content;
+    const double verticalPadding = 13.0;
+
+    switch (_syncStatus) {
+      case SyncStatus.synced:
+        bgColor = _isDarkMode ? const Color(0xFF052E16) : const Color(0xFFDCFCE7);
+        textColor = _isDarkMode ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
+        borderColor = _isDarkMode ? const Color(0xFF14532D) : const Color(0xFF86EFAC);
+        final String syncText = _lastSyncTime != null
+            ? "✓ Sincronizado con la nube • ${_formatLastSyncTime(_lastSyncTime!)}"
+            : "✓ Sincronizado con la nube";
+        content = Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle_outline, size: 21, color: textColor),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                syncText,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+        break;
+
+      case SyncStatus.syncing:
+        bgColor = _isDarkMode ? const Color(0xFF1E3A8A) : const Color(0xFF2563EB);
+        textColor = Colors.white;
+        borderColor = _isDarkMode ? const Color(0xFF3B82F6) : const Color(0xFF1D4ED8);
+        content = const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            SizedBox(width: 8),
+            Text(
+              "🔄 Sincronizando datos...",
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        );
+        break;
+
+      case SyncStatus.offlinePending:
+        bgColor = const Color(0xFFD97706);
+        textColor = Colors.white;
+        borderColor = const Color(0xFFB45309);
+        final String offlineText = _lastSyncTime != null
+            ? "⚡ Modo sin conexión • Última sinc: ${_formatLastSyncTime(_lastSyncTime!)} • Toca para sincronizar"
+            : "⚡ Modo sin conexión: Guardado en tu dispositivo. [ Toca aquí para sincronizar ]";
+        content = Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.bolt, size: 21, color: Colors.white),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                offlineText,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
+          ],
+        );
+        break;
+
+      case SyncStatus.error:
+        bgColor = const Color(0xFFDC2626);
+        textColor = Colors.white;
+        borderColor = const Color(0xFF991B1B);
+        final String errorText = _lastSyncTime != null
+            ? "⚠️ Error de conexión • Última sinc: ${_formatLastSyncTime(_lastSyncTime!)} • [ Reintentar ]"
+            : "⚠️ Error de conexión: Datos seguros en tu dispositivo. [ Reintentar ]";
+        content = Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.warning_amber_rounded, size: 21, color: Colors.white),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                errorText,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
+          ],
+        );
+        break;
+    }
+
+    return Material(
+      color: bgColor,
+      child: InkWell(
+        onTap: _triggerManualSync,
+        child: Container(
+          width: double.infinity,
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.symmetric(vertical: verticalPadding, horizontal: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: borderColor, width: 1.0),
+            ),
+          ),
+          child: Center(child: content),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Show loading screen while initializing
@@ -3077,7 +3336,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.16.0 03/11/26",
+                "v.23.17.0 04/11/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,
@@ -3202,15 +3461,22 @@ class _TelevisaAppState extends State<TelevisaApp> {
           )
         ],
         persistentFooterAlignment: AlignmentDirectional.centerEnd,
-        body: TabBarView(children: [
-          _buildHoyTab(),
-          _buildQuincenaTab(),
-          _buildAnoTab(),
-          _buildNominaTab(),
-          _buildExtrasTab(),
-          if (_isUnitManager) _buildUnitManagerTab(),
-          _buildSettingsTab()
-        ]),
+        body: Column(
+          children: [
+            _buildSyncStatusBanner(),
+            Expanded(
+              child: TabBarView(children: [
+                _buildHoyTab(),
+                _buildQuincenaTab(),
+                _buildAnoTab(),
+                _buildNominaTab(),
+                _buildExtrasTab(),
+                if (_isUnitManager) _buildUnitManagerTab(),
+                _buildSettingsTab()
+              ]),
+            ),
+          ],
+        ),
       ),
     );
   }

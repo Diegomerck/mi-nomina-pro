@@ -2,7 +2,7 @@
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: November 2026  
-> **Version**: `v.23.16.0 03/11/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.17.0 04/11/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.16.0` (November 2026 Release).
+- **Internal Version**: `v.23.17.0` (November 2026 Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,7 +234,8 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
-- **v.23.16.0 03/11/26 (Current Release)**: Compartición independiente de horarios y asistencia con múltiples Ingenieros de Unidad simultáneos (cada uno con su propio modo de vigencia, permisos de datos y vigencia ilimitada en 'Todos Mis Registros' y 'Yo Decido'). Selector interactivo en calendario para compartir días específicos o semanas completas en bloque, e interruptores por ingeniero en Hoy, Quincena y Año. Adelanto del calendario de pagos 2027 (enero y febrero), selector rápido de año (`2026 | 2027`) fijo en Nómina y Año, pago triple automático en días festivos trabajados y mejoras en Modo Claro.
+- **v.23.17.0 04/11/26 (Current Release)**: Modo sin conexión con persistencia local robusta (offline-first mediante Firestore offline cache y sincronización automática bidireccional), barra de estado de sincronización en la nube con indicación visual clara de conexión y hora exacta del último respaldo (soporte de toque para forzar sincronización manual), mejoras de accesibilidad visual y tipográfica, y pantalla Hoy compactada y adaptada ergonómicamente para consultar toda la información de jornada de un vistazo sin scroll en dispositivos móviles.
+- **v.23.16.0 03/11/26**: Compartición independiente de horarios y asistencia con múltiples Ingenieros de Unidad simultáneos (cada uno con su propio modo de vigencia, permisos de datos y vigencia ilimitada en 'Todos Mis Registros' y 'Yo Decido'). Selector interactivo en calendario para compartir días específicos o semanas completas en bloque, e interruptores por ingeniero en Hoy, Quincena y Año. Adelanto del calendario de pagos 2027 (enero y febrero), selector rápido de año (`2026 | 2027`) fijo en Nómina y Año, pago triple automático en días festivos trabajados y mejoras en Modo Claro.
 - **v.23.15.0 28/10/26**: Herramientas de soporte en la Consola de Administración para consultar y cambiar correos registrados, enviar enlaces de recuperación de contraseña y realizar fusiones limpias de cuentas duplicadas (con eliminación definitiva de la cuenta origen en Firestore para evitar cuentas fantasma).
 - **v.23.14.0 27/10/26**: Ventana unificada de edición de turnos con interacción directa en un solo modal (Entrada, Salida, Entrada Real y Notas integradas con validación horaria). Protección contra cierres accidentales mediante control de salida y diálogo de confirmación de descarte. Filtro estricto de rangos temporales en sincronización y optimizaciones de rendimiento y respuesta visual en la interfaz general.
 - **v.23.13.2 16/10/26 (Internal Admin Release)**: Consola interna de administración para fusión y migración selectiva de cuentas (`AdminAccountMergeScreen`). Herramienta con acceso restringido para administradores (`minominapro@gmail.com` / UID `RybFq34QonRHbx3m1KitV1Wcft83`) accesible desde la pestaña Ajustes. Búsqueda de cuentas donante y receptora por número de empleado o correo electrónico con validación en tiempo real. Matriz comparativa interactiva campo por campo (turnos con selector de reemplazo exacto para eliminar huérfanos, sueldo diario, jornada, descansos, retención, fomento, cuota sindical, aumentos históricos y perfil) con casillas de verificación independientes para transferencia granular. Sincronización automática del directorio público (`employee_directory`) y marcado de cuenta donante fusionada sin pérdida de registros originales.

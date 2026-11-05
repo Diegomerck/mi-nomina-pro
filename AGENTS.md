@@ -51,11 +51,24 @@ Any agent generating code changes must follow these exact instructions:
 ---
 
 ## 5. Release & Deployment Protocol ("Publish New Version")
-Whenever the user instructs to "publish this new version" (or any equivalent wording):
-1. **Version Documentation**: Update `_changelogByVersion`, version strings in `lib/main.dart`, `PROJECT_OVERVIEW.md`, and `blueprint.md`.
-2. **GitHub Synchronization**: Stage, commit, and push all changes to `origin/master`.
-3. **Production Web Build**: Compile the release bundle using `flutter build web`.
-4. **Live Deployment**: Deploy to Firebase Hosting using `firebase deploy --only hosting`.
+
+The repository recognizes two official deployment commands:
+
+### A. `PUSH TO LIVE` (Official Public Release)
+Full release workflow notifying end users of updates:
+1. **Version Documentation**: Update `_changelogTitles` and `_changelogByVersion` in `lib/main.dart` using simple, clear, user-friendly language. Update version strings across the app (`lib/main.dart`, `PROJECT_OVERVIEW.md`, `blueprint.md`).
+2. **Release Notes**: Document technical and functional changes in `PROJECT_OVERVIEW.md` and `blueprint.md`.
+3. **GitHub Synchronization**: Stage, commit, and push all changes to `origin/master`.
+4. **Production Web Build**: Compile the release bundle using `flutter build web`.
+5. **Live Deployment**: Deploy live to Firebase Hosting using `firebase deploy --only hosting`.
+
+### B. `PUSH DISCRETE` (Silent / Maintenance Release)
+Maintenance release workflow for silent fixes or backend adjustments without end-user notification:
+1. **No User Notification**: Do **NOT** modify `_changelogTitles` or `_changelogByVersion` in `lib/main.dart` (ensures users do not receive an unread update badge or popup).
+2. **Release Notes & Documentation**: Stage internal notes and version updates in `PROJECT_OVERVIEW.md` and `blueprint.md`.
+3. **GitHub Synchronization**: Stage, commit, and push all changes to `origin/master`.
+4. **Production Web Build**: Compile the release bundle using `flutter build web`.
+5. **Live Deployment**: Deploy live to Firebase Hosting using `firebase deploy --only hosting`.
 
 ---
 
