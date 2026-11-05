@@ -1045,39 +1045,54 @@ class _LoginScreenState extends State<LoginScreen> {
                       .get();
                   if (dirDoc.exists) {
                     final d = dirDoc.data();
-                    targetEmail = (d?['email'] ?? d?['recovery_email'])
-                        ?.toString()
-                        .trim()
-                        .toLowerCase();
+                    final em = d?['email']?.toString().trim().toLowerCase();
+                    final rec =
+                        d?['recovery_email']?.toString().trim().toLowerCase();
+                    if (rec != null &&
+                        rec.isNotEmpty &&
+                        !rec.endsWith('@televisa.com')) {
+                      targetEmail = rec;
+                    } else if (em != null &&
+                        em.isNotEmpty &&
+                        !em.endsWith('@televisa.com')) {
+                      targetEmail = em;
+                    } else {
+                      targetEmail = em ?? rec;
+                    }
                   }
 
-                  // Fallback check in users collection
+                  // Fallback check in users collection (guarded with try-catch for unauthenticated users)
                   if (targetEmail == null || targetEmail.isEmpty) {
-                    final snapEmp = await FirebaseFirestore.instance
-                        .collection('users')
-                        .where('employee_number', isEqualTo: rawInput)
-                        .limit(1)
-                        .get();
-                    if (snapEmp.docs.isNotEmpty) {
-                      final data = snapEmp.docs.first.data();
-                      targetEmail = (data['recovery_email'] ?? data['email'])
-                          ?.toString()
-                          .trim()
-                          .toLowerCase();
-                    }
-                    if (targetEmail == null || targetEmail.isEmpty) {
-                      final snapUserEmp = await FirebaseFirestore.instance
+                    try {
+                      final snapEmp = await FirebaseFirestore.instance
                           .collection('users')
-                          .where('user_emp', isEqualTo: rawInput)
+                          .where('employee_number', isEqualTo: rawInput)
                           .limit(1)
                           .get();
-                      if (snapUserEmp.docs.isNotEmpty) {
-                        final data = snapUserEmp.docs.first.data();
+                      if (snapEmp.docs.isNotEmpty) {
+                        final data = snapEmp.docs.first.data();
                         targetEmail = (data['recovery_email'] ?? data['email'])
                             ?.toString()
                             .trim()
                             .toLowerCase();
                       }
+                      if (targetEmail == null || targetEmail.isEmpty) {
+                        final snapUserEmp = await FirebaseFirestore.instance
+                            .collection('users')
+                            .where('user_emp', isEqualTo: rawInput)
+                            .limit(1)
+                            .get();
+                        if (snapUserEmp.docs.isNotEmpty) {
+                          final data = snapUserEmp.docs.first.data();
+                          targetEmail = (data['recovery_email'] ?? data['email'])
+                              ?.toString()
+                              .trim()
+                              .toLowerCase();
+                        }
+                      }
+                    } catch (e) {
+                      debugPrint(
+                          "Notice: unauthenticated users collection lookup ignored: $e");
                     }
                   }
                 }
@@ -1089,7 +1104,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     isSubmitting = false;
                     errorMessage = rawInput.contains('@')
                         ? "El correo no está registrado en el sistema"
-                        : "El número de empleado no tiene un correo de recuperación registrado";
+                        : "No se encontró un correo para el número $rawInput. Si conoces tu correo registrado, ingrésalo directamente arriba.";
                   });
                   return;
                 }

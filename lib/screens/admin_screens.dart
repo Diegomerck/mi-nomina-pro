@@ -2944,6 +2944,199 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
     }
   }
 
+  Future<void> _syncEmployeeDirectory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor:
+            _isDarkMode ? const Color(0xFF1E1E26) : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0284C7).withAlpha(30),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.sync_rounded,
+                  color: Color(0xFF0284C7), size: 24),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                "Sincronizar Directorio",
+                style: TextStyle(
+                  color: _isDarkMode ? Colors.white : const Color(0xFF0F172A),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          "Se escanearán todos los usuarios activos no fusionados con número de empleado y correo registrados para actualizar la colección pública 'employee_directory'.\n\nEsto garantiza que la recuperación de contraseña y login por número de empleado funcionen correctamente sin errores de permisos.",
+          style: TextStyle(
+            color: _isDarkMode ? Colors.white70 : const Color(0xFF475569),
+            fontSize: 14,
+            height: 1.4,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              "CANCELAR",
+              style: TextStyle(
+                color: _isDarkMode ? Colors.white60 : Colors.black54,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0284C7),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              "SINCRONIZAR AHORA",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+            SizedBox(width: 14),
+            Text("Sincronizando directorio de empleados..."),
+          ],
+        ),
+        duration: Duration(seconds: 4),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+
+    try {
+      final usersSnap =
+          await FirebaseFirestore.instance.collection('users').get();
+      final Map<String, Map<String, dynamic>> toSync = {};
+
+      for (final doc in usersSnap.docs) {
+        final d = doc.data();
+        final isMerged = d['is_merged'] == true;
+        if (isMerged) continue;
+
+        final empNo =
+            (d['employee_number'] ?? d['user_emp'] ?? '').toString().trim();
+        if (empNo.isEmpty) continue;
+
+        final email = (d['email'] ?? '').toString().trim().toLowerCase();
+        final recEmail =
+            (d['recovery_email'] ?? '').toString().trim().toLowerCase();
+
+        String effectiveEmail = '';
+        if (recEmail.isNotEmpty && !recEmail.endsWith('@televisa.com')) {
+          effectiveEmail = recEmail;
+        } else if (email.isNotEmpty && !email.endsWith('@televisa.com')) {
+          effectiveEmail = email;
+        } else if (recEmail.isNotEmpty) {
+          effectiveEmail = recEmail;
+        } else if (email.isNotEmpty) {
+          effectiveEmail = email;
+        }
+
+        if (effectiveEmail.isEmpty && recEmail.isEmpty) continue;
+
+        // If employee number already mapped, prefer the entry with a real non-televisa email
+        if (toSync.containsKey(empNo)) {
+          final existingEmail = (toSync[empNo]!['email'] ?? '') as String;
+          final existingIsReal = existingEmail.isNotEmpty &&
+              !existingEmail.endsWith('@televisa.com');
+          final newIsReal = effectiveEmail.isNotEmpty &&
+              !effectiveEmail.endsWith('@televisa.com');
+          if (existingIsReal && !newIsReal) {
+            continue;
+          }
+        }
+
+        toSync[empNo] = {
+          'uid': doc.id,
+          'employee_number': empNo,
+          'email': effectiveEmail,
+          if (recEmail.isNotEmpty) 'recovery_email': recEmail,
+          'legacy_email': "$empNo@televisa.com",
+          'updated_at': FieldValue.serverTimestamp(),
+        };
+      }
+
+      WriteBatch batch = FirebaseFirestore.instance.batch();
+      int opCount = 0;
+      int totalSynced = 0;
+
+      for (final entry in toSync.entries) {
+        final ref = FirebaseFirestore.instance
+            .collection('employee_directory')
+            .doc(entry.key);
+        batch.set(ref, entry.value, SetOptions(merge: true));
+        opCount++;
+        totalSynced++;
+
+        if (opCount >= 400) {
+          await batch.commit();
+          batch = FirebaseFirestore.instance.batch();
+          opCount = 0;
+        }
+      }
+
+      if (opCount > 0) {
+        await batch.commit();
+      }
+
+      await _loadAdminMetrics();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                "Directorio sincronizado exitosamente ($totalSynced empleados registrados)."),
+            backgroundColor: const Color(0xFF0284C7),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al sincronizar directorio: $e"),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _promptToggleUnitManager({
     required String uid,
     required String userName,
@@ -3672,13 +3865,19 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
     required String subtitle,
     required IconData icon,
     required List<Color> gradient,
+    VoidCallback? onTap,
+    String? tooltip,
   }) {
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: _cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _border),
+        border: Border.all(
+          color: onTap != null
+              ? gradient.first.withAlpha(120)
+              : _border,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3695,14 +3894,27 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
                 ),
                 child: Icon(icon, color: Colors.white, size: 18),
               ),
-              Text(
-                title,
-                style: TextStyle(
-                  color: _textSecondary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: _textSecondary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  if (onTap != null) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.sync_rounded,
+                      size: 14,
+                      color: gradient.first,
+                    ),
+                  ],
+                ],
               ),
             ],
           ),
@@ -3725,6 +3937,20 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap,
+          child: tooltip != null
+              ? Tooltip(message: tooltip, child: card)
+              : card,
+        ),
+      );
+    }
+    return card;
   }
 
   Widget _buildResumenTab() {
@@ -3868,6 +4094,8 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
                       subtitle: "Mapeos emp_dir",
                       icon: Icons.badge_rounded,
                       gradient: const [Color(0xFF0284C7), Color(0xFF38BDF8)],
+                      onTap: _syncEmployeeDirectory,
+                      tooltip: "Sincronizar Directorio",
                     ),
                   ],
                 );
@@ -4555,6 +4783,83 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
 
           const SizedBox(height: 20),
 
+          // Administrative Tools Card
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: _cardBg,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0284C7).withAlpha(30),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.build_circle_rounded,
+                        color: Color(0xFF38BDF8),
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      "Herramientas Administrativas",
+                      style: TextStyle(
+                        color: _textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  "Sincronización y mantenimiento de colecciones auxiliares para garantizar el acceso, login por número y recuperación de contraseñas.",
+                  style: TextStyle(
+                    color: _textSecondary,
+                    fontSize: 13,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0284C7),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 1,
+                    ),
+                    icon: const Icon(Icons.sync_rounded, size: 20),
+                    label: const Text(
+                      "SINCRONIZAR DIRECTORIO DE EMPLEADOS",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    onPressed: _syncEmployeeDirectory,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
           // System Info Card
           Container(
             padding: const EdgeInsets.all(18),
@@ -4575,7 +4880,7 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildInfoRow("Versión Aplicación", "v.23.17.0 04/11/26"),
+                _buildInfoRow("Versión Aplicación", "v.23.17.1 05/11/26"),
                 const Divider(height: 20),
                 _buildInfoRow("Entorno", "Firebase Production (Hosting & Firestore)"),
                 const Divider(height: 20),

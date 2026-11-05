@@ -452,6 +452,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
   String? _lastSeenVersion;
   SyncStatus _syncStatus = SyncStatus.synced;
   DateTime? _lastSyncTime;
+  int _pendingSyncCount = 0;
 
   int get _unreadChangelogCount {
     final lastSeen = _lastSeenVersion ?? "0.0.0";
@@ -504,6 +505,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
   StreamSubscription? _userRoleSubscription;
   StreamSubscription? _unitShareMembersSubscription;
   StreamSubscription? _unitShareEmpSubscription;
+  StreamSubscription? _userHistorySubscription;
   Stream<List<DocumentSnapshot>>? _unitMembersStream;
   String? _unitMembersStreamUid;
   String? _unitMembersStreamEmp;
@@ -1364,7 +1366,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
       .collection('users')
       .doc(FirebaseAuth.instance.currentUser?.uid)
       .collection('history');
-  Future<void> _saveData({bool checkSalaryChange = true}) async {
+  Future<void> _saveData(
+      {bool checkSalaryChange = true, bool isModification = true}) async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
 
@@ -1515,6 +1518,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
       final nowSync = DateTime.now();
       _lastSyncTime = nowSync;
       await prefs.setString('last_sync_time', nowSync.toIso8601String());
+      _pendingSyncCount = 0;
+      await prefs.setInt('pending_sync_count', 0);
       if (mounted) {
         setState(() {
           _syncStatus = SyncStatus.synced;
@@ -1523,6 +1528,10 @@ class _TelevisaAppState extends State<TelevisaApp> {
     } catch (e) {
       debugPrint("Notice: Cloud sync error or offline: $e");
       await prefs.setBool('has_pending_sync', true);
+      if (isModification) {
+        _pendingSyncCount++;
+        await prefs.setInt('pending_sync_count', _pendingSyncCount);
+      }
       if (mounted) {
         setState(() {
           if (e is TimeoutException ||
@@ -1546,7 +1555,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     setState(() {
       _syncStatus = SyncStatus.syncing;
     });
-    await _saveData(checkSalaryChange: false);
+    await _saveData(checkSalaryChange: false, isModification: false);
   }
 
   Future<void> _toggleTheme() async {
@@ -1588,10 +1597,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
           'pending_entrada_real',
           'pending_clocked_in',
           'last_sync_time',
+          'pending_sync_count',
+          'has_pending_sync',
         ]) {
           await prefs.remove(key);
         }
         _lastSyncTime = null;
+        _pendingSyncCount = 0;
       }
       await prefs.setString('last_logged_in_uid', user.uid);
     }
@@ -1744,16 +1756,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
           _lastSyncTime = DateTime.parse(savedLastSync);
         } catch (_) {}
       }
+      _pendingSyncCount = prefs.getInt('pending_sync_count') ?? 0;
     });
 
     final bool hasPendingSync = prefs.getBool('has_pending_sync') ?? false;
-    if (hasPendingSync && mounted) {
+    if ((hasPendingSync || _pendingSyncCount > 0) && mounted) {
       setState(() {
         _syncStatus = SyncStatus.offlinePending;
       });
     }
 
     if (user != null) {
+      _setupHistoryListener(user);
       try {
         // 1. Load Settings from Cloud
         final userDoc = await FirebaseFirestore.instance
@@ -1864,12 +1878,19 @@ class _TelevisaAppState extends State<TelevisaApp> {
         // 3. Load Unit Share Settings
         await _loadUnitShareSettings().timeout(const Duration(seconds: 4));
 
-        if (!hasPendingSync && mounted) {
+        final bool isCached =
+            userDoc.metadata.isFromCache || snapshot.metadata.isFromCache;
+
+        if (!isCached && !hasPendingSync && _pendingSyncCount == 0 && mounted) {
           final nowSync = DateTime.now();
           _lastSyncTime = nowSync;
           await prefs.setString('last_sync_time', nowSync.toIso8601String());
           setState(() {
             _syncStatus = SyncStatus.synced;
+          });
+        } else if (mounted) {
+          setState(() {
+            _syncStatus = SyncStatus.offlinePending;
           });
         }
       } catch (e) {
@@ -2054,6 +2075,66 @@ class _TelevisaAppState extends State<TelevisaApp> {
     }
   }
 
+  void _setupHistoryListener(User user) {
+    _userHistorySubscription?.cancel();
+    _userHistorySubscription = _userHistory
+        .snapshots(includeMetadataChanges: true)
+        .listen((snapshot) async {
+      final int pendingDocsCount =
+          snapshot.docs.where((d) => d.metadata.hasPendingWrites).length;
+
+      final prefs = await SharedPreferences.getInstance();
+
+      if (snapshot.metadata.hasPendingWrites) {
+        final int count = pendingDocsCount > _pendingSyncCount
+            ? pendingDocsCount
+            : (_pendingSyncCount > 0
+                ? _pendingSyncCount
+                : (pendingDocsCount > 0 ? pendingDocsCount : 1));
+        if (_pendingSyncCount != count) {
+          if (mounted) {
+            setState(() {
+              _pendingSyncCount = count;
+            });
+          } else {
+            _pendingSyncCount = count;
+          }
+          await prefs.setInt('pending_sync_count', _pendingSyncCount);
+        }
+        await prefs.setBool('has_pending_sync', true);
+        if (mounted &&
+            _syncStatus != SyncStatus.syncing &&
+            _syncStatus != SyncStatus.error) {
+          setState(() {
+            _syncStatus = SyncStatus.offlinePending;
+          });
+        }
+      } else if (!snapshot.metadata.isFromCache) {
+        if (_pendingSyncCount != 0) {
+          if (mounted) {
+            setState(() {
+              _pendingSyncCount = 0;
+            });
+          } else {
+            _pendingSyncCount = 0;
+          }
+          await prefs.setInt('pending_sync_count', 0);
+        }
+        await prefs.setBool('has_pending_sync', false);
+        final nowSync = DateTime.now();
+        _lastSyncTime = nowSync;
+        await prefs.setString('last_sync_time', nowSync.toIso8601String());
+        if (mounted && _syncStatus != SyncStatus.syncing) {
+          setState(() {
+            _syncStatus = SyncStatus.synced;
+          });
+        }
+      }
+    }, onError: (e) {
+      debugPrint("user history listener notice: $e");
+    });
+  }
+
   void _setupUnitManagerRealtimeListener(User user, String userEmp) {
     _userRoleSubscription?.cancel();
     _unitShareMembersSubscription?.cancel();
@@ -2077,13 +2158,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
         }
       }
       if (mounted) {
-        if (snap.metadata.hasPendingWrites) {
-          if (_syncStatus != SyncStatus.syncing) {
+        if (snap.metadata.hasPendingWrites || snap.metadata.isFromCache) {
+          if (_syncStatus != SyncStatus.syncing &&
+              _syncStatus != SyncStatus.error) {
             setState(() {
               _syncStatus = SyncStatus.offlinePending;
             });
           }
-        } else {
+        } else if (!snap.metadata.isFromCache && _pendingSyncCount == 0) {
           if (_syncStatus != SyncStatus.syncing) {
             final nowSync = DateTime.now();
             _lastSyncTime = nowSync;
@@ -2226,6 +2308,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     _userRoleSubscription?.cancel();
     _unitShareMembersSubscription?.cancel();
     _unitShareEmpSubscription?.cancel();
+    _userHistorySubscription?.cancel();
     _salaryController.dispose();
     _baseHoursController.dispose();
     _retentionController.dispose();
@@ -3164,7 +3247,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
     );
   }
 
-  String _formatLastSyncTime(DateTime dt) {
+  String _formatLastSyncTime(DateTime? dt) {
+    if (dt == null) return "--/--";
     final now = DateTime.now();
     final bool isToday =
         dt.year == now.year && dt.month == now.month && dt.day == now.day;
@@ -3188,7 +3272,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         textColor = _isDarkMode ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
         borderColor = _isDarkMode ? const Color(0xFF14532D) : const Color(0xFF86EFAC);
         final String syncText = _lastSyncTime != null
-            ? "✓ Sincronizado con la nube • ${_formatLastSyncTime(_lastSyncTime!)}"
+            ? "✓ Sincronizado con la nube • ${_formatLastSyncTime(_lastSyncTime)}"
             : "✓ Sincronizado con la nube";
         content = Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -3242,9 +3326,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
         bgColor = const Color(0xFFD97706);
         textColor = Colors.white;
         borderColor = const Color(0xFFB45309);
-        final String offlineText = _lastSyncTime != null
-            ? "⚡ Modo sin conexión • Última sinc: ${_formatLastSyncTime(_lastSyncTime!)} • Toca para sincronizar"
-            : "⚡ Modo sin conexión: Guardado en tu dispositivo. [ Toca aquí para sincronizar ]";
+        final String offlineText = _pendingSyncCount > 0
+            ? "⚡ $_pendingSyncCount ${_pendingSyncCount == 1 ? 'registro pendiente' : 'registros pendientes'} de sincronizar • Última sinc: ${_formatLastSyncTime(_lastSyncTime)} • Toca para sincronizar"
+            : "⚡ Modo sin conexión • Última sinc: ${_formatLastSyncTime(_lastSyncTime)} • Toca para sincronizar";
         content = Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -3271,7 +3355,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         textColor = Colors.white;
         borderColor = const Color(0xFF991B1B);
         final String errorText = _lastSyncTime != null
-            ? "⚠️ Error de conexión • Última sinc: ${_formatLastSyncTime(_lastSyncTime!)} • [ Reintentar ]"
+            ? "⚠️ Error de conexión • Última sinc: ${_formatLastSyncTime(_lastSyncTime)} • [ Reintentar ]"
             : "⚠️ Error de conexión: Datos seguros en tu dispositivo. [ Reintentar ]";
         content = Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -3336,7 +3420,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.17.0 04/11/26",
+                "v.23.17.1 05/11/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,
