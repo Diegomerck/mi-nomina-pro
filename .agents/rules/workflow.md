@@ -40,11 +40,21 @@ The user should never have to guess whether a task is trivial or complex. During
 
 ---
 
-## 4. Execution Protocol on `IMPLEMENTATION` Trigger
+## 4. Execution Protocols: `IMPLEMENTATION` and `IMPLEMENT: INHERIT`
 
-When the user sends a message starting with `IMPLEMENTATION`:
-1. **Dispatch Subagent**: Automatically invoke the subagent using the assessed tier model (`flash` or `pro`) with clear, targeted instructions and constraints.
-2. **Execute Changes**: The subagent applies the drop-in ready code changes and runs static analysis (`flutter analyze`).
+The user can trigger implementation using two distinct commands depending on quota and model preferences:
+
+### A. `IMPLEMENTATION` (Standard Automatic Tier)
+- **Model Routing**: Automatically dispatches subagent using the assessed tier model (`flash` by default to preserve quota, or `pro` for high-complexity architecture).
+- **Quota Impact**: Draws from the standard Gemini quota.
+
+### B. `IMPLEMENT: INHERIT` (Inherited Chat Model)
+- **Model Routing**: Dispatches the subagent strictly with **`Model: "inherit"`**.
+- **Quota Impact**: The subagent directly adopts the model currently chosen in the chat interface model picker (e.g., **Claude Opus**, **Claude Sonnet**, **GPT-4o**), ensuring execution runs against that specific provider quota.
+
+### Common Execution Steps for Both Triggers:
+1. **Dispatch Subagent**: Automatically invoke the subagent using the determined model setting with clear, targeted instructions and constraints.
+2. **Execute Changes**: The subagent applies the drop-in ready code changes and runs static analysis (`flutter analyze` in Nómina / `npm run build` in Bitácora).
 3. **Verify Integrity**: Verify that the build remains healthy and no regressions occurred.
 4. **Concise Report**: Report back to the user with an itemized, concise summary of files changed and verification status.
 

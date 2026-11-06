@@ -1366,8 +1366,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
       .collection('users')
       .doc(FirebaseAuth.instance.currentUser?.uid)
       .collection('history');
-  Future<void> _saveData(
-      {bool checkSalaryChange = true, bool isModification = true}) async {
+  Future<void> _saveData({
+    WorkDay? specificDay,
+    List<WorkDay>? specificDays,
+    bool updateProfile = true,
+    bool checkSalaryChange = true,
+    bool isModification = true,
+    bool fullHistoryBackup = false,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
 
@@ -1457,60 +1463,92 @@ class _TelevisaAppState extends State<TelevisaApp> {
       // 2. Save to Firebase
       if (user != null) {
         final batch = FirebaseFirestore.instance.batch();
+        bool hasBatchWrites = false;
 
-        // Update profile in 'users' collection
-        batch.set(
-            FirebaseFirestore.instance.collection('users').doc(user.uid),
-            {
-              'salary': _salaryController.text,
-              'salary_history': _salaryHistory,
-              'jornada_history': _jornadaHistory,
-              'retention_history': _retentionHistory,
-              'fomento_history': _fomentoHistory,
-              'cuota_history': _cuotaHistory,
-              'rest_days_history': _restDaysHistory,
-              'base_hours': _baseHoursController.text,
-              'rest_days': _restDays,
-              'retention': _retentionController.text,
-              'fomento': _fomentoController.text,
-              'cuota': _cuotaController.text,
-              'first_name': _firstNameController.text,
-              'last_name': _lastNameController.text,
-              'user_emp': _userEmpNoController.text,
-              'recovery_email':
-                  _recoveryEmailController.text.trim().toLowerCase(),
-            },
-            SetOptions(merge: true));
-
-        // Update history
-        for (var day in _weeklyHistory) {
-          batch.set(_userHistory.doc(day.id), day.toJson());
-        }
-
-        // Sync employee_directory mapping
-        final empNumber = _userEmpNoController.text.trim();
-        final recoveryEmail = _recoveryEmailController.text.trim().toLowerCase();
-        final authEmail = (user.email ?? "").trim().toLowerCase();
-        final userEmail = recoveryEmail.isNotEmpty
-            ? recoveryEmail
-            : (authEmail.endsWith('@televisa.com') ? "" : authEmail);
-        if (empNumber.isNotEmpty && userEmail.isNotEmpty) {
+        // Update profile in 'users' collection if requested
+        if (updateProfile) {
           batch.set(
-            FirebaseFirestore.instance
-                .collection('employee_directory')
-                .doc(empNumber),
-            {
-              'email': userEmail,
-              'legacy_email': "$empNumber@televisa.com",
-              'employee_number': empNumber,
-              'uid': user.uid,
-              'updated_at': FieldValue.serverTimestamp(),
-            },
-            SetOptions(merge: true),
-          );
+              FirebaseFirestore.instance.collection('users').doc(user.uid),
+              {
+                'salary': _salaryController.text,
+                'salary_history': _salaryHistory,
+                'jornada_history': _jornadaHistory,
+                'retention_history': _retentionHistory,
+                'fomento_history': _fomentoHistory,
+                'cuota_history': _cuotaHistory,
+                'rest_days_history': _restDaysHistory,
+                'base_hours': _baseHoursController.text,
+                'rest_days': _restDays,
+                'retention': _retentionController.text,
+                'fomento': _fomentoController.text,
+                'cuota': _cuotaController.text,
+                'first_name': _firstNameController.text,
+                'last_name': _lastNameController.text,
+                'user_emp': _userEmpNoController.text,
+                'recovery_email':
+                    _recoveryEmailController.text.trim().toLowerCase(),
+              },
+              SetOptions(merge: true));
+          hasBatchWrites = true;
+
+          // Sync employee_directory mapping
+          final empNumber = _userEmpNoController.text.trim();
+          final recoveryEmail =
+              _recoveryEmailController.text.trim().toLowerCase();
+          final authEmail = (user.email ?? "").trim().toLowerCase();
+          final userEmail = recoveryEmail.isNotEmpty
+              ? recoveryEmail
+              : (authEmail.endsWith('@televisa.com') ? "" : authEmail);
+          if (empNumber.isNotEmpty && userEmail.isNotEmpty) {
+            batch.set(
+              FirebaseFirestore.instance
+                  .collection('employee_directory')
+                  .doc(empNumber),
+              {
+                'email': userEmail,
+                'legacy_email': "$empNumber@televisa.com",
+                'employee_number': empNumber,
+                'uid': user.uid,
+                'updated_at': FieldValue.serverTimestamp(),
+              },
+              SetOptions(merge: true),
+            );
+          }
         }
 
-        await batch.commit().timeout(const Duration(seconds: 8));
+        // Granular history writes
+        if (specificDay != null) {
+          batch.set(_userHistory.doc(specificDay.id), specificDay.toJson(),
+              SetOptions(merge: true));
+          hasBatchWrites = true;
+        }
+
+        if (specificDays != null && specificDays.isNotEmpty) {
+          for (var day in specificDays) {
+            batch.set(_userHistory.doc(day.id), day.toJson(),
+                SetOptions(merge: true));
+          }
+          hasBatchWrites = true;
+        }
+
+        if (fullHistoryBackup) {
+          // If full backup exceeds batch limit, commit in chunks of 400
+          for (var i = 0; i < _weeklyHistory.length; i += 400) {
+            final chunkBatch = FirebaseFirestore.instance.batch();
+            final end = (i + 400 < _weeklyHistory.length)
+                ? i + 400
+                : _weeklyHistory.length;
+            for (var j = i; j < end; j++) {
+              chunkBatch.set(_userHistory.doc(_weeklyHistory[j].id),
+                  _weeklyHistory[j].toJson(), SetOptions(merge: true));
+            }
+            await chunkBatch.commit().timeout(const Duration(seconds: 8));
+          }
+        }
+
+        if (hasBatchWrites) {
+          await batch.commit().timeout(const Duration(seconds: 8));
+        }
         _syncShiftsToUnitManager();
       }
 
@@ -1528,8 +1566,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
     } catch (e) {
       debugPrint("Notice: Cloud sync error or offline: $e");
       await prefs.setBool('has_pending_sync', true);
-      if (isModification) {
-        _pendingSyncCount++;
+      if (isModification && _pendingSyncCount == 0) {
+        _pendingSyncCount = 1;
         await prefs.setInt('pending_sync_count', _pendingSyncCount);
       }
       if (mounted) {
@@ -1552,10 +1590,61 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
   Future<void> _triggerManualSync() async {
     if (_syncStatus == SyncStatus.syncing) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
     setState(() {
       _syncStatus = SyncStatus.syncing;
     });
-    await _saveData(checkSalaryChange: false, isModification: false);
+
+    final prefs = await SharedPreferences.getInstance();
+
+    try {
+      // 1. Wait for pending writes to flush to the server
+      await FirebaseFirestore.instance
+          .waitForPendingWrites()
+          .timeout(const Duration(seconds: 8));
+
+      // 2. Light server connectivity check
+      await _userHistory
+          .limit(1)
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 4));
+
+      final nowSync = DateTime.now();
+      _lastSyncTime = nowSync;
+      await prefs.setString('last_sync_time', nowSync.toIso8601String());
+      _pendingSyncCount = 0;
+      await prefs.setInt('pending_sync_count', 0);
+      await prefs.setBool('has_pending_sync', false);
+
+      if (mounted) {
+        setState(() {
+          _syncStatus = SyncStatus.synced;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Sincronización con la nube completada"),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Manual sync check notice: $e");
+      if (mounted) {
+        setState(() {
+          _syncStatus = SyncStatus.offlinePending;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Sin conexión o cambios pendientes por sincronizar"),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _toggleTheme() async {
@@ -2086,25 +2175,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
       final prefs = await SharedPreferences.getInstance();
 
       if (snapshot.metadata.hasPendingWrites) {
-        final int count = pendingDocsCount > _pendingSyncCount
-            ? pendingDocsCount
-            : (_pendingSyncCount > 0
-                ? _pendingSyncCount
-                : (pendingDocsCount > 0 ? pendingDocsCount : 1));
-        if (_pendingSyncCount != count) {
+        if (_pendingSyncCount != pendingDocsCount) {
           if (mounted) {
             setState(() {
-              _pendingSyncCount = count;
+              _pendingSyncCount = pendingDocsCount;
             });
           } else {
-            _pendingSyncCount = count;
+            _pendingSyncCount = pendingDocsCount;
           }
           await prefs.setInt('pending_sync_count', _pendingSyncCount);
         }
         await prefs.setBool('has_pending_sync', true);
-        if (mounted &&
-            _syncStatus != SyncStatus.syncing &&
-            _syncStatus != SyncStatus.error) {
+        if (mounted && _syncStatus != SyncStatus.syncing) {
           setState(() {
             _syncStatus = SyncStatus.offlinePending;
           });
@@ -2602,7 +2684,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _weeklyHistory.add(day);
       _weeklyHistory.sort((a, b) => b.entrada.compareTo(a.entrada));
     });
-    await _saveData();
+    await _saveData(specificDay: day);
 
     if (mounted) {
       setState(() => _isProcessing = false);
@@ -2744,7 +2826,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _weeklyHistory.sort((a, b) => b.entrada.compareTo(a.entrada));
     });
 
-    await _saveData();
+    await _saveData(specificDay: inProgressDay);
 
     // Start countdown timer for time remaining message
     _startCountdownTimer();
@@ -2806,7 +2888,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     await prefs.remove('pending_entrada_real');
     await prefs.setBool('pending_clocked_in', false);
 
-    await _saveData();
+    await _saveData(specificDay: shift);
     _syncShiftsToUnitManager();
 
     if (mounted) {
@@ -2832,8 +2914,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
       picked.minute,
     );
 
+    WorkDay? shift;
     setState(() {
-      WorkDay? shift = _weeklyHistory.cast<WorkDay?>().firstWhere(
+      shift = _weeklyHistory.cast<WorkDay?>().firstWhere(
             (d) =>
                 d?.id == _currentShiftId ||
                 (d != null && d.isInProgress) ||
@@ -2847,8 +2930,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _entradaRealDateTime = newEntrada;
       _entradaDisplay = DateFormat('dd/MM - hh:mm a').format(newEntrada);
       if (shift != null) {
-        shift.entrada = newEntrada;
-        shift.entradaReal = newEntrada;
+        shift!.entrada = newEntrada;
+        shift!.entradaReal = newEntrada;
       }
       if (_completedToday && _salidaDateTime != null) {
         _calculateEarnings(_salidaDateTime!, dayOverride: shift);
@@ -2856,7 +2939,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     });
 
     _updateTimeRemainingMessage();
-    await _saveData();
+    await _saveData(specificDay: shift);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -2889,23 +2972,24 @@ class _TelevisaAppState extends State<TelevisaApp> {
       newSalida = newSalida.add(const Duration(days: 1));
     }
 
+    WorkDay? shift;
     setState(() {
       _salidaDateTime = newSalida;
       _salidaDisplay = DateFormat('dd/MM - hh:mm a').format(newSalida);
-      WorkDay? shift = _weeklyHistory.cast<WorkDay?>().firstWhere(
+      shift = _weeklyHistory.cast<WorkDay?>().firstWhere(
             (d) =>
                 d?.id == _currentShiftId ||
                 (d != null && d.entrada == _entradaDateTime),
             orElse: () => null,
           );
       if (shift != null) {
-        shift.salida = newSalida;
-        shift.isInProgress = false;
+        shift!.salida = newSalida;
+        shift!.isInProgress = false;
         _calculateEarnings(newSalida, dayOverride: shift);
       }
     });
 
-    await _saveData();
+    await _saveData(specificDay: shift);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -3135,7 +3219,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       _calculateEarnings(_salidaDateTime!, dayOverride: shift);
                     }
                   });
-                  await _saveData();
+                  await _saveData(specificDay: shift);
                 },
               ),
               const SizedBox(width: 8),
@@ -3153,7 +3237,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       _calculateEarnings(_salidaDateTime!, dayOverride: shift);
                     }
                   });
-                  await _saveData();
+                  await _saveData(specificDay: shift);
                 },
               ),
               const SizedBox(width: 8),
@@ -3171,7 +3255,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                       _calculateEarnings(_salidaDateTime!, dayOverride: shift);
                     }
                   });
-                  await _saveData();
+                  await _saveData(specificDay: shift);
                 },
               ),
             ],
@@ -3420,7 +3504,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.17.1 05/11/26",
+                "v.23.17.2 06/11/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,

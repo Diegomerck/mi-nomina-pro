@@ -129,7 +129,7 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                   }
                   _syncWorkDayStatics();
                 });
-                await _saveData(checkSalaryChange: false);
+                await _saveData(checkSalaryChange: false, fullHistoryBackup: true);
 
                 if (!dialogContext.mounted) return;
                 Navigator.pop(dialogContext);
@@ -648,8 +648,7 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                       _rebuild(() {
                         day.notas = newNotes;
                       });
-                      await _userHistory.doc(day.id).set(day.toJson());
-                      await _saveData();
+                      await _saveData(specificDay: day);
                     }
                   },
                   child: Text("Editar",
@@ -712,8 +711,7 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                 _rebuild(() {
                   day.notas = newNotes;
                 });
-                await _userHistory.doc(day.id).set(day.toJson());
-                await _saveData();
+                await _saveData(specificDay: day);
               }
             },
           ),
@@ -1684,8 +1682,7 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
       }
     });
 
-    await _userHistory.doc(day.id).set(day.toJson());
-    await _saveData();
+    await _saveData(specificDay: day);
     _syncTodayStateFromHistory();
 
     if (canShare) {

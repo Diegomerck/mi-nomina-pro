@@ -2,7 +2,7 @@
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: November 2026  
-> **Version**: `v.23.17.1 05/11/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.17.2 06/11/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.17.1` (November 2026 Discrete Maintenance Release).
+- **Internal Version**: `v.23.17.2` (November 2026 Discrete Maintenance Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,7 +234,8 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
-- **v.23.17.1 05/11/26 (Current Discrete Maintenance Release)**: Corrección de falso positivo en caché sin conexión de Firestore al inicio (validación mediante `metadata.isFromCache` para evitar marcar indebidamente estado sincronizado sin conexión viva), contador dinámico en tiempo real de turnos y modificaciones pendientes de sincronización en la nube (`hasPendingWrites` y `_pendingSyncCount`), supresión limpia de errores de permisos no autenticados durante la búsqueda para restablecimiento de contraseña en pantalla de acceso, y nueva herramienta de sincronización masiva del directorio de empleados (`_syncEmployeeDirectory`) en la Consola de Administración.
+- **v.23.17.2 06/11/26 (Current Discrete Maintenance Release)**: Optimización del motor de persistencia y sincronización a la nube mediante escrituras delta granulares (`specificDay` y `specificDays` en `_saveData`), eliminando la reescritura masiva de todo el historial en cada modificación de turno o notas. Corrección del contador dinámico de pendientes (`_pendingSyncCount`) para reflejar fielmente los documentos pendientes reales con `hasPendingWrites` sin desincronizaciones ni falsos pendientes en el indicador visual de respaldo.
+- **v.23.17.1 05/11/26**: Corrección de falso positivo en caché sin conexión de Firestore al inicio (validación mediante `metadata.isFromCache` para evitar marcar indebidamente estado sincronizado sin conexión viva), contador dinámico en tiempo real de turnos y modificaciones pendientes de sincronización en la nube (`hasPendingWrites` y `_pendingSyncCount`), supresión limpia de errores de permisos no autenticados durante la búsqueda para restablecimiento de contraseña en pantalla de acceso, y nueva herramienta de sincronización masiva del directorio de empleados (`_syncEmployeeDirectory`) en la Consola de Administración.
 - **v.23.17.0 04/11/26**: Modo sin conexión con persistencia local robusta (offline-first mediante Firestore offline cache y sincronización automática bidireccional), barra de estado de sincronización en la nube con indicación visual clara de conexión y hora exacta del último respaldo (soporte de toque para forzar sincronización manual), mejoras de accesibilidad visual y tipográfica, y pantalla Hoy compactada y adaptada ergonómicamente para consultar toda la información de jornada de un vistazo sin scroll en dispositivos móviles.
 - **v.23.16.0 03/11/26**: Compartición independiente de horarios y asistencia con múltiples Ingenieros de Unidad simultáneos (cada uno con su propio modo de vigencia, permisos de datos y vigencia ilimitada en 'Todos Mis Registros' y 'Yo Decido'). Selector interactivo en calendario para compartir días específicos o semanas completas en bloque, e interruptores por ingeniero en Hoy, Quincena y Año. Adelanto del calendario de pagos 2027 (enero y febrero), selector rápido de año (`2026 | 2027`) fijo en Nómina y Año, pago triple automático en días festivos trabajados y mejoras en Modo Claro.
 - **v.23.15.0 28/10/26**: Herramientas de soporte en la Consola de Administración para consultar y cambiar correos registrados, enviar enlaces de recuperación de contraseña y realizar fusiones limpias de cuentas duplicadas (con eliminación definitiva de la cuenta origen en Firestore para evitar cuentas fantasma).

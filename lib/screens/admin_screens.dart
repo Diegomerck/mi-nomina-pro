@@ -4880,7 +4880,7 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildInfoRow("Versión Aplicación", "v.23.17.1 05/11/26"),
+                _buildInfoRow("Versión Aplicación", "v.23.17.2 06/11/26"),
                 const Divider(height: 20),
                 _buildInfoRow("Entorno", "Firebase Production (Hosting & Firestore)"),
                 const Divider(height: 20),

@@ -142,7 +142,8 @@ Para optimizar el uso de créditos y tokens sin perder contexto histórico, todo
 | Disparador | Modo | Comportamiento del Agente |
 | :--- | :--- | :--- |
 | *(Sin prefijo)* | **PLANNING (Por defecto)** | **Cero edición de código**. Solo análisis, discusión de requerimientos, diseño, evaluación de casos borde y estimación de tier. No ejecuta builds ni tests modificadores. |
-| `IMPLEMENTATION` | **IMPLEMENTACIÓN** | Despacha automáticamente un **subagente** en el nivel evaluado (`flash` o `pro`), aplica los cambios, verifica el build (`npm run build` en Bitácora / `flutter analyze` en Nómina), y entrega un resumen conciso. |
+| `IMPLEMENTATION` | **IMPLEMENTACIÓN (Automática)** | Despacha automáticamente un **subagente** en el nivel evaluado (`flash` o `pro`), aplica los cambios, verifica el build (`npm run build` en Bitácora / `flutter analyze` en Nómina), y entrega un resumen conciso. Utiliza cuota estándar de Gemini. |
+| `IMPLEMENT: INHERIT` | **IMPLEMENTACIÓN (Modelo Heredado)** | Despacha el subagente con `Model: "inherit"`. El subagente adopta el modelo seleccionado en el chat (Claude Opus, Sonnet, GPT-4o), consumiendo esa cuota específica. |
 | `QUICK FIX` | **CORRECCIÓN RÁPIDA** | Aplica cambios mínimos directamente (1 línea, typo, estilo puntual) sin necesidad de subagente. |
 | `PUSH TO LIVE` | **LANZAMIENTO PÚBLICO** | Ejecuta el flujo oficial completo: changelog y novedades amables en `lib/main.dart`, documentación, respaldo git, compilación web y deploy a Hosting. |
 | `PUSH DISCRETE` | **LANZAMIENTO SILENCIOSO** | Ejecuta el despliegue a producción sin alterar el changelog ni notificar a los usuarios en la app: documentación, respaldo git, build web y deploy a Hosting. |
