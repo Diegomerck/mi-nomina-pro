@@ -164,7 +164,8 @@ extension _AnoTabExt on _TelevisaAppState {
             itemCount: 53, // Covers all potential weeks in a year
             itemBuilder: (context, index) {
               DateTime weekStart = firstMonday.add(Duration(days: index * 7));
-              DateTime weekEnd = weekStart.add(const Duration(days: 6));
+              DateTime weekEnd = weekStart.add(const Duration(
+                  days: 6, hours: 23, minutes: 59, seconds: 59));
 
               // Highlight current week logic
               DateTime now = DateTime.now();
@@ -291,7 +292,8 @@ extension _AnoTabExt on _TelevisaAppState {
 
   Widget _buildWeekOvertimeSummary(DateTime weekStart) {
     // Get all days in this week (Monday to Sunday)
-    DateTime weekEnd = weekStart.add(const Duration(days: 6));
+    DateTime weekEnd = weekStart.add(
+        const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
     List<WorkDay> weekDays = _weeklyHistory.where((d) {
       return d.entrada
               .isAfter(weekStart.subtract(const Duration(seconds: 1))) &&
@@ -432,121 +434,150 @@ extension _AnoTabExt on _TelevisaAppState {
               // Manual Spanish Map
               const dialNames = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
               String dayLetter = dialNames[dayDate.weekday - 1];
+
+              Color tileBg;
+              Color tileBorder;
+              double tileBorderWidth;
+              Color letterColor;
+              Color numberColor;
+              Color starColor = Colors.transparent;
+
+              if (hasData) {
+                if (!_isDarkMode) {
+                  if (isMantenimiento) {
+                    tileBg = const Color(0xFFBFDBFE);
+                    tileBorder = const Color(0xFF1D4ED8);
+                    tileBorderWidth = 2.5;
+                    letterColor = const Color(0xFF1E3A8A);
+                    numberColor = const Color(0xFF1E3A8A);
+                  } else if (isVacaciones) {
+                    tileBg = const Color(0xFFD9F99D);
+                    tileBorder = const Color(0xFF4D7C0F);
+                    tileBorderWidth = 2.5;
+                    letterColor = const Color(0xFF365314);
+                    numberColor = const Color(0xFF365314);
+                    starColor = const Color(0xFF4D7C0F);
+                  } else if (isFestivo) {
+                    tileBg = const Color(0xFFE9D5FF);
+                    tileBorder = const Color(0xFF7E22CE);
+                    tileBorderWidth = 2.5;
+                    letterColor = const Color(0xFF581C87);
+                    numberColor = const Color(0xFF581C87);
+                    starColor = const Color(0xFF7E22CE);
+                  } else if (isFalta) {
+                    tileBg = const Color(0xFFFECACA);
+                    tileBorder = const Color(0xFFB91C1C);
+                    tileBorderWidth = 2.5;
+                    letterColor = const Color(0xFF7F1D1D);
+                    numberColor = const Color(0xFF7F1D1D);
+                  } else {
+                    // Regular Jornada
+                    tileBg = const Color(0xFFBBF7D0);
+                    tileBorder = const Color(0xFF15803D);
+                    tileBorderWidth = 2.5;
+                    letterColor = const Color(0xFF14532D);
+                    numberColor = const Color(0xFF14532D);
+                  }
+                } else {
+                  // Dark Mode with Data
+                  if (isMantenimiento) {
+                    tileBg = Colors.blue.withAlpha(50);
+                    tileBorder = Colors.blueAccent;
+                    tileBorderWidth = 2.5;
+                    letterColor = Colors.blueAccent;
+                    numberColor = Colors.blueAccent;
+                  } else if (isVacaciones) {
+                    tileBg = Colors.lightGreen.withAlpha(50);
+                    tileBorder = Colors.lightGreenAccent;
+                    tileBorderWidth = 2.5;
+                    letterColor = Colors.lightGreenAccent;
+                    numberColor = Colors.lightGreenAccent;
+                    starColor = Colors.lightGreenAccent;
+                  } else if (isFestivo) {
+                    tileBg = Colors.purple.withAlpha(50);
+                    tileBorder = Colors.purpleAccent;
+                    tileBorderWidth = 2.5;
+                    letterColor = Colors.purpleAccent;
+                    numberColor = Colors.purpleAccent;
+                    starColor = Colors.purpleAccent;
+                  } else if (isFalta) {
+                    tileBg = Colors.red.shade900.withAlpha(180);
+                    tileBorder = Colors.redAccent;
+                    tileBorderWidth = 2.5;
+                    letterColor = Colors.white;
+                    numberColor = Colors.white;
+                  } else {
+                    // Regular Jornada Dark Mode
+                    tileBg = Colors.green.withAlpha(50);
+                    tileBorder = Colors.greenAccent;
+                    tileBorderWidth = 2.5;
+                    letterColor = Colors.greenAccent;
+                    numberColor = Colors.greenAccent;
+                  }
+                }
+              } else {
+                // No Data
+                if (isToday) {
+                  if (!_isDarkMode) {
+                    tileBg = const Color(0xFFFED7AA);
+                    tileBorder = const Color(0xFFEA580C);
+                    tileBorderWidth = 3.0;
+                    letterColor = const Color(0xFF7C2D12);
+                    numberColor = const Color(0xFF7C2D12);
+                  } else {
+                    tileBg = Colors.orangeAccent.withAlpha(70);
+                    tileBorder = Colors.orangeAccent;
+                    tileBorderWidth = 3.0;
+                    letterColor = Colors.white;
+                    numberColor = Colors.white;
+                  }
+                } else {
+                  if (!_isDarkMode) {
+                    tileBg = Colors.white;
+                    tileBorder = isSelected
+                        ? const Color(0xFFEA580C)
+                        : const Color(0xFF94A3B8);
+                    tileBorderWidth = isSelected ? 2.0 : 1.5;
+                    numberColor = const Color(0xFF1E293B);
+                    letterColor = const Color(0xFF475569);
+                  } else {
+                    tileBg = isCurrent
+                        ? Colors.transparent
+                        : Colors.white.withAlpha(5);
+                    tileBorder =
+                        isSelected ? Colors.orangeAccent : Colors.white12;
+                    tileBorderWidth = isSelected ? 2.0 : 1.5;
+                    letterColor = Colors.white60;
+                    numberColor =
+                        isCurrent ? Colors.white : Colors.white70;
+                  }
+                }
+              }
+
               return GestureDetector(
                 onTap: () {
                   _rebuild(() => _selectedCalendarDay = dayDate);
                   _showManualDayDialog(dayDate);
                 },
                 child: Container(
-                  width: isToday ? 48 : 42, // Slightly larger for today
-                  height: isToday ? 48 : 42,
+                  width: isToday ? 46 : 42,
+                  height: isToday ? 46 : 42,
                   padding: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
-                    color: isToday
-                        ? (_isDarkMode
-                            ? Colors.orangeAccent.withAlpha(80) // Strong highlight for today
-                            : const Color(0xFFFFEDD5))
-                        : isSelected
-                            ? (_isDarkMode
-                                ? (isMantenimiento
-                                    ? Colors.blue.withAlpha(50)
-                                    : isFestivo
-                                        ? Colors.purple.withAlpha(50)
-                                        : isVacaciones
-                                            ? Colors.lightGreen.withAlpha(50)
-                                            : isFalta
-                                                ? Colors.red.shade700
-                                                : Colors.green.withAlpha(50)) // Asistencia GREEN
-                                : (isMantenimiento
-                                    ? const Color(0xFFDBEAFE)
-                                    : isFestivo
-                                        ? const Color(0xFFF3E8FF)
-                                        : isVacaciones
-                                            ? const Color(0xFFDCFCE7)
-                                            : isFalta
-                                                ? const Color(0xFFFEE2E2)
-                                                : (hasData
-                                                    ? const Color(0xFFDCFCE7)
-                                                    : Colors.white)))
-                            : (hasData
-                                ? (_isDarkMode
-                                    ? (isMantenimiento
-                                        ? Colors.blue.withAlpha(40)
-                                        : isFestivo
-                                            ? Colors.purple.withAlpha(40)
-                                            : isVacaciones
-                                                ? Colors.lightGreen.withAlpha(40)
-                                                : isFalta
-                                                    ? Colors.red.shade700
-                                                    : Colors.green.withAlpha(40)) // Asistencia GREEN
-                                    : (isMantenimiento
-                                        ? const Color(0xFFEFF6FF)
-                                        : isFestivo
-                                            ? const Color(0xFFFAF5FF)
-                                            : isVacaciones
-                                                ? const Color(0xFFDCFCE7)
-                                                : isFalta
-                                                    ? const Color(0xFFFEF2F2)
-                                                    : const Color(0xFFDCFCE7)))
-                                : (_isDarkMode
-                                    ? (isCurrent
-                                        ? Colors.transparent
-                                        : Colors.white.withAlpha(5))
-                                    : Colors.white)),
-                    borderRadius: BorderRadius.circular(
-                        isToday ? 12 : 8), // More rounded for today
+                    color: tileBg,
+                    borderRadius: BorderRadius.circular(isToday ? 10 : 8),
                     border: Border.all(
-                        color: isToday
-                            ? (_isDarkMode
-                                ? Colors.orangeAccent // Bright border for today
-                                : const Color(0xFFEA580C))
-                            : isSelected
-                                ? (_isDarkMode
-                                    ? (isMantenimiento
-                                        ? Colors.blueAccent
-                                        : isFestivo
-                                            ? Colors.purpleAccent
-                                            : isVacaciones
-                                                ? Colors.lightGreenAccent
-                                                : isFalta
-                                                    ? Colors.redAccent
-                                                    : Colors.greenAccent)
-                                    : const Color(0xFFEA580C))
-                                : (hasData
-                                    ? (_isDarkMode
-                                        ? (isMantenimiento
-                                            ? Colors.blueAccent
-                                            : isFestivo
-                                                ? Colors.purpleAccent
-                                                : isVacaciones
-                                                    ? Colors.lightGreenAccent
-                                                    : isFalta
-                                                        ? Colors.redAccent
-                                                        : Colors.greenAccent)
-                                        : (isMantenimiento
-                                            ? const Color(0xFF93C5FD)
-                                            : isFestivo
-                                                ? const Color(0xFFD8B4FE)
-                                                : isVacaciones
-                                                    ? const Color(0xFF16A34A)
-                                                    : isFalta
-                                                        ? const Color(0xFFFCA5A5)
-                                                        : const Color(0xFF16A34A)))
-                                    : (_isDarkMode
-                                        ? Colors.white10
-                                        : const Color(0xFFCBD5E1))),
-                        width: isToday
-                            ? 3
-                            : (isSelected ? 2.0 : (hasData ? 2.0 : 1.2))), // Thicker border for today
+                      color: tileBorder,
+                      width: tileBorderWidth,
+                    ),
                     boxShadow: isToday
                         ? [
                             BoxShadow(
-                              color: _isDarkMode
-                                  ? Colors.orangeAccent.withAlpha(100)
-                                  : const Color(0xFFEA580C).withAlpha(60),
-                              blurRadius: 8,
-                              spreadRadius: 2,
-                            )
+                              color: const Color(0xFFEA580C)
+                                  .withAlpha(_isDarkMode ? 120 : 160),
+                              blurRadius: 6,
+                              spreadRadius: 2.5,
+                            ),
                           ]
                         : null,
                   ),
@@ -556,23 +587,24 @@ extension _AnoTabExt on _TelevisaAppState {
                         mainAxisAlignment: MainAxisAlignment.center,
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          if (isToday && hasData) ...[
+                            Container(
+                              width: 14,
+                              height: 3,
+                              margin: const EdgeInsets.only(bottom: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEA580C),
+                                borderRadius: BorderRadius.circular(1.5),
+                              ),
+                            ),
+                          ],
                           Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(dayLetter,
                                   style: TextStyle(
-                                      color: isToday
-                                          ? (_isDarkMode
-                                              ? Colors.white // White for today
-                                              : const Color(0xFF9A3412))
-                                          : (isFalta
-                                              ? (_isDarkMode
-                                                  ? Colors.white
-                                                  : const Color(0xFF991B1B))
-                                              : (_isDarkMode
-                                                  ? Colors.orange
-                                                  : const Color(0xFFC2410C))),
-                                      fontSize: isToday ? 12 : 10,
+                                      color: letterColor,
+                                      fontSize: isToday ? 11 : 10,
                                       height: 1.0,
                                       fontWeight: FontWeight.bold)),
                               if (hasNotes) ...[
@@ -592,13 +624,7 @@ extension _AnoTabExt on _TelevisaAppState {
                                 const SizedBox(width: 2),
                                 Icon(
                                   Icons.star,
-                                  color: _isDarkMode
-                                      ? (isVacaciones
-                                          ? Colors.lightGreenAccent
-                                          : Colors.purpleAccent)
-                                      : (isVacaciones
-                                          ? const Color(0xFF16A34A)
-                                          : const Color(0xFF9333EA)),
+                                  color: starColor,
                                   size: 10,
                                 ),
                               ],
@@ -607,40 +633,12 @@ extension _AnoTabExt on _TelevisaAppState {
                           const SizedBox(height: 2),
                           Text(dayDate.day.toString(),
                               style: TextStyle(
-                                  color: isToday
-                                      ? (_isDarkMode
-                                          ? Colors.black // Black number on orange for contrast
-                                          : const Color(0xFF7C2D12))
-                                      : (hasData
-                                          ? (_isDarkMode
-                                              ? (isMantenimiento
-                                                  ? Colors.blueAccent
-                                                  : isFestivo
-                                                      ? Colors.purpleAccent
-                                                      : isVacaciones
-                                                          ? Colors.lightGreenAccent
-                                                          : isFalta
-                                                              ? Colors.white
-                                                              : Colors.greenAccent)
-                                              : (isMantenimiento
-                                                  ? const Color(0xFF1D4ED8)
-                                                  : isFestivo
-                                                      ? const Color(0xFF6B21A8)
-                                                      : isVacaciones
-                                                          ? const Color(0xFF14532D)
-                                                          : isFalta
-                                                              ? const Color(0xFF991B1B)
-                                                              : const Color(0xFF14532D)))
-                                          : (_isDarkMode
-                                              ? (isCurrent
-                                                  ? Colors.white
-                                                  : Colors.white70)
-                                              : Colors.black)),
-                                  fontSize: isToday ? 16 : 14,
+                                  color: numberColor,
+                                  fontSize: isToday ? 15 : 14,
                                   height: 1.0,
                                   fontWeight: isToday
                                       ? FontWeight.w900
-                                      : FontWeight.bold)), // Extra bold for today
+                                      : FontWeight.bold)),
                         ]),
                   ),
                 ),

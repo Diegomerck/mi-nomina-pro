@@ -1249,7 +1249,8 @@ extension _QuincenaTabExt on _TelevisaAppState {
       int currentWeekIndex = -1;
       for (int i = 0; i < 53; i++) {
         DateTime weekStart = firstMonday.add(Duration(days: i * 7));
-        DateTime weekEnd = weekStart.add(const Duration(days: 6));
+        DateTime weekEnd = weekStart.add(
+            const Duration(days: 6, hours: 23, minutes: 59, seconds: 59));
 
         if (now.isAfter(weekStart.subtract(const Duration(seconds: 1))) &&
             now.isBefore(weekEnd.add(const Duration(seconds: 1)))) {

@@ -9,10 +9,10 @@ extension _UnitManagerTabExt on _TelevisaAppState {
         _isDarkMode ? Colors.cyanAccent : const Color(0xFF0284C7);
     final Color cardBg = _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
     final Color borderColor =
-        _isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
-    final Color textColor = _isDarkMode ? Colors.white : Colors.black87;
+        _isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1);
+    final Color textColor = _isDarkMode ? Colors.white : Colors.black;
     final Color subtextColor =
-        _isDarkMode ? Colors.white54 : const Color(0xFF64748B);
+        _isDarkMode ? Colors.white54 : const Color(0xFF1E293B);
 
     if (user == null) {
       return Center(
@@ -32,7 +32,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
           decoration: BoxDecoration(
             color: cardBg,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: borderColor),
+            border: Border.all(color: borderColor, width: 1.5),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withAlpha(_isDarkMode ? 40 : 10),
@@ -76,10 +76,16 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: Colors.green.withAlpha(35),
+                                color: _isDarkMode
+                                    ? Colors.green.withAlpha(35)
+                                    : const Color(0xFFDCFCE7),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                    color: Colors.green.withAlpha(120)),
+                                  color: _isDarkMode
+                                      ? Colors.green.withAlpha(120)
+                                      : const Color(0xFF16A34A),
+                                  width: 1.5,
+                                ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -87,16 +93,20 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                                   Container(
                                     width: 7,
                                     height: 7,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.greenAccent,
+                                    decoration: BoxDecoration(
+                                      color: _isDarkMode
+                                          ? Colors.greenAccent
+                                          : const Color(0xFF15803D),
                                       shape: BoxShape.circle,
                                     ),
                                   ),
                                   const SizedBox(width: 5),
-                                  const Text(
+                                  Text(
                                     "EN VIVO",
                                     style: TextStyle(
-                                      color: Colors.greenAccent,
+                                      color: _isDarkMode
+                                          ? Colors.greenAccent
+                                          : const Color(0xFF15803D),
                                       fontSize: 10,
                                       fontWeight: FontWeight.bold,
                                       letterSpacing: 0.5,
@@ -185,7 +195,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                 decoration: BoxDecoration(
                   color: cardBg,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: borderColor),
+                  border: Border.all(color: borderColor, width: 1.5),
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -327,7 +337,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                   ),
                   IconButton(
                     icon: Icon(Icons.close,
-                        color: _isDarkMode ? Colors.white54 : Colors.black54),
+                        color: _isDarkMode ? Colors.white54 : const Color(0xFF1E293B)),
                     onPressed: () => Navigator.pop(sheetContext),
                   ),
                 ],
@@ -486,17 +496,17 @@ extension _UnitManagerTabExt on _TelevisaAppState {
         _isDarkMode ? Colors.orange : const Color(0xFFC2410C);
     final Color cardBg = _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
     final Color borderColor =
-        _isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
-    final Color textColor = _isDarkMode ? Colors.white : Colors.black87;
+        _isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1);
+    final Color textColor = _isDarkMode ? Colors.white : Colors.black;
     final Color subtextColor =
-        _isDarkMode ? Colors.white54 : const Color(0xFF64748B);
+        _isDarkMode ? Colors.white54 : const Color(0xFF1E293B);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor, width: 1.2),
+        border: Border.all(color: borderColor, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withAlpha(_isDarkMode ? 30 : 10),
@@ -1221,8 +1231,15 @@ extension _UnitManagerTabExt on _TelevisaAppState {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-      scrollable: true,
+        scrollable: true,
         backgroundColor: _isDarkMode ? Colors.grey[900] : Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: _isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1),
+            width: 1.5,
+          ),
+        ),
         title: Text("INFORMACIÓN",
             style: TextStyle(
                 color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
@@ -1237,7 +1254,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                     color: _isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.17.2 06/11/26",
+            Text("Versión v.23.18.0 17/11/26",
                 style: TextStyle(
                     color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
                     fontSize: 14)),
@@ -1247,7 +1264,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
             Text(
                 "Esta aplicación es una herramienta independiente creada con el objetivo de ayudar a los usuarios a estimar y visualizar cierta información de forma práctica.\n\nNo es una aplicación oficial ni está afiliada, respaldada o relacionada de ninguna manera con Televisa.\n\nLas cantidades, cálculos o resultados mostrados son estimaciones generadas con base en la información disponible al momento de su desarrollo. Estos valores pueden contener errores o variaciones, ya que Televisa puede modificar en cualquier momento sus métodos de cálculo, agregar conceptos adicionales o aplicar retenciones distintas sin previo aviso.\n\nPor lo tanto, la información proporcionada por esta aplicación debe considerarse únicamente como una referencia orientativa y no como un dato definitivo, oficial o garantizado.",
                 style: TextStyle(
-                    color: _isDarkMode ? Colors.white70 : Colors.black87,
+                    color: _isDarkMode ? Colors.white70 : Colors.black,
                     fontSize: 13)),
             Divider(
                 color: _isDarkMode ? Colors.white38 : const Color(0xFFCBD5E1),
@@ -1260,7 +1277,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
             Text("Sugerencias y/o quejas a: minominapro@gmail.com",
                 style: TextStyle(
                     fontSize: 14,
-                    color: _isDarkMode ? Colors.white70 : Colors.black87)),
+                    color: _isDarkMode ? Colors.white70 : Colors.black)),
           ],
         ),
         actions: [

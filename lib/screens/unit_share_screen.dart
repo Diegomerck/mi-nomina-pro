@@ -134,7 +134,7 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
               Text(
                 dayName,
                 style: TextStyle(
-                  color: isDarkMode ? Colors.white : Colors.black87,
+                  color: isDarkMode ? Colors.white : Colors.black,
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                 ),
@@ -168,14 +168,14 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
                 Text(
                   "Ent: ",
                   style: TextStyle(
-                      color: isDarkMode ? Colors.white60 : Colors.black54,
+                      color: isDarkMode ? Colors.white60 : const Color(0xFF1E293B),
                       fontSize: 10),
                 ),
                 Expanded(
                   child: Text(
                     entradaStr ?? "---",
                     style: TextStyle(
-                      color: isDarkMode ? Colors.white : Colors.black87,
+                      color: isDarkMode ? Colors.white : Colors.black,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                     ),
@@ -193,7 +193,7 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
                 Text(
                   "Sal: ",
                   style: TextStyle(
-                      color: isDarkMode ? Colors.white60 : Colors.black54,
+                      color: isDarkMode ? Colors.white60 : const Color(0xFF1E293B),
                       fontSize: 10),
                 ),
                 Expanded(
@@ -202,7 +202,7 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
                     style: TextStyle(
                       color: isInProgress
                           ? Colors.amber
-                          : (isDarkMode ? Colors.white : Colors.black87),
+                          : (isDarkMode ? Colors.white : Colors.black),
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                     ),
@@ -221,7 +221,7 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
                   Text(
                     "Real: ",
                     style: TextStyle(
-                        color: isDarkMode ? Colors.white60 : Colors.black54,
+                        color: isDarkMode ? Colors.white60 : const Color(0xFF1E293B),
                         fontSize: 10),
                   ),
                   Expanded(
@@ -254,13 +254,13 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
                 children: [
                   Icon(Icons.chat_bubble_outline_rounded,
                       size: 10,
-                      color: isDarkMode ? Colors.white54 : Colors.black45),
+                      color: isDarkMode ? Colors.white54 : const Color(0xFF1E293B)),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       notes,
                       style: TextStyle(
-                        color: isDarkMode ? Colors.white70 : Colors.black87,
+                        color: isDarkMode ? Colors.white70 : Colors.black,
                         fontSize: 10,
                         fontStyle: FontStyle.italic,
                       ),
@@ -321,7 +321,7 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
                       style: TextStyle(
                         color: isDarkMode
                             ? Colors.white54
-                            : const Color(0xFF64748B),
+                            : const Color(0xFF1E293B),
                         fontSize: 10,
                       ),
                     ),
@@ -364,7 +364,7 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
                     : "Sin registros para este período",
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  color: isDarkMode ? Colors.white38 : Colors.black38,
+                  color: isDarkMode ? Colors.white38 : const Color(0xFF1E293B),
                   fontSize: 10,
                   fontStyle: FontStyle.italic,
                 ),
@@ -390,10 +390,10 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
     final Color cardBg =
         isDarkMode ? const Color(0xFF1E293B) : Colors.white;
     final Color borderColor =
-        isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
-    final Color textColor = isDarkMode ? Colors.white : Colors.black87;
+        isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1);
+    final Color textColor = isDarkMode ? Colors.white : Colors.black;
     final Color subtextColor =
-        isDarkMode ? Colors.white54 : const Color(0xFF64748B);
+        isDarkMode ? Colors.white54 : const Color(0xFF1E293B);
 
     final String memberName =
         (data['member_name'] ?? 'Sin nombre').toString();
@@ -475,7 +475,7 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: borderColor, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withAlpha(isDarkMode ? 35 : 10),
@@ -672,7 +672,7 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
                     child: Text(
                       lastClockOutStr,
                       style: TextStyle(
-                        color: isDarkMode ? Colors.white : Colors.black87,
+                        color: isDarkMode ? Colors.white : Colors.black,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -805,9 +805,9 @@ class _UnitMemberAttendanceCardState extends State<_UnitMemberAttendanceCard> {
 
             final Color dialogBg =
                 isDarkMode ? const Color(0xFF1E293B) : Colors.white;
-            final Color textColor = isDarkMode ? Colors.white : Colors.black87;
+            final Color textColor = isDarkMode ? Colors.white : Colors.black;
             final Color subtextColor =
-                isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+                isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF1E293B);
             final Color primaryColor =
                 isDarkMode ? Colors.cyanAccent : const Color(0xFF0284C7);
 
@@ -2211,7 +2211,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
               style: TextStyle(
                 color: widget.isDarkMode
                     ? const Color(0xFF94A3B8)
-                    : const Color(0xFF64748B),
+                    : const Color(0xFF1E293B),
                 fontSize: 13,
                 height: 1.3,
               ),
@@ -2271,7 +2271,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                             style: TextStyle(
                               color: widget.isDarkMode
                                   ? const Color(0xFF94A3B8)
-                                  : const Color(0xFF64748B),
+                                  : const Color(0xFF1E293B),
                               fontSize: 12,
                             ),
                           ),
@@ -2286,8 +2286,8 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
               "Tus datos de sueldo, costo por hora y totales de nómina NUNCA se comparten.",
               style: TextStyle(
                 color: widget.isDarkMode
-                    ? const Color(0xFF64748B)
-                    : const Color(0xFF94A3B8),
+                    ? const Color(0xFF94A3B8)
+                    : const Color(0xFF1E293B),
                 fontSize: 11,
                 fontStyle: FontStyle.italic,
               ),
@@ -2300,7 +2300,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             child: Text(
               "CANCELAR",
               style: TextStyle(
-                color: widget.isDarkMode ? Colors.white60 : Colors.black54,
+                color: widget.isDarkMode ? Colors.white60 : const Color(0xFF1E293B),
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -2695,7 +2695,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             child: Text(
               "CANCELAR",
               style: TextStyle(
-                color: widget.isDarkMode ? Colors.white60 : Colors.black54,
+                color: widget.isDarkMode ? Colors.white60 : const Color(0xFF1E293B),
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -2926,7 +2926,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             child: Text(
               "CANCELAR",
               style: TextStyle(
-                color: widget.isDarkMode ? Colors.white60 : Colors.black54,
+                color: widget.isDarkMode ? Colors.white60 : const Color(0xFF1E293B),
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -3323,11 +3323,11 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
     final Color itemBg =
         isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
     final Color borderColor =
-        isDark ? Colors.white12 : const Color(0xFFE2E8F0);
+        isDark ? Colors.white12 : const Color(0xFFCBD5E1);
     final Color textColor =
-        isDark ? Colors.white : const Color(0xFF0F172A);
+        isDark ? Colors.white : Colors.black;
     final Color subtextColor =
-        isDark ? Colors.white60 : const Color(0xFF64748B);
+        isDark ? Colors.white60 : const Color(0xFF1E293B);
 
     final weekdayNames = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
@@ -3644,7 +3644,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                                                       color: isSelected
                                                           ? (isDark
                                                               ? Colors.white
-                                                              : Colors.black87)
+                                                              : Colors.black)
                                                           : textColor,
                                                       fontSize: 12,
                                                       fontWeight:
@@ -3760,10 +3760,10 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
         isDark ? Colors.orange : const Color(0xFFC2410C);
     final Color cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
     final Color borderColor =
-        isDark ? Colors.white12 : const Color(0xFFE2E8F0);
-    final Color textColor = isDark ? Colors.white : Colors.black87;
+        isDark ? Colors.white12 : const Color(0xFFCBD5E1);
+    final Color textColor = isDark ? Colors.white : Colors.black;
     final Color subtextColor =
-        isDark ? Colors.white54 : const Color(0xFF64748B);
+        isDark ? Colors.white54 : const Color(0xFF1E293B);
 
     final bool showActiveDashboard =
         (_activeShares.isNotEmpty || _isUnitShareActive) && !_isConfiguringShare;
@@ -3869,7 +3869,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                       decoration: BoxDecoration(
                         color: cardBg,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: borderColor, width: 1.2),
+                        border: Border.all(color: borderColor, width: 1.5),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withAlpha(isDark ? 30 : 10),
@@ -3922,14 +3922,23 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.green.withAlpha(widget.isDarkMode ? 35 : 20),
+                color: widget.isDarkMode
+                    ? Colors.green.withAlpha(35)
+                    : const Color(0xFFDCFCE7),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.green.withAlpha(90)),
+                border: Border.all(
+                  color: widget.isDarkMode
+                      ? Colors.green.withAlpha(90)
+                      : const Color(0xFF16A34A),
+                  width: 1.5,
+                ),
               ),
               child: Text(
                 "${_activeShares.length} ${_activeShares.length == 1 ? 'activo' : 'activos'}",
-                style: const TextStyle(
-                  color: Colors.greenAccent,
+                style: TextStyle(
+                  color: widget.isDarkMode
+                      ? Colors.greenAccent
+                      : const Color(0xFF15803D),
                   fontWeight: FontWeight.bold,
                   fontSize: 11,
                 ),
@@ -3970,8 +3979,10 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
               color: cardBg,
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: unitColor.withAlpha(widget.isDarkMode ? 70 : 100),
-                width: 1.3,
+                color: widget.isDarkMode
+                    ? unitColor.withAlpha(70)
+                    : const Color(0xFFCBD5E1),
+                width: 1.5,
               ),
               boxShadow: [
                 BoxShadow(
@@ -4029,7 +4040,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                                 Text(
                                   "No. $mEmp",
                                   style: TextStyle(
-                                    color: textColor.withAlpha(180),
+                                    color: textColor,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -4047,7 +4058,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                   height: 1,
                   color: widget.isDarkMode
                       ? Colors.white10
-                      : const Color(0xFFE2E8F0),
+                      : const Color(0xFFCBD5E1),
                 ),
                 const SizedBox(height: 10),
 
@@ -4110,7 +4121,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                   height: 1,
                   color: widget.isDarkMode
                       ? Colors.white10
-                      : const Color(0xFFE2E8F0),
+                      : const Color(0xFFCBD5E1),
                 ),
                 const SizedBox(height: 8),
 
@@ -4126,7 +4137,9 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                             fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                       style: TextButton.styleFrom(
-                        foregroundColor: unitColor,
+                        foregroundColor: widget.isDarkMode
+                            ? unitColor
+                            : const Color(0xFF1D4ED8),
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                       ),
@@ -4141,7 +4154,9 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                             fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                       style: TextButton.styleFrom(
-                        foregroundColor: Colors.redAccent,
+                        foregroundColor: widget.isDarkMode
+                            ? Colors.redAccent
+                            : const Color(0xFFDC2626),
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                       ),
@@ -4160,17 +4175,21 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
           width: double.infinity,
           child: OutlinedButton.icon(
             icon: Icon(Icons.person_add_alt_1_rounded,
-                color: unitColor, size: 18),
+                color: widget.isDarkMode ? unitColor : const Color(0xFF0284C7),
+                size: 18),
             label: Text(
               "Compartir con otro Ingeniero",
               style: TextStyle(
-                color: unitColor,
+                color: widget.isDarkMode ? unitColor : const Color(0xFF0284C7),
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
               ),
             ),
             style: OutlinedButton.styleFrom(
-              side: BorderSide(color: unitColor, width: 1.3),
+              side: BorderSide(
+                color: widget.isDarkMode ? unitColor : const Color(0xFF0284C7),
+                width: 1.5,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
@@ -4184,22 +4203,49 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
   }
 
   Widget _buildChipBadge(String label, IconData icon, Color color) {
+    final bool isDark = widget.isDarkMode;
+    final Color chipColor;
+    final Color chipBg;
+    final Color chipBorder;
+
+    if (label == "Entrada") {
+      chipColor = isDark ? Colors.greenAccent : const Color(0xFF15803D);
+      chipBg = isDark ? Colors.green.withAlpha(35) : const Color(0xFFDCFCE7);
+      chipBorder = isDark ? Colors.green.withAlpha(80) : const Color(0xFF16A34A);
+    } else if (label == "Salida") {
+      chipColor = isDark ? Colors.orangeAccent : const Color(0xFFC2410C);
+      chipBg = isDark ? Colors.orangeAccent.withAlpha(35) : const Color(0xFFFFEDD5);
+      chipBorder = isDark ? Colors.orangeAccent.withAlpha(80) : const Color(0xFFEA580C);
+    } else if (label == "Entrada Real") {
+      chipColor = isDark ? Colors.blueAccent : const Color(0xFF1D4ED8);
+      chipBg = isDark ? Colors.blueAccent.withAlpha(35) : const Color(0xFFDBEAFE);
+      chipBorder = isDark ? Colors.blueAccent.withAlpha(80) : const Color(0xFF2563EB);
+    } else if (label == "Notas") {
+      chipColor = isDark ? Colors.purpleAccent : const Color(0xFF7E22CE);
+      chipBg = isDark ? Colors.purpleAccent.withAlpha(35) : const Color(0xFFF3E8FF);
+      chipBorder = isDark ? Colors.purpleAccent.withAlpha(80) : const Color(0xFFA855F7);
+    } else {
+      chipColor = isDark ? color : const Color(0xFF1E293B);
+      chipBg = isDark ? color.withAlpha(35) : const Color(0xFFF1F5F9);
+      chipBorder = isDark ? color.withAlpha(80) : const Color(0xFFCBD5E1);
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withAlpha(widget.isDarkMode ? 35 : 20),
+        color: chipBg,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withAlpha(80)),
+        border: Border.all(color: chipBorder, width: isDark ? 1.0 : 1.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: color),
+          Icon(icon, size: 12, color: chipColor),
           const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
-              color: color,
+              color: chipColor,
               fontSize: 11,
               fontWeight: FontWeight.w600,
             ),
@@ -4380,7 +4426,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
             decoration: BoxDecoration(
               color: cardBg,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: borderColor),
+              border: Border.all(color: borderColor, width: 1.5),
             ),
             child: Column(
               children: [
@@ -4456,7 +4502,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
       decoration: BoxDecoration(
         color: itemBg,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderColor),
+        border: Border.all(color: borderColor, width: 1.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -4737,7 +4783,7 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
                 labelStyle: TextStyle(
                   color: widget.isDarkMode
                       ? const Color(0xFF94A3B8)
-                      : const Color(0xFF475569),
+                      : const Color(0xFF1E293B),
                   fontSize: 14,
                 ),
                 hintText: "Ej. 1043577 o Diego Merck",
@@ -5354,22 +5400,54 @@ class _UnitShareScreenState extends State<UnitShareScreen> {
   }
 
   Widget _buildActiveBadge(String label, IconData icon, Color color) {
+    final bool isDark = widget.isDarkMode;
+    final Color badgeText;
+    final Color badgeBg;
+    final Color badgeBorder;
+
+    final bool isGreen = color == Colors.greenAccent ||
+        color == Colors.green ||
+        color == const Color(0xFF15803D);
+    final bool isOrange = color == Colors.orangeAccent ||
+        color == Colors.orange ||
+        color == const Color(0xFFC2410C);
+
+    if (isDark) {
+      badgeText = color;
+      badgeBg = color.withAlpha(35);
+      badgeBorder = color.withAlpha(90);
+    } else {
+      if (isGreen) {
+        badgeText = const Color(0xFF15803D);
+        badgeBg = const Color(0xFFDCFCE7);
+        badgeBorder = const Color(0xFF16A34A);
+      } else if (isOrange) {
+        badgeText = const Color(0xFFC2410C);
+        badgeBg = const Color(0xFFFFEDD5);
+        badgeBorder = const Color(0xFFEA580C);
+      } else {
+        badgeText = const Color(0xFF0284C7);
+        badgeBg = const Color(0xFFE0F2FE);
+        badgeBorder = const Color(0xFF0284C7);
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withAlpha(widget.isDarkMode ? 35 : 20),
+        color: badgeBg,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withAlpha(90)),
+        border: Border.all(color: badgeBorder, width: isDark ? 1.0 : 1.5),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: color),
+          Icon(icon, size: 13, color: badgeText),
           const SizedBox(width: 5),
           Text(
             label,
             style: TextStyle(
-              color: color,
+              color: badgeText,
               fontWeight: FontWeight.w600,
               fontSize: 11,
             ),

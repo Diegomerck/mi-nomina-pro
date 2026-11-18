@@ -32,6 +32,7 @@ part 'tabs/unit_manager_tab.dart';
 part 'tabs/day_dialogs_and_io.dart';
 
 final Map<String, String> _changelogTitles = {
+  "23.18.0": "🎬 Versión 23.18.0 (17/11/26) — Permisos de Salida Temprana y Pantalla Hoy Compacta",
   "23.17.0": "🤝 Versión 23.17.0 (04/11/26) — Modo Sin Conexión, Estado en la Nube y Pantalla Más Cómoda",
   "23.16.0": "🤝 Versión 23.16.0 (03/11/26) — Compartir Horarios, Nómina 2027 y Soporte de Cuenta",
   "23.15.0": "🛠️ Versión 23.15.0 (28/10/26) — Herramientas de Soporte y Fusión de Cuentas",
@@ -42,6 +43,12 @@ final Map<String, String> _changelogTitles = {
 };
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.18.0": [
+    "🎬 Permiso de salida anticipada: Si checas salida antes de tus 8 horas porque te dieron salida temprano en producción, la app te preguntará de forma amigable en la pantalla Hoy si fue autorizado. Si confirmas que te dieron salida, ¡no se te descontará nada de tu sueldo base! Si saliste por tu cuenta, se desglosará el descuento con total claridad.",
+    "📱 Resumen compacto y desplegable en Hoy: Nuevo botón [Ver desglose ▾] que muestra de un vistazo tu total de horas y pago diario sin saturar la pantalla, permitiéndote consultar el desglose completo cuando lo necesites sin ocultar las opciones inferiores.",
+    "📅 Corrección de Semana Actual en domingos: Se corrigió el cálculo de semanas en la pestaña Año para que los domingos se resalten como parte de la semana actual y el auto-desplazamiento funcione con exactitud.",
+    "✨ Experiencia visual más limpia: Se eliminaron las notificaciones emergentes al guardar modificaciones de turno para no cubrir los botones inferiores.",
+  ],
   "23.17.0": [
     "⚡ Úsala sin internet (Modo Fuera de Línea): Ahora puedes registrar tus turnos, entradas y salidas aunque no tengas señal ni internet. Tus datos se guardan en tu celular y se subirán solitos a la nube en cuanto vuelvas a tener conexión.",
     "☁️ Barra de estado de conexión: Nueva barra arriba de la pantalla que te avisa con letras grandes y claras si tus datos ya están respaldados en la nube o si estás sin conexión, junto con la hora exacta del último respaldo. ¡Puedes tocarla cuando quieras para forzar el guardado!",
@@ -234,6 +241,7 @@ class WorkDay {
   bool esVacaciones;
   bool esFestivo;
   bool festivoTrabajado;
+  bool salidaAutorizada;
   String notas;
 
   WorkDay(
@@ -248,6 +256,7 @@ class WorkDay {
       this.esVacaciones = false,
       this.esFestivo = false,
       this.festivoTrabajado = false,
+      this.salidaAutorizada = false,
       this.notas = "",
       String? id})
       : _storedSueldoBase = sueldoBase,
@@ -309,7 +318,8 @@ class WorkDay {
         esFalta ||
         esMantenimiento ||
         esVacaciones ||
-        esFestivo) {
+        esFestivo ||
+        salidaAutorizada) {
       return 0.0;
     }
     if (actualWorkedMinutes < requiredShiftMinutes) {
@@ -397,6 +407,7 @@ class WorkDay {
         'esVacaciones': esVacaciones,
         'esFestivo': esFestivo,
         'festivoTrabajado': festivoTrabajado,
+        'salidaAutorizada': salidaAutorizada,
         'notas': notas,
       };
   factory WorkDay.fromJson(Map<String, dynamic> json) => WorkDay(
@@ -415,6 +426,7 @@ class WorkDay {
             json['esVacaciones'] ?? json['esVacacionesFestivo'] ?? false,
         esFestivo: json['esFestivo'] ?? false,
         festivoTrabajado: json['festivoTrabajado'] ?? false,
+        salidaAutorizada: json['salidaAutorizada'] ?? false,
         notas: json['notas'] ?? "",
       );
 }
@@ -443,6 +455,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
   List<WorkDay> _weeklyHistory = [];
   bool _isClockedIn = false;
   bool _completedToday = false;
+  bool _isTodayBreakdownExpanded = false;
   DateTime? _entradaDateTime;
   DateTime? _salidaDateTime;
   String? _currentShiftId;
@@ -2035,6 +2048,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _currentShiftId = todayCompleted.id;
       _isClockedIn = false;
       _completedToday = true;
+      _isTodayBreakdownExpanded = false;
       _entradaDateTime = todayCompleted.entrada;
       _entradaRealDateTime = todayCompleted.entradaReal;
       _salidaDateTime = todayCompleted.salida;
@@ -2047,6 +2061,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _currentShiftId = null;
       _isClockedIn = false;
       _completedToday = false;
+      _isTodayBreakdownExpanded = false;
       _entradaDateTime = null;
       _entradaRealDateTime = null;
       _salidaDateTime = null;
@@ -2677,6 +2692,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
   Future<void> _addAndSortHistory(WorkDay day) async {
     setState(() {
       _isProcessing = true;
+      if (day.entrada.year == DateTime.now().year &&
+          day.entrada.month == DateTime.now().month &&
+          day.entrada.day == DateTime.now().day) {
+        _isTodayBreakdownExpanded = false;
+      }
       _weeklyHistory.removeWhere((item) =>
           item.entrada.year == day.entrada.year &&
           item.entrada.month == day.entrada.month &&
@@ -2817,6 +2837,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _salidaDateTime = null;
       _isClockedIn = true;
       _completedToday = false;
+      _isTodayBreakdownExpanded = false;
       _entradaDisplay = DateFormat('dd/MM - hh:mm a').format(assignedTime);
       _salidaDisplay = "--/-- --:--";
 
@@ -2875,6 +2896,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _currentShiftId = shift?.id;
       _isClockedIn = false;
       _completedToday = true;
+      _isTodayBreakdownExpanded = false;
       _salidaDateTime = salidaTime;
       _salidaDisplay = DateFormat('dd/MM - hh:mm a').format(salidaTime);
       _timeRemainingMessage = "";
@@ -2940,14 +2962,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
     _updateTimeRemainingMessage();
     await _saveData(specificDay: shift);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Hora de entrada actualizada"),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-      ));
-    }
   }
 
   Future<void> _editSalidaTime() async {
@@ -2990,14 +3004,6 @@ class _TelevisaAppState extends State<TelevisaApp> {
     });
 
     await _saveData(specificDay: shift);
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Hora de salida actualizada"),
-        backgroundColor: Colors.green,
-        duration: Duration(seconds: 2),
-      ));
-    }
   }
 
   bool _isShiftFromPreviousDay() {
@@ -3056,6 +3062,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _currentShiftId = null;
       _isClockedIn = false;
       _completedToday = false;
+      _isTodayBreakdownExpanded = false;
       _entradaDateTime = null;
       _entradaRealDateTime = null;
       _salidaDateTime = null;
@@ -3138,6 +3145,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _currentShiftId = null;
       _isClockedIn = false;
       _completedToday = false;
+      _isTodayBreakdownExpanded = false;
       _entradaDateTime = null;
       _entradaRealDateTime = null;
       _salidaDateTime = null;
@@ -3504,7 +3512,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.17.2 06/11/26",
+                "v.23.18.0 17/11/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,
@@ -4381,80 +4389,217 @@ class _TelevisaAppState extends State<TelevisaApp> {
                     ],
                   ),
                 ),
-                if (day.esFestivo && day.festivoTrabajado)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _statDetail(
-                          "DESGLOSE DE HORAS",
-                          "${normalHrs.toStringAsFixed(1)}h (Base) + ${day.holidayExtraHours.toStringAsFixed(2)}h (Extra)",
-                          "${day.totalHours.toStringAsFixed(2)} hrs totales"),
-                      _statDetail(
-                          "DESGLOSE DE PAGO",
-                          "Pago Base: \$${day.sueldoBase.toStringAsFixed(2)} × 2 = \$${(day.sueldoBase * 2).toStringAsFixed(2)}\n"
-                          "EXTRAS FESTIVO 3×: ${day.holidayExtraHours.toStringAsFixed(1)} hrs = \$${day.holidayExtrasPay.toStringAsFixed(2)}",
-                          "\$${day.totalPay.toStringAsFixed(2)}",
-                          isMoney: true),
-                    ],
-                  )
-                else if (!day.esMantenimiento)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _statDetail(
-                          "DESGLOSE DE HORAS",
-                          "${normalHrs.toStringAsFixed(1)}h (Base) + ${day.extraHoursCount.toStringAsFixed(2)}h (Extra)",
-                          "${day.totalHours.toStringAsFixed(2)} hrs totales"),
-                      _statDetail(
-                          "DESGLOSE DE PAGO",
-                          day.isRestDay
-                              ? "\$${day.sueldoBase.toStringAsFixed(2)} Base\n"
-                                  "\$${day.sueldoBase.toStringAsFixed(2)} Día de descanso\n"
-                                  "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
-                                  "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}"
-                              : "\$${day.dailyPay.toStringAsFixed(2)} Base\n"
-                                  "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
-                                  "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}",
-                          "\$${(day.dailyPay + realExtrasPay).toStringAsFixed(2)}",
-                          isMoney: true),
-                    ],
-                  )
-                else
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _isDarkMode
+                        ? Colors.white.withAlpha(12)
+                        : const Color(0xFFF1F5F9),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
                       color: _isDarkMode
-                          ? Colors.blue.withAlpha(30)
-                          : const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: _isDarkMode
-                              ? Colors.blueAccent.withAlpha(100)
-                              : const Color(0xFFBFDBFE)),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                            "MANTENIMIENTO - SIN HORAS EXTRA",
-                            style: TextStyle(
-                                color: _isDarkMode
-                                    ? Colors.blueAccent
-                                    : const Color(0xFF1D4ED8),
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 4),
-                        Text(
-                            "Jornada: ${day.totalHours.toStringAsFixed(2)} hrs | Pago base: \$${day.dailyPay.toStringAsFixed(2)}",
-                            style: TextStyle(
-                                color: _isDarkMode
-                                    ? Colors.white70
-                                    : const Color(0xFF4B5563),
-                                fontSize: 13)),
-                      ],
+                          ? Colors.white.withAlpha(24)
+                          : const Color(0xFFE2E8F0),
                     ),
                   ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            "TOTAL HORAS",
+                            style: TextStyle(
+                              color: _isDarkMode
+                                  ? Colors.white60
+                                  : const Color(0xFF64748B),
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            "${day.totalHours.toStringAsFixed(2)} hrs",
+                            style: TextStyle(
+                              color: _isDarkMode
+                                  ? Colors.white
+                                  : const Color(0xFF0F172A),
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            "TOTAL PAGO",
+                            style: TextStyle(
+                              color: _isDarkMode
+                                  ? Colors.white60
+                                  : const Color(0xFF64748B),
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            "\$${(day.esFestivo && day.festivoTrabajado ? day.totalPay : (day.esMantenimiento ? day.dailyPay : (day.dailyPay + realExtrasPay))).toStringAsFixed(2)}",
+                            style: TextStyle(
+                              color: _isDarkMode
+                                  ? Colors.greenAccent
+                                  : const Color(0xFF15803D),
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _isTodayBreakdownExpanded =
+                                !_isTodayBreakdownExpanded;
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: _isDarkMode
+                                ? (_isTodayBreakdownExpanded
+                                    ? const Color(0xFFEA580C).withAlpha(40)
+                                    : Colors.white.withAlpha(20))
+                                : (_isTodayBreakdownExpanded
+                                    ? const Color(0xFFFFEDD5)
+                                    : const Color(0xFFE2E8F0)),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: _isDarkMode
+                                  ? (_isTodayBreakdownExpanded
+                                      ? const Color(0xFFFB923C)
+                                      : Colors.white30)
+                                  : (_isTodayBreakdownExpanded
+                                      ? const Color(0xFFEA580C)
+                                      : const Color(0xFFCBD5E1)),
+                              width: 1.2,
+                            ),
+                          ),
+                          child: Text(
+                            _isTodayBreakdownExpanded
+                                ? "Ocultar desglose ▴"
+                                : "Ver desglose ▾",
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: _isDarkMode
+                                  ? (_isTodayBreakdownExpanded
+                                      ? const Color(0xFFFDBA74)
+                                      : Colors.white)
+                                  : (_isTodayBreakdownExpanded
+                                      ? const Color(0xFF9A3412)
+                                      : const Color(0xFF1E293B)),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_isTodayBreakdownExpanded) ...[
+                  const SizedBox(height: 12),
+                  if (day.esFestivo && day.festivoTrabajado)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _statDetail(
+                            "DESGLOSE DE HORAS",
+                            "${normalHrs.toStringAsFixed(1)}h (Base) + ${day.holidayExtraHours.toStringAsFixed(2)}h (Extra)",
+                            "${day.totalHours.toStringAsFixed(2)} hrs totales"),
+                        _statDetail(
+                            "DESGLOSE DE PAGO",
+                            "Pago Base: \$${day.sueldoBase.toStringAsFixed(2)} × 2 = \$${(day.sueldoBase * 2).toStringAsFixed(2)}\n"
+                            "EXTRAS FESTIVO 3×: ${day.holidayExtraHours.toStringAsFixed(1)} hrs = \$${day.holidayExtrasPay.toStringAsFixed(2)}",
+                            "\$${day.totalPay.toStringAsFixed(2)}",
+                            isMoney: true),
+                      ],
+                    )
+                  else if (!day.esMantenimiento)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _statDetail(
+                            "DESGLOSE DE HORAS",
+                            "${normalHrs.toStringAsFixed(1)}h (Base) + ${day.extraHoursCount.toStringAsFixed(2)}h (Extra)",
+                            "${day.totalHours.toStringAsFixed(2)} hrs totales"),
+                        _statDetail(
+                            "DESGLOSE DE PAGO",
+                            day.isRestDay
+                                ? "\$${day.sueldoBase.toStringAsFixed(2)} Base\n"
+                                    "\$${day.sueldoBase.toStringAsFixed(2)} Día de descanso\n"
+                                    "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
+                                    "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}"
+                                : "\$${day.dailyPay.toStringAsFixed(2)} Base\n"
+                                    "2× ${breakdown.hours2x.toStringAsFixed(2)}h  \$${breakdown.pay2x.toStringAsFixed(2)}\n"
+                                    "3× ${breakdown.hours3x.toStringAsFixed(2)}h  \$${breakdown.pay3x.toStringAsFixed(2)}",
+                            "\$${(day.dailyPay + realExtrasPay).toStringAsFixed(2)}",
+                            isMoney: true),
+                      ],
+                    )
+                  else
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: _isDarkMode
+                            ? Colors.blue.withAlpha(30)
+                            : const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: _isDarkMode
+                                ? Colors.blueAccent.withAlpha(100)
+                                : const Color(0xFFBFDBFE)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                              "MANTENIMIENTO - SIN HORAS EXTRA",
+                              style: TextStyle(
+                                  color: _isDarkMode
+                                      ? Colors.blueAccent
+                                      : const Color(0xFF1D4ED8),
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text(
+                              "Jornada: ${day.totalHours.toStringAsFixed(2)} hrs | Pago base: \$${day.dailyPay.toStringAsFixed(2)}",
+                              style: TextStyle(
+                                  color: _isDarkMode
+                                      ? Colors.white70
+                                      : const Color(0xFF4B5563),
+                                  fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                ],
+                if (!day.esFalta &&
+                    !day.esMantenimiento &&
+                    !day.esVacaciones &&
+                    !day.esFestivo &&
+                    (day.actualWorkedMinutes < day.requiredShiftMinutes)) ...[
+                  const SizedBox(height: 8),
+                  _buildEarlyDepartureQuestionCard(day),
+                ],
                 const SizedBox(height: 8),
                 Divider(
                     color: _isDarkMode
@@ -4499,12 +4644,201 @@ class _TelevisaAppState extends State<TelevisaApp> {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         _buildShiftRatingSelector(day),
       ],
     );
   }
 
+  Widget _buildEarlyDepartureQuestionCard(WorkDay day) {
+    final bool isDark = _isDarkMode;
+    final bool isAuthorized = day.salidaAutorizada;
+    final String baseHrs =
+        day.baseHours.truncateToDouble() == day.baseHours
+            ? day.baseHours.toInt().toString()
+            : day.baseHours.toString();
+
+    final int shortfallMinutes =
+        day.requiredShiftMinutes - day.actualWorkedMinutes;
+    final int deficitBlocks = (shortfallMinutes / 30.0).ceil();
+    final double deduction = deficitBlocks * 0.5 * day.hourlyRate;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1),
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text("🎬", style: TextStyle(fontSize: 16)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  "¿Terminaste temprano hoy?",
+                  style: TextStyle(
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            "Checaste salida antes de cubrir tu jornada de $baseHrs hrs.\n¿Te dieron permiso para retirarte temprano? Si fue autorizado, no te preocupes: no se te descontará nada de tu sueldo base.",
+            style: TextStyle(
+              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF1E293B),
+              fontSize: 12,
+              height: 1.3,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _buildDepartureOption(
+            title: "¡Sí, me dieron salida!",
+            subtitle: "(Día completo pagado)",
+            isSelected: isAuthorized,
+            isEmerald: true,
+            onTap: () async {
+              setState(() {
+                day.salidaAutorizada = true;
+              });
+              _calculateEarnings(day.salida, dayOverride: day);
+              await _saveData(specificDay: day);
+              _syncShiftsToUnitManager();
+            },
+          ),
+          const SizedBox(height: 6),
+          _buildDepartureOption(
+            title: "No, descontar horas faltantes",
+            subtitle: !isAuthorized && deduction > 0
+                ? "(Salí por mi cuenta • -\$${deduction.toStringAsFixed(2)})"
+                : "(Salí por mi cuenta)",
+            isSelected: !isAuthorized,
+            isEmerald: false,
+            onTap: () async {
+              setState(() {
+                day.salidaAutorizada = false;
+              });
+              _calculateEarnings(day.salida, dayOverride: day);
+              await _saveData(specificDay: day);
+              _syncShiftsToUnitManager();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDepartureOption({
+    required String title,
+    required String subtitle,
+    required bool isSelected,
+    required bool isEmerald,
+    required VoidCallback onTap,
+  }) {
+    final bool isDark = _isDarkMode;
+
+    final Color bgColor;
+    final Color borderColor;
+    final Color titleColor;
+    final Color subtitleColor;
+    final IconData icon;
+    final Color iconColor;
+
+    if (isSelected) {
+      if (isEmerald) {
+        bgColor = isDark
+            ? const Color(0xFF064E3B).withAlpha(120)
+            : const Color(0xFFECFDF5);
+        borderColor =
+            isDark ? const Color(0xFF10B981) : const Color(0xFF059669);
+        titleColor = isDark ? Colors.white : const Color(0xFF065F46);
+        subtitleColor =
+            isDark ? const Color(0xFF6EE7B7) : const Color(0xFF047857);
+        icon = Icons.check_circle_rounded;
+        iconColor = isDark ? const Color(0xFF34D399) : const Color(0xFF059669);
+      } else {
+        bgColor = isDark
+            ? const Color(0xFF78350F).withAlpha(120)
+            : const Color(0xFFFFFBEB);
+        borderColor =
+            isDark ? const Color(0xFFF59E0B) : const Color(0xFFD97706);
+        titleColor = isDark ? Colors.white : const Color(0xFF78350F);
+        subtitleColor =
+            isDark ? const Color(0xFFFCD34D) : const Color(0xFF92400E);
+        icon = Icons.check_circle_rounded;
+        iconColor = isDark ? const Color(0xFFFBBF24) : const Color(0xFFD97706);
+      }
+    } else {
+      bgColor = isDark ? const Color(0xFF0F172A).withAlpha(100) : Colors.white;
+      borderColor = isDark ? const Color(0xFF334155) : const Color(0xFFCBD5E1);
+      titleColor = isDark ? Colors.white70 : const Color(0xFF0F172A);
+      subtitleColor = isDark ? Colors.white54 : const Color(0xFF475569);
+      icon = Icons.radio_button_unchecked_rounded;
+      iconColor = isDark ? Colors.white38 : const Color(0xFF94A3B8);
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: borderColor,
+              width: isSelected ? 2.0 : 1.4,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: iconColor, size: 19),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: titleColor,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: subtitleColor,
+                        fontWeight:
+                            isSelected ? FontWeight.w500 : FontWeight.normal,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   void _rebuild([VoidCallback? fn]) => setState(fn ?? () {});
 }

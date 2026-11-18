@@ -33,7 +33,7 @@ extension _SettingsTabExt on _TelevisaAppState {
           Text(
             "Toca cualquier ajuste para consultar o registrar su historial de vigencias por rango de fechas.",
             style: TextStyle(
-              color: _isDarkMode ? Colors.white60 : const Color(0xFF64748B),
+              color: _isDarkMode ? Colors.white60 : const Color(0xFF1E293B),
               fontSize: 13,
             ),
           ),
@@ -378,6 +378,13 @@ extension _SettingsTabExt on _TelevisaAppState {
         return AlertDialog(
           scrollable: true,
           backgroundColor: _isDarkMode ? Colors.grey[900] : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: _isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1),
+              width: 1.5,
+            ),
+          ),
           title: Text(
             "¿Cerrar sesión?",
             style: TextStyle(
@@ -387,7 +394,7 @@ extension _SettingsTabExt on _TelevisaAppState {
           content: Text(
             "¿Estás seguro de que deseas cerrar sesión?",
             style: TextStyle(
-                color: _isDarkMode ? Colors.white : const Color(0xFF1E293B)),
+                color: _isDarkMode ? Colors.white : Colors.black),
           ),
           actions: [
             TextButton(
@@ -397,7 +404,7 @@ extension _SettingsTabExt on _TelevisaAppState {
                 style: TextStyle(
                     color: _isDarkMode
                         ? Colors.white54
-                        : const Color(0xFF64748B)),
+                        : const Color(0xFF1E293B)),
               ),
             ),
             ElevatedButton(
@@ -824,11 +831,11 @@ extension _SettingsTabExt on _TelevisaAppState {
         _isDarkMode ? Colors.cyanAccent : const Color(0xFF0284C7);
     final Color cardBg = _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
     final Color borderColor =
-        _isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
+        _isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1);
     final Color textColor =
-        _isDarkMode ? Colors.white : const Color(0xFF0F172A);
+        _isDarkMode ? Colors.white : Colors.black;
     final Color subtextColor =
-        _isDarkMode ? Colors.white60 : const Color(0xFF64748B);
+        _isDarkMode ? Colors.white54 : const Color(0xFF1E293B);
 
     if (activeGrants.length == 1) {
       final entry = activeGrants.entries.first;
@@ -865,7 +872,7 @@ extension _SettingsTabExt on _TelevisaAppState {
           color: cardBg,
           borderRadius: BorderRadius.circular(14),
           border:
-              Border.all(color: singleBorderColor, width: isShared ? 1.4 : 1.0),
+              Border.all(color: singleBorderColor, width: 1.5),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withAlpha(_isDarkMode ? 30 : 8),
@@ -925,10 +932,10 @@ extension _SettingsTabExt on _TelevisaAppState {
                             color: isShared
                                 ? (_isDarkMode
                                     ? Colors.greenAccent
-                                    : const Color(0xFF16A34A))
+                                    : const Color(0xFF15803D))
                                 : (_isDarkMode
                                     ? Colors.white60
-                                    : const Color(0xFF64748B)),
+                                    : const Color(0xFF1E293B)),
                             fontSize: 9.5,
                             fontWeight: FontWeight.bold,
                           ),
@@ -974,7 +981,7 @@ extension _SettingsTabExt on _TelevisaAppState {
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor, width: 1.0),
+        border: Border.all(color: borderColor, width: 1.5),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withAlpha(_isDarkMode ? 30 : 8),
@@ -1065,7 +1072,7 @@ extension _SettingsTabExt on _TelevisaAppState {
                             ? primaryColor
                             : (_isDarkMode
                                 ? Colors.white60
-                                : const Color(0xFF64748B)),
+                                : const Color(0xFF1E293B)),
                         fontWeight: FontWeight.bold,
                         fontSize: 11.5,
                       ),
@@ -1107,7 +1114,7 @@ extension _SettingsTabExt on _TelevisaAppState {
                                   color: isShared
                                       ? (_isDarkMode
                                           ? Colors.greenAccent
-                                          : const Color(0xFF16A34A))
+                                          : const Color(0xFF15803D))
                                       : subtextColor,
                                   fontSize: 8.5,
                                   fontWeight: FontWeight.bold,
@@ -1154,10 +1161,10 @@ extension _SettingsTabExt on _TelevisaAppState {
         _isDarkMode ? Colors.cyanAccent : const Color(0xFF0284C7);
     final Color cardBg = _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
     final Color borderColor =
-        _isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0);
-    final Color textColor = _isDarkMode ? Colors.white : Colors.black87;
+        _isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1);
+    final Color textColor = _isDarkMode ? Colors.white : Colors.black;
     final Color subtextColor =
-        _isDarkMode ? Colors.white54 : const Color(0xFF64748B);
+        _isDarkMode ? Colors.white54 : const Color(0xFF1E293B);
 
     final bool isActive = _isUnitShareActive && _activeUnitShareData != null;
     final String managerName =
@@ -1183,7 +1190,7 @@ extension _SettingsTabExt on _TelevisaAppState {
           color: isActive
               ? unitColor.withAlpha(_isDarkMode ? 120 : 140)
               : borderColor,
-          width: isActive ? 1.5 : 1.2,
+          width: 1.5,
         ),
         boxShadow: [
           BoxShadow(

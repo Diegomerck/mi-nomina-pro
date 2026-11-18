@@ -1146,14 +1146,21 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.red.withAlpha(40),
+                        color: _isDarkMode
+                            ? Colors.red.withAlpha(40)
+                            : const Color(0xFFFEE2E2),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.redAccent),
+                        border: Border.all(
+                            color: _isDarkMode
+                                ? Colors.redAccent
+                                : const Color(0xFFEF4444)),
                       ),
-                      child: const Text(
+                      child: Text(
                         "FALTA / NO LABORADO",
                         style: TextStyle(
-                          color: Colors.white,
+                          color: _isDarkMode
+                              ? Colors.white
+                              : const Color(0xFF991B1B),
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
@@ -1165,19 +1172,30 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withAlpha(40),
+                        color: _isDarkMode
+                            ? Colors.amber.withAlpha(40)
+                            : const Color(0xFFFEF3C7),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amberAccent),
+                        border: Border.all(
+                            color: _isDarkMode
+                                ? Colors.amberAccent
+                                : const Color(0xFFF59E0B)),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.star, color: Colors.amberAccent, size: 20),
-                          SizedBox(width: 8),
+                          Icon(Icons.star,
+                              color: _isDarkMode
+                                  ? Colors.amberAccent
+                                  : const Color(0xFF854D0E),
+                              size: 20),
+                          const SizedBox(width: 8),
                           Text(
                             "VACACIONES",
                             style: TextStyle(
-                              color: Colors.amberAccent,
+                              color: _isDarkMode
+                                  ? Colors.amberAccent
+                                  : const Color(0xFF854D0E),
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
@@ -1190,23 +1208,33 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.amber.withAlpha(20),
+                        color: _isDarkMode
+                            ? Colors.amber.withAlpha(20)
+                            : const Color(0xFFFEF3C7),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.amberAccent.withAlpha(100)),
+                        border: Border.all(
+                            color: _isDarkMode
+                                ? Colors.amberAccent.withAlpha(100)
+                                : const Color(0xFFF59E0B)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("VACACIONES - PAGO BASE COMPLETO",
+                          Text("VACACIONES - PAGO BASE COMPLETO",
                               style: TextStyle(
-                                  color: Colors.amberAccent,
+                                  color: _isDarkMode
+                                      ? Colors.amberAccent
+                                      : const Color(0xFF854D0E),
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
                           Text(
                               "Pago base: \$${day.dailyPay.toStringAsFixed(2)} | Sin descuento ni horas extra",
-                              style: const TextStyle(
-                                  color: Colors.white70, fontSize: 13)),
+                              style: TextStyle(
+                                  color: _isDarkMode
+                                      ? Colors.white70
+                                      : const Color(0xFF1E293B),
+                                  fontSize: 13)),
                         ],
                       ),
                     ),
@@ -1215,19 +1243,30 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.purple.withAlpha(40),
+                        color: _isDarkMode
+                            ? Colors.purple.withAlpha(40)
+                            : const Color(0xFFF3E8FF),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.purpleAccent),
+                        border: Border.all(
+                            color: _isDarkMode
+                                ? Colors.purpleAccent
+                                : const Color(0xFFA855F7)),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.star, color: Colors.purpleAccent, size: 20),
-                          SizedBox(width: 8),
+                          Icon(Icons.star,
+                              color: _isDarkMode
+                                  ? Colors.purpleAccent
+                                  : const Color(0xFF6B21A8),
+                              size: 20),
+                          const SizedBox(width: 8),
                           Text(
                             "DÍA FESTIVO (NO LABORADO)",
                             style: TextStyle(
-                              color: Colors.purpleAccent,
+                              color: _isDarkMode
+                                  ? Colors.purpleAccent
+                                  : const Color(0xFF6B21A8),
                               fontWeight: FontWeight.bold,
                               fontSize: 16,
                             ),
@@ -1240,23 +1279,33 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.purple.withAlpha(20),
+                        color: _isDarkMode
+                            ? Colors.purple.withAlpha(20)
+                            : const Color(0xFFF3E8FF),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.purpleAccent.withAlpha(100)),
+                        border: Border.all(
+                            color: _isDarkMode
+                                ? Colors.purpleAccent.withAlpha(100)
+                                : const Color(0xFFA855F7)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("DÍA FESTIVO - PAGO BASE COMPLETO",
+                          Text("DÍA FESTIVO - PAGO BASE COMPLETO",
                               style: TextStyle(
-                                  color: Colors.purpleAccent,
+                                  color: _isDarkMode
+                                      ? Colors.purpleAccent
+                                      : const Color(0xFF6B21A8),
                                   fontSize: 13,
                                   fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
                           Text(
                               "Pago base: \$${day.dailyPay.toStringAsFixed(2)} | Sin descuento ni horas extra",
-                              style: const TextStyle(
-                                  color: Colors.white70, fontSize: 13)),
+                              style: TextStyle(
+                                  color: _isDarkMode
+                                      ? Colors.white70
+                                      : const Color(0xFF1E293B),
+                                  fontSize: 13)),
                         ],
                       ),
                     ),
@@ -1265,14 +1314,21 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withAlpha(40),
+                        color: _isDarkMode
+                            ? Colors.blue.withAlpha(40)
+                            : const Color(0xFFDBEAFE),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blueAccent),
+                        border: Border.all(
+                            color: _isDarkMode
+                                ? Colors.blueAccent
+                                : const Color(0xFF3B82F6)),
                       ),
-                      child: const Text(
+                      child: Text(
                         "DÍA DE MANTENIMIENTO",
                         style: TextStyle(
-                          color: Colors.white,
+                          color: _isDarkMode
+                              ? Colors.white
+                              : const Color(0xFF1E40AF),
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
                         ),
@@ -1284,8 +1340,13 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(10),
+                        color: _isDarkMode
+                            ? Colors.white.withAlpha(10)
+                            : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(8),
+                        border: _isDarkMode
+                            ? Border.all(color: Colors.white10)
+                            : Border.all(color: const Color(0xFFCBD5E1)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1295,16 +1356,20 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                             children: [
                               Text(
                                 "Entrada: ${DateFormat('hh:mm a').format(day.entrada)}",
-                                style: const TextStyle(
-                                  color: Colors.blueAccent,
+                                style: TextStyle(
+                                  color: _isDarkMode
+                                      ? Colors.blueAccent
+                                      : const Color(0xFF0369A1),
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                               Text(
                                 "Salida: ${DateFormat('hh:mm a').format(day.salida)}",
-                                style: const TextStyle(
-                                  color: Colors.redAccent,
+                                style: TextStyle(
+                                  color: _isDarkMode
+                                      ? Colors.redAccent
+                                      : const Color(0xFFB91C1C),
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -1319,8 +1384,12 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                                 "Registro Real: ${DateFormat('hh:mm a').format(day.entradaReal!)} ${day.entradaReal!.isBefore(day.entrada) ? '(Temprano)' : '(Tarde)'}",
                                 style: TextStyle(
                                   color: day.entradaReal!.isBefore(day.entrada)
-                                      ? Colors.greenAccent
-                                      : Colors.yellowAccent,
+                                      ? (_isDarkMode
+                                          ? Colors.greenAccent
+                                          : const Color(0xFF166534))
+                                      : (_isDarkMode
+                                          ? Colors.yellowAccent
+                                          : const Color(0xFFB45309)),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -1334,34 +1403,129 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                       width: double.infinity,
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withAlpha(30),
+                        color: _isDarkMode
+                            ? Colors.blue.withAlpha(30)
+                            : const Color(0xFFEFF6FF),
                         borderRadius: BorderRadius.circular(8),
-                        border:
-                            Border.all(color: Colors.blueAccent.withAlpha(100)),
+                        border: Border.all(
+                            color: _isDarkMode
+                                ? Colors.blueAccent.withAlpha(100)
+                                : const Color(0xFF3B82F6)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("MANTENIMIENTO - SIN HORAS EXTRA",
+                          Text("MANTENIMIENTO - SIN HORAS EXTRA",
                               style: TextStyle(
-                                  color: Colors.blueAccent,
+                                  color: _isDarkMode
+                                      ? Colors.blueAccent
+                                      : const Color(0xFF1E40AF),
                                   fontSize: 14,
                                   fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
                           Text(
                               "Jornada: ${day.totalHours.toStringAsFixed(2)} hrs | Pago base: \$${day.dailyPay.toStringAsFixed(2)}",
-                              style: const TextStyle(
-                                  color: Colors.white70, fontSize: 13)),
+                              style: TextStyle(
+                                  color: _isDarkMode
+                                      ? Colors.white70
+                                      : const Color(0xFF1E293B),
+                                  fontSize: 13)),
                         ],
                       ),
                     ),
                   ] else ...[
+                    if (day.esFestivo && day.festivoTrabajado) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _isDarkMode
+                              ? Colors.purple.withAlpha(40)
+                              : const Color(0xFFF3E8FF),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _isDarkMode
+                                ? Colors.purpleAccent
+                                : const Color(0xFFA855F7),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.work_history,
+                              color: _isDarkMode
+                                  ? Colors.purpleAccent
+                                  : const Color(0xFF6B21A8),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "FESTIVO LABORADO",
+                              style: TextStyle(
+                                color: _isDarkMode
+                                    ? Colors.purpleAccent
+                                    : const Color(0xFF6B21A8),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ] else ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: _isDarkMode
+                              ? Colors.green.withAlpha(40)
+                              : const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _isDarkMode
+                                ? Colors.greenAccent
+                                : const Color(0xFF22C55E),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.check_circle_outline,
+                              color: _isDarkMode
+                                  ? Colors.greenAccent
+                                  : const Color(0xFF166534),
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "JORNADA REGULAR",
+                              style: TextStyle(
+                                color: _isDarkMode
+                                    ? Colors.greenAccent
+                                    : const Color(0xFF166534),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     // Times section
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(10),
+                        color: _isDarkMode
+                            ? Colors.white.withAlpha(10)
+                            : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(8),
+                        border: _isDarkMode
+                            ? Border.all(color: Colors.white10)
+                            : Border.all(color: const Color(0xFFCBD5E1)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1371,16 +1535,20 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                             children: [
                               Text(
                                 "Entrada: ${DateFormat('hh:mm a').format(day.entrada)}",
-                                style: const TextStyle(
-                                  color: Colors.orangeAccent,
+                                style: TextStyle(
+                                  color: _isDarkMode
+                                      ? Colors.orangeAccent
+                                      : const Color(0xFFC2410C),
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
                               Text(
                                 "Salida: ${DateFormat('hh:mm a').format(day.salida)}",
-                                style: const TextStyle(
-                                  color: Colors.redAccent,
+                                style: TextStyle(
+                                  color: _isDarkMode
+                                      ? Colors.redAccent
+                                      : const Color(0xFFB91C1C),
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -1395,8 +1563,12 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                                 "Registro Real: ${DateFormat('hh:mm a').format(day.entradaReal!)} ${day.entradaReal!.isBefore(day.entrada) ? '(Temprano)' : '(Tarde)'}",
                                 style: TextStyle(
                                   color: day.entradaReal!.isBefore(day.entrada)
-                                      ? Colors.greenAccent
-                                      : Colors.yellowAccent,
+                                      ? (_isDarkMode
+                                          ? Colors.greenAccent
+                                          : const Color(0xFF166534))
+                                      : (_isDarkMode
+                                          ? Colors.yellowAccent
+                                          : const Color(0xFFB45309)),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w500,
                                 ),
@@ -1408,23 +1580,115 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: Colors.redAccent.withAlpha(60),
+                                color: _isDarkMode
+                                    ? Colors.redAccent.withAlpha(60)
+                                    : const Color(0xFFFEE2E2),
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              child: const Text(
+                              child: Text(
                                 "SALIDA DÍA SIGUIENTE",
                                 style: TextStyle(
-                                  color: Colors.redAccent,
+                                  color: _isDarkMode
+                                      ? Colors.redAccent
+                                      : const Color(0xFFB91C1C),
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                 ),
+                              ),
+                            ),
+                          if (!day.isInProgress &&
+                              !day.esFalta &&
+                              !day.esMantenimiento &&
+                              !day.esVacaciones &&
+                              !day.esFestivo &&
+                              (day.actualWorkedMinutes <
+                                  day.requiredShiftMinutes))
+                            Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: day.salidaAutorizada
+                                    ? (_isDarkMode
+                                        ? Colors.green.withAlpha(35)
+                                        : const Color(0xFFDCFCE7))
+                                    : (_isDarkMode
+                                        ? Colors.amber.withAlpha(35)
+                                        : const Color(0xFFFEF3C7)),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: day.salidaAutorizada
+                                      ? (_isDarkMode
+                                          ? Colors.greenAccent.withAlpha(120)
+                                          : const Color(0xFF16A34A))
+                                      : (_isDarkMode
+                                          ? Colors.amberAccent.withAlpha(120)
+                                          : const Color(0xFFD97706)),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    day.salidaAutorizada
+                                        ? Icons.verified_user_rounded
+                                        : Icons.warning_amber_rounded,
+                                    color: day.salidaAutorizada
+                                        ? (_isDarkMode
+                                            ? Colors.greenAccent
+                                            : const Color(0xFF166534))
+                                        : (_isDarkMode
+                                            ? Colors.amberAccent
+                                            : const Color(0xFF92400E)),
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          day.salidaAutorizada
+                                              ? "SALIDA AUTORIZADA • SIN DESCUENTO"
+                                              : "SALIDA TEMPRANO • HORAS DESCONTADAS",
+                                          style: TextStyle(
+                                            color: day.salidaAutorizada
+                                                ? (_isDarkMode
+                                                    ? Colors.greenAccent
+                                                    : const Color(0xFF166534))
+                                                : (_isDarkMode
+                                                    ? Colors.amberAccent
+                                                    : const Color(0xFF92400E)),
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          day.salidaAutorizada
+                                              ? "Salida antes de cubrir jornada autorizada. Sueldo base completo pagado."
+                                              : "Salida por cuenta propia sin autorización. Se aplicó descuento de horas faltantes.",
+                                          style: TextStyle(
+                                            color: _isDarkMode
+                                                ? Colors.white70
+                                                : const Color(0xFF1E293B),
+                                            fontSize: 10.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Divider(color: Colors.white24),
+                    Divider(
+                        color: _isDarkMode
+                            ? Colors.white24
+                            : const Color(0xFFCBD5E1)),
                     const SizedBox(height: 12),
                     // Hours breakdown
                     Row(
@@ -1467,7 +1731,10 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                   ],
                   // Notes Section
                   const SizedBox(height: 12),
-                  const Divider(color: Colors.white24),
+                  Divider(
+                      color: _isDarkMode
+                          ? Colors.white24
+                          : const Color(0xFFCBD5E1)),
                   _buildNotesSection(day, dialogContext: dialogContext),
                 ],
               ),
@@ -1497,7 +1764,7 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildButton("ASISTENCIA", Colors.green, () {
+              _buildButton("JORNADA REGULAR", Colors.green, () {
                 Navigator.pop(dialogContext);
                 _pickTimeForWorkDay(date);
               }),
@@ -1677,8 +1944,20 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
       day.entradaReal = result.entradaReal;
       day.notas = result.notas;
       day.isInProgress = result.isInProgress;
-      if (result.timesModified && !result.isInProgress) {
-        day.esFalta = false;
+      day.esMantenimiento = result.esMantenimiento;
+      day.esVacaciones = result.esVacaciones;
+      day.esFestivo = result.esFestivo;
+      day.festivoTrabajado = result.festivoTrabajado;
+      day.esFalta = result.esFalta;
+      day.salidaAutorizada = result.salidaAutorizada;
+      if (result.esVacaciones ||
+          result.esFalta ||
+          (result.esFestivo && !result.festivoTrabajado)) {
+        day.entrada = DateTime(
+            day.entrada.year, day.entrada.month, day.entrada.day, 12, 0);
+        day.salida = day.entrada;
+        day.entradaReal = null;
+        day.isInProgress = false;
       }
     });
 
@@ -1712,13 +1991,6 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
       } else {
         await _syncShiftsToUnitManager();
       }
-    }
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text("Registro actualizado exitosamente"),
-        backgroundColor: Colors.green,
-      ));
     }
   }
 
