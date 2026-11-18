@@ -2,7 +2,7 @@
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: November 2026  
-> **Version**: `v.23.18.0 17/11/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.18.1 18/11/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.18.0` (November 2026 Discrete Maintenance Release).
+- **Internal Version**: `v.23.18.1` (November 2026 Discrete Maintenance Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,6 +234,7 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
+- **v.23.18.1 18/11/26 (Discrete Maintenance Release)**: Integración corporativa del Fondo de Ahorro con cumplimiento estricto de la LISR Art. 27 Fracc. XI (tope legal del 13% y tope periódico de 1.3 UMAs quincenales / mensuales). Pantalla dedicada de configuración del Fondo de Ahorro (`FondoAhorroScreen`) con edición protegida por candado de seguridad, desglose quincenal humanizado y guía informativa interactiva. Herramienta de conciliación con recibo de nómina (overrides manuales con regla de auto-calibración ante 4 discrepancias consecutivas). Reflejo de deducción única consolidada en recibos y desgloses de Nómina.
 - **v.23.18.0 17/11/26 (Discrete Maintenance Release)**: Flujo de permiso de salida anticipada (¿Terminaste temprano hoy? 🎬) con conservación íntegra del sueldo base cuando es autorizado por producción (o desglose transparente si no fue autorizado). Resumen compacto y desplegable en Hoy con botón interactivo de alternancia [Ver desglose ▾ / Ocultar desglose ▴] para consultar horas y pago diario sin saturar la pantalla ni tapar opciones inferiores. Corrección matemática de cálculo de semanas en pestaña Año para agrupar e iluminar correctamente los domingos en la semana en curso con auto-desplazamiento exacto. Eliminación de notificaciones emergentes (SnackBar) al guardar modificaciones de turno para una experiencia visual más limpia.
 - **v.23.17.2 06/11/26 (Discrete Maintenance Release)**: Optimización del motor de persistencia y sincronización a la nube mediante escrituras delta granulares (`specificDay` y `specificDays` en `_saveData`), eliminando la reescritura masiva de todo el historial en cada modificación de turno o notas. Corrección del contador dinámico de pendientes (`_pendingSyncCount`) para reflejar fielmente los documentos pendientes reales con `hasPendingWrites` sin desincronizaciones ni falsos pendientes en el indicador visual de respaldo.
 - **v.23.17.1 05/11/26**: Corrección de falso positivo en caché sin conexión de Firestore al inicio (validación mediante `metadata.isFromCache` para evitar marcar indebidamente estado sincronizado sin conexión viva), contador dinámico en tiempo real de turnos y modificaciones pendientes de sincronización en la nube (`hasPendingWrites` y `_pendingSyncCount`), supresión limpia de errores de permisos no autenticados durante la búsqueda para restablecimiento de contraseña en pantalla de acceso, y nueva herramienta de sincronización masiva del directorio de empleados (`_syncEmployeeDirectory`) en la Consola de Administración.

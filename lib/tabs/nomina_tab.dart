@@ -108,6 +108,7 @@ extension _NominaTabExt on _TelevisaAppState {
               }
 
               String pid = currentYearPids[index];
+              final int qNum = int.tryParse(pid.substring(4)) ?? 0;
               var cfg = _payCalendar[pid]!;
 
               // Calculate date range for this quincena based on its weeks and quincena year
@@ -328,9 +329,18 @@ extension _NominaTabExt on _TelevisaAppState {
         if (totalBruto < 0) totalBruto = 0.0;
 
         double cuotaSindical = baseEarned * applicableCuotaRate;
+        double fondoAhorroEmpleado = 0.0;
+        if (_fondoAhorroEnabled &&
+            qNum >= _fondoAhorroStartQuincena &&
+            qNum <= _fondoAhorroCutoffQuincena) {
+          final faRes = calculateFondoAhorro(baseEarned: baseEarned);
+          fondoAhorroEmpleado = faRes['deduction']!;
+        }
+
         double isrEstimate =
             totalBruto > 0 ? totalBruto * (applicableRetention / 100) : 0.0;
-        double netDeposit = totalBruto - (isrEstimate + cuotaSindical);
+        double netDeposit =
+            totalBruto - (isrEstimate + cuotaSindical) - fondoAhorroEmpleado;
         if (netDeposit < 0) netDeposit = 0.0;
         return Card(
           color: cardColor,
@@ -421,6 +431,12 @@ extension _NominaTabExt on _TelevisaAppState {
                       "${totalHours3x.toStringAsFixed(1)} hrs"),
                   _confirmRow("I.S.R. Estimado:",
                       "-\$${isrEstimate.toStringAsFixed(2)}"),
+                  if (cuotaSindical > 0)
+                    _confirmRow("Cuota Sindical:",
+                        "-\$${cuotaSindical.toStringAsFixed(2)}"),
+                  if (_fondoAhorroEnabled && fondoAhorroEmpleado > 0)
+                    _confirmRow("Fondo de Ahorro:",
+                        "-\$${fondoAhorroEmpleado.toStringAsFixed(2)}"),
                   Divider(
                       color: _isDarkMode
                           ? Colors.orange
@@ -455,6 +471,4 @@ extension _NominaTabExt on _TelevisaAppState {
 ],
 );
   }
-
-
 }

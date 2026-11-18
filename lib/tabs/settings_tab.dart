@@ -179,6 +179,21 @@ extension _SettingsTabExt on _TelevisaAppState {
               },
             ),
           ),
+
+          // 6. Fondo de Ahorro (LISR Art. 27 Fracc. XI)
+          _buildNumericSettingCard(
+            title: "Fondo de Ahorro",
+            valueDisplay: _fondoAhorroEnabled
+                ? "${_fondoAhorroPct.toStringAsFixed(1)} %"
+                : "Inactivo",
+            periodCount: 0,
+            subtitle: _fondoAhorroEnabled
+                ? "Aportación 1:${_fondoAhorroMatchRatio == 1.0 ? '1' : _fondoAhorroMatchRatio.toStringAsFixed(1)} • Entrega Q${_fondoAhorroCutoffQuincena.toString().padLeft(2, '0')}"
+                : "Inactivo • Configurar ahorro y aportación",
+            icon: Icons.savings_rounded,
+            onTap: () => _navigateToFondoAhorroSettings(),
+          ),
+
           const SizedBox(height: 20),
           OutlinedButton(
               style: OutlinedButton.styleFrom(
@@ -1550,5 +1565,16 @@ extension _SettingsTabExt on _TelevisaAppState {
     }
   }
 
-
+  Future<void> _navigateToFondoAhorroSettings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _FondoAhorroScreen(
+          appState: this,
+        ),
+      ),
+    );
+    _rebuild(() {});
+  }
 }
+

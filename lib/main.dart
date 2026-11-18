@@ -22,6 +22,7 @@ part 'widgets/edit_work_day_dialog.dart';
 part 'screens/unit_share_screen.dart';
 part 'screens/history_screens.dart';
 part 'screens/admin_screens.dart';
+part 'screens/fondo_ahorro_screen.dart';
 part 'tabs/hoy_tab.dart';
 part 'tabs/quincena_tab.dart';
 part 'tabs/ano_tab.dart';
@@ -502,6 +503,271 @@ class _TelevisaAppState extends State<TelevisaApp> {
       TextEditingController(text: "");
   final TextEditingController _recoveryEmailController =
       TextEditingController(text: ""); // For password recovery
+
+  // Fondo de Ahorro State (LISR Art. 27 Fracc. XI)
+  bool _fondoAhorroEnabled = false;
+  double _fondoAhorroPct = 13.0;
+  double _fondoAhorroMatchRatio = 1.0;
+  int _fondoAhorroStartQuincena = 1;
+  int _fondoAhorroCutoffQuincena = 22;
+  final TextEditingController _fondoAhorroPctController =
+      TextEditingController(text: "13.0");
+  final TextEditingController _fondoAhorroMatchRatioController =
+      TextEditingController(text: "100");
+  Map<String, double> _fondoAhorroPayStubOverrides = {};
+  double? _fondoAhorroFixedAmount;
+
+  // 2026 UMA & Fondo de Ahorro Constants (LISR Art. 27 Fracc. XI)
+  static const double kDailyUma2026 = 117.31;
+  static const double kFondoAhorroQuincenaCap = 2287.545; // 1.3 * 117.31 * 15 = $2,287.55
+
+  Map<String, double> calculateFondoAhorro({
+    required double baseEarned,
+    double? pct,
+    double? matchRatio,
+  }) {
+    final effectivePct = pct ?? _fondoAhorroPct;
+    final effectiveRatio = matchRatio ?? _fondoAhorroMatchRatio;
+    final uncappedDeduction = baseEarned * (effectivePct / 100.0);
+    final deduction = uncappedDeduction > kFondoAhorroQuincenaCap
+        ? kFondoAhorroQuincenaCap
+        : uncappedDeduction;
+    final employerMatch = deduction * effectiveRatio;
+    final totalSavings = deduction + employerMatch;
+    return {
+      'uncappedDeduction': uncappedDeduction,
+      'deduction': deduction,
+      'employerMatch': employerMatch,
+      'totalSavings': totalSavings,
+      'isCapped': uncappedDeduction > kFondoAhorroQuincenaCap ? 1.0 : 0.0,
+    };
+  }
+
+  void calibrateFondoAhorroFixedAmount({int? year}) {
+    final int targetYear = year ?? DateTime.now().year;
+    final List<String> sortedPids = _payCalendar.keys
+        .where((k) => k.startsWith(targetYear.toString()))
+        .toList()
+      ..sort((a, b) => a.compareTo(b));
+
+    double? lastAmt;
+    int consecutive = 0;
+    double? calibratedAmt;
+
+    for (final pid in sortedPids) {
+      int qNum = int.tryParse(pid.substring(4)) ?? 0;
+      if (qNum < _fondoAhorroStartQuincena ||
+          qNum > _fondoAhorroCutoffQuincena) {
+        continue;
+      }
+
+      if (_fondoAhorroPayStubOverrides.containsKey(pid)) {
+        double amt = _fondoAhorroPayStubOverrides[pid]!;
+        if (lastAmt != null && (amt - lastAmt).abs() < 0.01) {
+          consecutive++;
+        } else {
+          lastAmt = amt;
+          consecutive = 1;
+        }
+
+        if (consecutive >= 4) {
+          calibratedAmt = amt;
+        }
+      } else {
+        lastAmt = null;
+        consecutive = 0;
+      }
+    }
+
+    _fondoAhorroFixedAmount = calibratedAmt;
+  }
+
+  Map<String, dynamic> calculateFondoAhorroCycleMetrics({int? year}) {
+    final int targetYear = year ?? DateTime.now().year;
+    final List<String> targetYearPids = _payCalendar.keys
+        .where((k) => k.startsWith(targetYear.toString()))
+        .toList();
+
+    double faAccumulatedTotal = 0.0;
+    double faAccumulatedEmployee = 0.0;
+    double faAccumulatedEmployer = 0.0;
+    int faAccumulatedQuincenasCount = 0;
+
+    double faFutureTotal = 0.0;
+    double faFutureEmployee = 0.0;
+    double faFutureEmployer = 0.0;
+
+    final DateTime now = DateTime.now();
+    final double currentSalaryToday = _getSalaryForDate(now);
+    final double standardBaseEarned = currentSalaryToday * 15.0;
+    final standardFaCalc =
+        calculateFondoAhorro(baseEarned: standardBaseEarned);
+
+    final List<String> sortedPids = targetYearPids.toList()
+      ..sort((a, b) => a.compareTo(b));
+
+    // Update 4-consecutive calibration
+    calibrateFondoAhorroFixedAmount(year: targetYear);
+
+    final List<Map<String, dynamic>> paidQuincenasDetails = [];
+
+    // Track calibration status chronologically
+    int consecutiveCalib = 0;
+    double? lastCalibAmt;
+    bool isCalibratedChronologically = false;
+    double? activeFixedAmount;
+
+    for (final pid in sortedPids) {
+      int qNum = int.tryParse(pid.substring(4)) ?? 0;
+      if (qNum < _fondoAhorroStartQuincena ||
+          qNum > _fondoAhorroCutoffQuincena) {
+        continue;
+      }
+
+      // Check 4-consecutive progression
+      if (_fondoAhorroPayStubOverrides.containsKey(pid)) {
+        double amt = _fondoAhorroPayStubOverrides[pid]!;
+        if (lastCalibAmt != null && (amt - lastCalibAmt).abs() < 0.01) {
+          consecutiveCalib++;
+        } else {
+          lastCalibAmt = amt;
+          consecutiveCalib = 1;
+        }
+        if (consecutiveCalib >= 4) {
+          isCalibratedChronologically = true;
+          activeFixedAmount = amt;
+        }
+      } else {
+        lastCalibAmt = null;
+        consecutiveCalib = 0;
+      }
+
+      var cfg = _payCalendar[pid]!;
+      final dateRange = _getQuincenaDateRange(pid, cfg);
+      final DateTime? quincenaStartDate = dateRange?.$1;
+      final DateTime? quincenaEndDate = dateRange?.$2;
+
+      DateTime? payoutDate;
+      try {
+        String payoutStr = cfg['payout'] as String;
+        List<String> parts = payoutStr.split('/');
+        if (parts.length == 3) {
+          int day = int.parse(parts[0]);
+          int month = int.parse(parts[1]);
+          int yearVal = 2000 + int.parse(parts[2]);
+          payoutDate = DateTime(yearVal, month, day);
+        }
+      } catch (_) {}
+
+      List<WorkDay> matched = _weeklyHistory.where((d) {
+        if (!cfg['weeks'].contains(_getWeekNumber(d.entrada))) {
+          return false;
+        }
+        if (quincenaStartDate != null && quincenaEndDate != null) {
+          return d.entrada.isAfter(quincenaStartDate
+                  .subtract(const Duration(seconds: 1))) &&
+              d.entrada.isBefore(quincenaEndDate
+                  .add(const Duration(seconds: 1)));
+        }
+        return true;
+      }).toList();
+
+      bool hasRecordedWork = matched.isNotEmpty &&
+          matched.any((d) => !d.isInProgress || d.totalHours > 0 || d.esFalta);
+
+      bool isPayoutPassed = payoutDate != null &&
+          !payoutDate.isAfter(DateTime(now.year, now.month, now.day, 23, 59, 59));
+      bool hasOverride = _fondoAhorroPayStubOverrides.containsKey(pid);
+      bool isPaidQuincena = isPayoutPassed || hasRecordedWork || hasOverride;
+
+      if (isPaidQuincena) {
+        double calculatedBaselineDeduction;
+        if (hasRecordedWork) {
+          DateTime refDate = payoutDate ?? quincenaStartDate ?? now;
+          double sal = _getSalaryForDate(refDate);
+          double baseQ = sal * 15.0;
+
+          int faltasCount = matched.where((d) => d.esFalta).length;
+          int diasLaborados =
+              matched.where((d) => !d.esFalta && !d.isInProgress).length;
+          int scheduledWorkdays = (cfg['weeks'] as List).length * 5;
+          if (scheduledWorkdays == 0) scheduledWorkdays = 10;
+
+          double descFaltas = 0.0;
+          if (faltasCount > 0) {
+            if (faltasCount >= scheduledWorkdays && diasLaborados == 0) {
+              descFaltas = baseQ;
+            } else {
+              double factor = 15.0 / scheduledWorkdays;
+              descFaltas = faltasCount * factor * sal;
+              if (descFaltas > baseQ) descFaltas = baseQ;
+            }
+          }
+          double baseEarned = baseQ - descFaltas;
+          if (baseEarned < 0) baseEarned = 0.0;
+
+          final faRes = calculateFondoAhorro(baseEarned: baseEarned);
+          calculatedBaselineDeduction = faRes['deduction']!;
+        } else {
+          calculatedBaselineDeduction = (isCalibratedChronologically && activeFixedAmount != null)
+              ? activeFixedAmount
+              : standardFaCalc['deduction']!;
+        }
+
+        final double effectiveDefault = (isCalibratedChronologically && activeFixedAmount != null)
+            ? activeFixedAmount
+            : calculatedBaselineDeduction;
+
+        final double deduction = hasOverride
+            ? _fondoAhorroPayStubOverrides[pid]!
+            : effectiveDefault;
+        final double employerMatch = deduction * _fondoAhorroMatchRatio;
+        final double totalSavings = deduction + employerMatch;
+
+        faAccumulatedEmployee += deduction;
+        faAccumulatedEmployer += employerMatch;
+        faAccumulatedTotal += totalSavings;
+        faAccumulatedQuincenasCount++;
+
+        paidQuincenasDetails.add({
+          'pid': pid,
+          'qNum': qNum,
+          'cfg': cfg,
+          'payoutDate': payoutDate,
+          'startDate': quincenaStartDate,
+          'endDate': quincenaEndDate,
+          'calculatedDeduction': effectiveDefault,
+          'actualDeduction': deduction,
+          'employerMatch': employerMatch,
+          'totalSavings': totalSavings,
+          'isVerified': hasOverride,
+          'hasRecordedWork': hasRecordedWork,
+        });
+      } else {
+        // Future quincena
+        final double futureDeduction = (isCalibratedChronologically && activeFixedAmount != null)
+            ? activeFixedAmount
+            : standardFaCalc['deduction']!;
+        final double futureMatch = futureDeduction * _fondoAhorroMatchRatio;
+        faFutureEmployee += futureDeduction;
+        faFutureEmployer += futureMatch;
+        faFutureTotal += (futureDeduction + futureMatch);
+      }
+    }
+
+    return {
+      'accumulatedTotal': faAccumulatedTotal,
+      'accumulatedEmployee': faAccumulatedEmployee,
+      'accumulatedEmployer': faAccumulatedEmployer,
+      'accumulatedQuincenas': faAccumulatedQuincenasCount,
+      'projectedTotal': faAccumulatedTotal + faFutureTotal,
+      'projectedEmployee': faAccumulatedEmployee + faFutureEmployee,
+      'projectedEmployer': faAccumulatedEmployer + faFutureEmployer,
+      'standardFaCalc': standardFaCalc,
+      'paidQuincenas': paidQuincenasDetails,
+      'fixedAmount': _fondoAhorroFixedAmount,
+    };
+  }
 
   // Unit Share ("Compartir Con") State
   bool _isUnitManager = false;
@@ -1451,6 +1717,19 @@ class _TelevisaAppState extends State<TelevisaApp> {
       await prefs.setString('last_name', _lastNameController.text);
       await prefs.setString('user_emp', _userEmpNoController.text);
       await prefs.setString('recovery_email', _recoveryEmailController.text);
+      await prefs.setBool('fondo_ahorro_enabled', _fondoAhorroEnabled);
+      await prefs.setDouble('fondo_ahorro_pct', _fondoAhorroPct);
+      await prefs.setDouble('fondo_ahorro_match_ratio', _fondoAhorroMatchRatio);
+      await prefs.setInt('fondo_ahorro_start_quincena', _fondoAhorroStartQuincena);
+      await prefs.setInt('fondo_ahorro_cutoff_quincena', _fondoAhorroCutoffQuincena);
+      await prefs.setString('fondo_ahorro_paystub_overrides',
+          jsonEncode(_fondoAhorroPayStubOverrides));
+      if (_fondoAhorroFixedAmount != null) {
+        await prefs.setDouble(
+            'fondo_ahorro_fixed_amount', _fondoAhorroFixedAmount!);
+      } else {
+        await prefs.remove('fondo_ahorro_fixed_amount');
+      }
 
       if (_entradaDateTime != null) {
         await prefs.setString(
@@ -1493,6 +1772,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 'user_emp': _userEmpNoController.text,
                 'recovery_email':
                     _recoveryEmailController.text.trim().toLowerCase(),
+                'fondo_ahorro_enabled': _fondoAhorroEnabled,
+                'fondo_ahorro_pct': _fondoAhorroPct,
+                'fondo_ahorro_match_ratio': _fondoAhorroMatchRatio,
+                'fondo_ahorro_start_quincena': _fondoAhorroStartQuincena,
+                'fondo_ahorro_cutoff_quincena': _fondoAhorroCutoffQuincena,
+                'fondo_ahorro_paystub_overrides': _fondoAhorroPayStubOverrides,
+                'fondo_ahorro_fixed_amount': _fondoAhorroFixedAmount,
               },
               SetOptions(merge: true));
           hasBatchWrites = true;
@@ -1694,6 +1980,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
           'last_sync_time',
           'pending_sync_count',
           'has_pending_sync',
+          'fondo_ahorro_enabled',
+          'fondo_ahorro_pct',
+          'fondo_ahorro_match_ratio',
+          'fondo_ahorro_start_quincena',
+          'fondo_ahorro_cutoff_quincena',
         ]) {
           await prefs.remove(key);
         }
@@ -1804,6 +2095,24 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _lastNameController.text = prefs.getString('last_name') ?? "";
       _recoveryEmailController.text =
           prefs.getString('recovery_email')?.toLowerCase() ?? "";
+      _fondoAhorroEnabled = prefs.getBool('fondo_ahorro_enabled') ?? false;
+      _fondoAhorroPct = prefs.getDouble('fondo_ahorro_pct') ?? 13.0;
+      _fondoAhorroMatchRatio = prefs.getDouble('fondo_ahorro_match_ratio') ?? 1.0;
+      _fondoAhorroStartQuincena = prefs.getInt('fondo_ahorro_start_quincena') ?? 1;
+      _fondoAhorroCutoffQuincena = prefs.getInt('fondo_ahorro_cutoff_quincena') ?? 22;
+      _fondoAhorroPctController.text = _fondoAhorroPct.toStringAsFixed(1);
+      _fondoAhorroMatchRatioController.text = (_fondoAhorroMatchRatio * 100).toStringAsFixed(0);
+      final String? savedOverrides =
+          prefs.getString('fondo_ahorro_paystub_overrides');
+      if (savedOverrides != null) {
+        try {
+          final Map<String, dynamic> decoded = jsonDecode(savedOverrides);
+          _fondoAhorroPayStubOverrides =
+              decoded.map((k, v) => MapEntry(k, (v as num).toDouble()));
+        } catch (_) {}
+      }
+      _fondoAhorroFixedAmount = prefs.getDouble('fondo_ahorro_fixed_amount');
+      calibrateFondoAhorroFixedAmount();
 
       // Load saved employee number or extract from current login email
       String savedEmp = prefs.getString('user_emp') ?? "";
@@ -1941,6 +2250,48 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 data['user_emp'] ?? data['employee_number'] ?? "";
             _recoveryEmailController.text =
                 (data['recovery_email'] as String?)?.toLowerCase() ?? "";
+            if (data.containsKey('fondo_ahorro_enabled')) {
+              _fondoAhorroEnabled = data['fondo_ahorro_enabled'] == true;
+              prefs.setBool('fondo_ahorro_enabled', _fondoAhorroEnabled);
+            }
+            if (data.containsKey('fondo_ahorro_pct')) {
+              _fondoAhorroPct = (data['fondo_ahorro_pct'] as num).toDouble();
+              _fondoAhorroPctController.text = _fondoAhorroPct.toStringAsFixed(1);
+              prefs.setDouble('fondo_ahorro_pct', _fondoAhorroPct);
+            }
+            if (data.containsKey('fondo_ahorro_match_ratio')) {
+              _fondoAhorroMatchRatio = (data['fondo_ahorro_match_ratio'] as num).toDouble();
+              _fondoAhorroMatchRatioController.text = (_fondoAhorroMatchRatio * 100).toStringAsFixed(0);
+              prefs.setDouble('fondo_ahorro_match_ratio', _fondoAhorroMatchRatio);
+            }
+            if (data.containsKey('fondo_ahorro_start_quincena')) {
+              _fondoAhorroStartQuincena = (data['fondo_ahorro_start_quincena'] as num).toInt();
+              prefs.setInt('fondo_ahorro_start_quincena', _fondoAhorroStartQuincena);
+            }
+            if (data.containsKey('fondo_ahorro_cutoff_quincena')) {
+              _fondoAhorroCutoffQuincena = (data['fondo_ahorro_cutoff_quincena'] as num).toInt();
+              prefs.setInt('fondo_ahorro_cutoff_quincena', _fondoAhorroCutoffQuincena);
+            }
+            if (data.containsKey('fondo_ahorro_paystub_overrides') &&
+                data['fondo_ahorro_paystub_overrides'] is Map) {
+              final Map rawMap = data['fondo_ahorro_paystub_overrides'] as Map;
+              _fondoAhorroPayStubOverrides = rawMap.map(
+                  (k, v) => MapEntry(k.toString(), (v as num).toDouble()));
+              prefs.setString('fondo_ahorro_paystub_overrides',
+                  jsonEncode(_fondoAhorroPayStubOverrides));
+            }
+            if (data.containsKey('fondo_ahorro_fixed_amount')) {
+              if (data['fondo_ahorro_fixed_amount'] != null) {
+                _fondoAhorroFixedAmount =
+                    (data['fondo_ahorro_fixed_amount'] as num).toDouble();
+                prefs.setDouble(
+                    'fondo_ahorro_fixed_amount', _fondoAhorroFixedAmount!);
+              } else {
+                _fondoAhorroFixedAmount = null;
+                prefs.remove('fondo_ahorro_fixed_amount');
+              }
+            }
+            calibrateFondoAhorroFixedAmount();
           });
         } else {
           final String fallbackEmp = _userEmpNoController.text.trim();
@@ -2407,6 +2758,9 @@ class _TelevisaAppState extends State<TelevisaApp> {
     _firstNameController.dispose();
     _lastNameController.dispose();
     _userEmpNoController.dispose();
+    _recoveryEmailController.dispose();
+    _fondoAhorroPctController.dispose();
+    _fondoAhorroMatchRatioController.dispose();
     super.dispose();
   }
 
@@ -3505,7 +3859,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.18.0 17/11/26",
+                "v.23.18.1 18/11/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,

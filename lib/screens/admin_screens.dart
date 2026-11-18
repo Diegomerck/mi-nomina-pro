@@ -103,6 +103,7 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
     'retencion': true,
     'fomento': true,
     'cuota': true,
+    'fondo_ahorro': true,
     'historial_aumentos': true,
     'nombre': true,
     'apellido': true,
@@ -639,6 +640,24 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
         hasSourceData: srcCuo.isNotEmpty,
       ),
       MergeFieldComparison(
+        key: 'fondo_ahorro',
+        title: 'Fondo de Ahorro',
+        icon: Icons.savings_outlined,
+        sourceValue: (srcData['fondo_ahorro_enabled'] == true)
+            ? 'Activo (${srcData['fondo_ahorro_pct'] ?? 13}%, Q${srcData['fondo_ahorro_start_quincena'] ?? 1}-Q${srcData['fondo_ahorro_cutoff_quincena'] ?? 22})'
+            : 'Inactivo',
+        targetValue: (tgtData['fondo_ahorro_enabled'] == true)
+            ? 'Activo (${tgtData['fondo_ahorro_pct'] ?? 13}%, Q${tgtData['fondo_ahorro_start_quincena'] ?? 1}-Q${tgtData['fondo_ahorro_cutoff_quincena'] ?? 22})'
+            : 'Inactivo',
+        isDifferent: (srcData['fondo_ahorro_enabled'] == true) !=
+                (tgtData['fondo_ahorro_enabled'] == true) ||
+            srcData['fondo_ahorro_pct'] != tgtData['fondo_ahorro_pct'] ||
+            srcData['fondo_ahorro_match_ratio'] != tgtData['fondo_ahorro_match_ratio'] ||
+            srcData['fondo_ahorro_start_quincena'] != tgtData['fondo_ahorro_start_quincena'] ||
+            srcData['fondo_ahorro_cutoff_quincena'] != tgtData['fondo_ahorro_cutoff_quincena'],
+        hasSourceData: srcData.containsKey('fondo_ahorro_enabled'),
+      ),
+      MergeFieldComparison(
         key: 'historial_aumentos',
         title: 'Historial aumentos / vigencias',
         icon: Icons.trending_up_rounded,
@@ -1059,6 +1078,21 @@ class _AdminAccountMergeScreenState extends State<AdminAccountMergeScreen> {
         }
         appliedFieldsSummary
             .add("Cuota sindical: ${cuo.isNotEmpty ? cuo : 'Sin asignar'}");
+      }
+
+      if (selectedKeys.contains('fondo_ahorro')) {
+        final bool faEnabled = srcData['fondo_ahorro_enabled'] == true;
+        targetProfileUpdates['fondo_ahorro_enabled'] = faEnabled;
+        targetProfileUpdates['fondo_ahorro_pct'] =
+            srcData['fondo_ahorro_pct'] ?? 13.0;
+        targetProfileUpdates['fondo_ahorro_match_ratio'] =
+            srcData['fondo_ahorro_match_ratio'] ?? 1.0;
+        targetProfileUpdates['fondo_ahorro_start_quincena'] =
+            srcData['fondo_ahorro_start_quincena'] ?? 1;
+        targetProfileUpdates['fondo_ahorro_cutoff_quincena'] =
+            srcData['fondo_ahorro_cutoff_quincena'] ?? 22;
+        appliedFieldsSummary.add(
+            "Fondo de Ahorro: ${faEnabled ? 'Activo (${srcData['fondo_ahorro_pct'] ?? 13}%)' : 'Inactivo'}");
       }
 
       if (selectedKeys.contains('historial_aumentos')) {
@@ -4880,7 +4914,7 @@ class _AdminPortalScaffoldState extends State<AdminPortalScaffold> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildInfoRow("Versión Aplicación", "v.23.18.0 17/11/26"),
+                _buildInfoRow("Versión Aplicación", "v.23.18.1 18/11/26"),
                 const Divider(height: 20),
                 _buildInfoRow("Entorno", "Firebase Production (Hosting & Firestore)"),
                 const Divider(height: 20),
