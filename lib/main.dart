@@ -32,7 +32,6 @@ part 'tabs/unit_manager_tab.dart';
 part 'tabs/day_dialogs_and_io.dart';
 
 final Map<String, String> _changelogTitles = {
-  "23.18.0": "🎬 Versión 23.18.0 (17/11/26) — Permisos de Salida Temprana y Pantalla Hoy Compacta",
   "23.17.0": "🤝 Versión 23.17.0 (04/11/26) — Modo Sin Conexión, Estado en la Nube y Pantalla Más Cómoda",
   "23.16.0": "🤝 Versión 23.16.0 (03/11/26) — Compartir Horarios, Nómina 2027 y Soporte de Cuenta",
   "23.15.0": "🛠️ Versión 23.15.0 (28/10/26) — Herramientas de Soporte y Fusión de Cuentas",
@@ -43,12 +42,6 @@ final Map<String, String> _changelogTitles = {
 };
 
 final Map<String, List<String>> _changelogByVersion = {
-  "23.18.0": [
-    "🎬 Permiso de salida anticipada: Si checas salida antes de tus 8 horas porque te dieron salida temprano en producción, la app te preguntará de forma amigable en la pantalla Hoy si fue autorizado. Si confirmas que te dieron salida, ¡no se te descontará nada de tu sueldo base! Si saliste por tu cuenta, se desglosará el descuento con total claridad.",
-    "📱 Resumen compacto y desplegable en Hoy: Nuevo botón [Ver desglose ▾] que muestra de un vistazo tu total de horas y pago diario sin saturar la pantalla, permitiéndote consultar el desglose completo cuando lo necesites sin ocultar las opciones inferiores.",
-    "📅 Corrección de Semana Actual en domingos: Se corrigió el cálculo de semanas en la pestaña Año para que los domingos se resalten como parte de la semana actual y el auto-desplazamiento funcione con exactitud.",
-    "✨ Experiencia visual más limpia: Se eliminaron las notificaciones emergentes al guardar modificaciones de turno para no cubrir los botones inferiores.",
-  ],
   "23.17.0": [
     "⚡ Úsala sin internet (Modo Fuera de Línea): Ahora puedes registrar tus turnos, entradas y salidas aunque no tengas señal ni internet. Tus datos se guardan en tu celular y se subirán solitos a la nube en cuanto vuelvas a tener conexión.",
     "☁️ Barra de estado de conexión: Nueva barra arriba de la pantalla que te avisa con letras grandes y claras si tus datos ya están respaldados en la nube o si estás sin conexión, junto con la hora exacta del último respaldo. ¡Puedes tocarla cuando quieras para forzar el guardado!",
