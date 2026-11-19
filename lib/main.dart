@@ -23,6 +23,7 @@ part 'screens/unit_share_screen.dart';
 part 'screens/history_screens.dart';
 part 'screens/admin_screens.dart';
 part 'screens/fondo_ahorro_screen.dart';
+part 'screens/vales_chedraui_screen.dart';
 part 'tabs/hoy_tab.dart';
 part 'tabs/quincena_tab.dart';
 part 'tabs/ano_tab.dart';
@@ -33,6 +34,8 @@ part 'tabs/unit_manager_tab.dart';
 part 'tabs/day_dialogs_and_io.dart';
 
 final Map<String, String> _changelogTitles = {
+  "23.19.0":
+      "🛒 Versión 23.19.0 (19/11/26) — Monedero Chedraui, Plantillas de Contrato, Salida Inteligente y Tablas SAT 2026",
   "23.17.0": "🤝 Versión 23.17.0 (04/11/26) — Modo Sin Conexión, Estado en la Nube y Pantalla Más Cómoda",
   "23.16.0": "🤝 Versión 23.16.0 (03/11/26) — Compartir Horarios, Nómina 2027 y Soporte de Cuenta",
   "23.15.0": "🛠️ Versión 23.15.0 (28/10/26) — Herramientas de Soporte y Fusión de Cuentas",
@@ -43,6 +46,12 @@ final Map<String, String> _changelogTitles = {
 };
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.19.0": [
+    "🛒 Monedero Chedraui (Vales de Despensa): Nueva pantalla dedicada para gestionar tu apoyo de despensa quincenal y mensual, consultar tu saldo acumulado, ver tus apoyos por quincena y registrar compras o aclaraciones fácilmente.",
+    "📋 Plantillas de Contrato Rápidas: En Ajustes de Nómina ahora puedes aplicar con un solo toque los perfiles estándar de retenciones y prestaciones (Sindicalizado 2026, Contrato Base o Confianza / Sin Sindicato) sin tener que configurar campo por campo.",
+    "⏱️ Registro Inteligente de Salida: Al marcar o editar tu salida en turnos nocturnos o del día anterior, el sistema detecta automáticamente la fecha exacta y te protege contra registros futuros accidentales.",
+    "📊 Tablas de Retención SAT 2026: Actualización oficial de los tabuladores de ISR quincenal conforme a las disposiciones fiscales vigentes para una estimación neta de tu nómina aún más exacta.",
+  ],
   "23.17.0": [
     "⚡ Úsala sin internet (Modo Fuera de Línea): Ahora puedes registrar tus turnos, entradas y salidas aunque no tengas señal ni internet. Tus datos se guardan en tu celular y se subirán solitos a la nube en cuanto vuelvas a tener conexión.",
     "☁️ Barra de estado de conexión: Nueva barra arriba de la pantalla que te avisa con letras grandes y claras si tus datos ya están respaldados en la nube o si estás sin conexión, junto con la hora exacta del último respaldo. ¡Puedes tocarla cuando quieras para forzar el guardado!",
@@ -366,13 +375,17 @@ class WorkDay {
       return 0.0;
     }
     if (creditedExtraHours <= 0) return 0.0;
+    final double unroundedOtHourlyRate = sueldoBase / 8.0;
     if (esFestivo && festivoTrabajado) {
-      return creditedExtraHours * (hourlyRate * 3);
+      return PayrollEngine.roundCurrency(
+          unroundedOtHourlyRate * 3.0 * creditedExtraHours);
     }
     if (isRestDay) {
-      return creditedExtraHours * (hourlyRate * 3);
+      return PayrollEngine.roundCurrency(
+          unroundedOtHourlyRate * 3.0 * creditedExtraHours);
     }
-    return creditedExtraHours * (hourlyRate * 2);
+    return PayrollEngine.roundCurrency(
+        unroundedOtHourlyRate * 2.0 * creditedExtraHours);
   }
 
   double get holidayExtraHours =>
@@ -384,7 +397,8 @@ class WorkDay {
       (isInProgress ||
               !(esFestivo && festivoTrabajado && creditedExtraHours > 0))
           ? 0.0
-          : creditedExtraHours * (hourlyRate * 3);
+          : PayrollEngine.roundCurrency(
+              (sueldoBase / 8.0) * 3.0 * creditedExtraHours);
 
   double get totalPay => (isInProgress) ? 0.0 : (dailyPay + extrasMoney);
 
@@ -437,6 +451,189 @@ class OvertimeBreakdown {
     this.pay3x = 0,
   });
   double get totalPay => pay2x + pay3x;
+}
+
+class PayrollEngine {
+  // 2026 UMA & Fondo de Ahorro Constants (LISR Art. 27 Fracc. XI)
+  static const double kDailyUma2026 = 117.31;
+  static const double kFondoAhorroQuincenaCap = 2287.55; // 1.3 * 117.31 * 15 = $2,287.55
+
+  // 2026 Mexican SAT Bi-Weekly Progressive ISR Table (LISR Art. 96 & Art. 152 / RMF Anexo 8)
+  static const List<({double lower, double upper, double fixed, double rate})>
+      kSatIsr2026BiWeeklyBrackets = [
+    (lower: 0.01, upper: 416.70, fixed: 0.00, rate: 0.0192),
+    (lower: 416.71, upper: 3537.15, fixed: 7.95, rate: 0.0640),
+    (lower: 3537.16, upper: 6216.15, fixed: 207.75, rate: 0.1088),
+    (lower: 6216.16, upper: 7225.95, fixed: 499.20, rate: 0.1600),
+    (lower: 7225.96, upper: 8651.40, fixed: 660.75, rate: 0.1792),
+    (lower: 8651.41, upper: 17448.75, fixed: 916.20, rate: 0.2136),
+    (lower: 17448.76, upper: 27501.60, fixed: 2795.25, rate: 0.2352),
+    (lower: 27501.61, upper: 52505.25, fixed: 5159.70, rate: 0.3000),
+    (lower: 52505.26, upper: 70006.95, fixed: 12660.75, rate: 0.3200),
+    (lower: 70006.96, upper: 210020.70, fixed: 18261.30, rate: 0.3400),
+    (lower: 210020.71, upper: double.infinity, fixed: 65866.05, rate: 0.3500),
+  ];
+
+  static double roundCurrency(double val) {
+    return double.parse((val + 1e-7).toStringAsFixed(2));
+  }
+
+  /// Disambiguates clock-out date when shift started on a previous calendar day or today.
+  /// Returns:
+  /// - The resolved [DateTime] for salida, OR
+  /// - null if the shift started today and [pickedTime] is in the future.
+  static DateTime? resolveClockOutDateTime({
+    required DateTime entrada,
+    required TimeOfDay pickedTime,
+    required DateTime now,
+  }) {
+    final bool isFromPreviousDay = entrada.year != now.year ||
+        entrada.month != now.month ||
+        entrada.day != now.day;
+
+    final bool isFutureTime = pickedTime.hour > now.hour ||
+        (pickedTime.hour == now.hour && pickedTime.minute > now.minute);
+
+    if (isFromPreviousDay) {
+      if (isFutureTime) {
+        // Clock-out occurred yesterday (before midnight)
+        return DateTime(
+          entrada.year,
+          entrada.month,
+          entrada.day,
+          pickedTime.hour,
+          pickedTime.minute,
+        );
+      } else {
+        // Overnight shift: clock-out occurred today
+        return DateTime(
+          now.year,
+          now.month,
+          now.day,
+          pickedTime.hour,
+          pickedTime.minute,
+        );
+      }
+    } else {
+      if (isFutureTime) {
+        // Shift started today and picked time is in the future -> blocked
+        return null;
+      }
+      return DateTime(
+        now.year,
+        now.month,
+        now.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    }
+  }
+
+  static double calculateSatIsr2026Quincenal(double baseGravable) {
+    if (baseGravable <= 0.0) return 0.0;
+    for (int i = kSatIsr2026BiWeeklyBrackets.length - 1; i >= 0; i--) {
+      final b = kSatIsr2026BiWeeklyBrackets[i];
+      if (baseGravable >= b.lower) {
+        final double excedente = baseGravable - b.lower;
+        final double isr = b.fixed + (excedente * b.rate);
+        return roundCurrency(isr);
+      }
+    }
+    return 0.0;
+  }
+
+  static Map<WorkDay, OvertimeBreakdown> calculateWeeklyOvertimeBreakdown(
+      List<WorkDay> weekDays) {
+    final sortedDays = [...weekDays]
+      ..sort((a, b) => a.entrada.compareTo(b.entrada));
+
+    double accumulatedCreditedOT = 0.0;
+    final Map<WorkDay, OvertimeBreakdown> result = {};
+
+    for (final day in sortedDays) {
+      final breakdown = OvertimeBreakdown();
+      if (!day.isInProgress &&
+          !day.esFalta &&
+          !day.esMantenimiento &&
+          !day.esFestivo &&
+          day.creditedExtraHours > 0) {
+        final double unroundedOtHourlyRate = day.sueldoBase / 8.0;
+
+        if (day.isRestDay) {
+          // Rest-day overtime is 100% 3x and does not consume regular 9h quota
+          double h3x = day.creditedExtraHours;
+          breakdown.hours2x = 0.0;
+          breakdown.pay2x = 0.0;
+          breakdown.hours3x = h3x;
+          breakdown.pay3x =
+              roundCurrency(unroundedOtHourlyRate * 3.0 * h3x);
+        } else {
+          double remainingOT = day.creditedExtraHours;
+
+          while (remainingOT > 0.001) {
+            double remaining2xQuota =
+                (9.0 - accumulatedCreditedOT).clamp(0.0, double.infinity);
+            if (remaining2xQuota > 0) {
+              double h2x = remainingOT.clamp(0.0, remaining2xQuota);
+              breakdown.hours2x += h2x;
+              accumulatedCreditedOT += h2x;
+              remainingOT -= h2x;
+            } else {
+              double h3x = remainingOT;
+              breakdown.hours3x += h3x;
+              accumulatedCreditedOT += h3x;
+              remainingOT = 0;
+            }
+          }
+          breakdown.pay2x = roundCurrency(
+              unroundedOtHourlyRate * 2.0 * breakdown.hours2x);
+          breakdown.pay3x = roundCurrency(
+              unroundedOtHourlyRate * 3.0 * breakdown.hours3x);
+        }
+      }
+      result[day] = breakdown;
+    }
+
+    return result;
+  }
+
+  static Map<String, double> calculateFondoAhorro({
+    required double baseEarned,
+    double pct = 13.0,
+    double matchRatio = 1.0,
+  }) {
+    final uncappedDeduction = baseEarned * (pct / 100.0);
+    final deduction = uncappedDeduction > kFondoAhorroQuincenaCap
+        ? kFondoAhorroQuincenaCap
+        : uncappedDeduction;
+    final employerMatch = deduction * matchRatio;
+    final totalSavings = deduction + employerMatch;
+    return {
+      'uncappedDeduction': uncappedDeduction,
+      'deduction': deduction,
+      'employerMatch': employerMatch,
+      'totalSavings': totalSavings,
+      'isCapped': uncappedDeduction > kFondoAhorroQuincenaCap ? 1.0 : 0.0,
+    };
+  }
+
+  static double calculateCuotaSindical({
+    required double baseEarned,
+    required double applicableCuotaRate,
+    required int qNum,
+  }) {
+    if (applicableCuotaRate <= 0.0 || baseEarned <= 0.0) return 0.0;
+    final bool isFirstQuincena = (qNum % 2 != 0);
+    // Contrato Base (2.0%): applies on every quincena
+    if ((applicableCuotaRate - 0.02).abs() < 0.001) {
+      return roundCurrency(baseEarned * applicableCuotaRate);
+    }
+    // Sindicalizado 2026 (4.0%) or other rates: applies only on 2nd quincena of each month
+    if (isFirstQuincena) {
+      return 0.0;
+    }
+    return roundCurrency(baseEarned * applicableCuotaRate);
+  }
 }
 
 class TelevisaApp extends StatefulWidget {
@@ -504,6 +701,16 @@ class _TelevisaAppState extends State<TelevisaApp> {
   final TextEditingController _recoveryEmailController =
       TextEditingController(text: ""); // For password recovery
 
+  // Vales de Fomento Cultural (Monedero Chedraui) State
+  bool _valesFomentoCulturalEnabled = false;
+  double _valesFomentoCulturalAmount = 0.0;
+  int _valesStartQuincena = 1;
+  Map<String, double> _valesPayStubOverrides = {};
+  List<Map<String, dynamic>> _valesExpenses = [];
+  final TextEditingController _valesFomentoCulturalAmountController =
+      TextEditingController(text: "");
+
+
   // Fondo de Ahorro State (LISR Art. 27 Fracc. XI)
   bool _fondoAhorroEnabled = false;
   double _fondoAhorroPct = 13.0;
@@ -518,29 +725,23 @@ class _TelevisaAppState extends State<TelevisaApp> {
   double? _fondoAhorroFixedAmount;
 
   // 2026 UMA & Fondo de Ahorro Constants (LISR Art. 27 Fracc. XI)
-  static const double kDailyUma2026 = 117.31;
-  static const double kFondoAhorroQuincenaCap = 2287.545; // 1.3 * 117.31 * 15 = $2,287.55
+  static const double kDailyUma2026 = PayrollEngine.kDailyUma2026;
+  static const double kFondoAhorroQuincenaCap =
+      PayrollEngine.kFondoAhorroQuincenaCap; // 1.3 * 117.31 * 15 = $2,287.55
+
+  static double calculateSatIsr2026Quincenal(double baseGravable) =>
+      PayrollEngine.calculateSatIsr2026Quincenal(baseGravable);
 
   Map<String, double> calculateFondoAhorro({
     required double baseEarned,
     double? pct,
     double? matchRatio,
   }) {
-    final effectivePct = pct ?? _fondoAhorroPct;
-    final effectiveRatio = matchRatio ?? _fondoAhorroMatchRatio;
-    final uncappedDeduction = baseEarned * (effectivePct / 100.0);
-    final deduction = uncappedDeduction > kFondoAhorroQuincenaCap
-        ? kFondoAhorroQuincenaCap
-        : uncappedDeduction;
-    final employerMatch = deduction * effectiveRatio;
-    final totalSavings = deduction + employerMatch;
-    return {
-      'uncappedDeduction': uncappedDeduction,
-      'deduction': deduction,
-      'employerMatch': employerMatch,
-      'totalSavings': totalSavings,
-      'isCapped': uncappedDeduction > kFondoAhorroQuincenaCap ? 1.0 : 0.0,
-    };
+    return PayrollEngine.calculateFondoAhorro(
+      baseEarned: baseEarned,
+      pct: pct ?? _fondoAhorroPct,
+      matchRatio: matchRatio ?? _fondoAhorroMatchRatio,
+    );
   }
 
   void calibrateFondoAhorroFixedAmount({int? year}) {
@@ -766,6 +967,103 @@ class _TelevisaAppState extends State<TelevisaApp> {
       'standardFaCalc': standardFaCalc,
       'paidQuincenas': paidQuincenasDetails,
       'fixedAmount': _fondoAhorroFixedAmount,
+    };
+  }
+
+  Map<String, dynamic> calculateValesChedrauiMetrics({int? year}) {
+    final int targetYear = year ?? DateTime.now().year;
+    final DateTime now = DateTime.now();
+
+    final List<String> targetYearPids = _payCalendar.keys
+        .where((k) => k.startsWith(targetYear.toString()))
+        .toList();
+    final List<String> sortedPids = targetYearPids.toList()
+      ..sort((a, b) => a.compareTo(b));
+
+    double totalDepositado = 0.0;
+    double futureProjection = 0.0;
+    final List<Map<String, dynamic>> allSecondQuincenas = [];
+
+    for (final pid in sortedPids) {
+      final int qNum = int.tryParse(pid.substring(4)) ?? 0;
+      final bool isSecondQuincena = (qNum % 2 == 0);
+      if (!isSecondQuincena) continue;
+      if (qNum < _valesStartQuincena) continue;
+
+      var cfg = _payCalendar[pid]!;
+      final dateRange = _getQuincenaDateRange(pid, cfg);
+      final DateTime? quincenaStartDate = dateRange?.$1;
+      final DateTime? quincenaEndDate = dateRange?.$2;
+
+      DateTime? payoutDate;
+      try {
+        String payoutStr = cfg['payout'] as String;
+        List<String> parts = payoutStr.split('/');
+        if (parts.length == 3) {
+          int day = int.parse(parts[0]);
+          int month = int.parse(parts[1]);
+          int yearVal = 2000 + int.parse(parts[2]);
+          payoutDate = DateTime(yearVal, month, day);
+        }
+      } catch (_) {}
+
+      final bool isPayoutPassed = payoutDate != null &&
+          !payoutDate.isAfter(DateTime(now.year, now.month, now.day, 23, 59, 59));
+      final bool hasOverride = _valesPayStubOverrides.containsKey(pid);
+
+      List<WorkDay> matched = _weeklyHistory.where((d) {
+        if (!cfg['weeks'].contains(_getWeekNumber(d.entrada))) return false;
+        if (quincenaStartDate != null && quincenaEndDate != null) {
+          return d.entrada.isAfter(quincenaStartDate.subtract(const Duration(seconds: 1))) &&
+              d.entrada.isBefore(quincenaEndDate.add(const Duration(seconds: 1)));
+        }
+        return true;
+      }).toList();
+
+      final bool hasRecordedWork = matched.isNotEmpty &&
+          matched.any((d) => !d.isInProgress || d.totalHours > 0 || d.esFalta);
+
+      final bool isDeposited = isPayoutPassed || hasRecordedWork || hasOverride;
+
+      final double actualAmount = hasOverride
+          ? _valesPayStubOverrides[pid]!
+          : _valesFomentoCulturalAmount;
+
+      if (isDeposited) {
+        totalDepositado += actualAmount;
+      } else {
+        futureProjection += actualAmount;
+      }
+
+      allSecondQuincenas.add({
+        'pid': pid,
+        'qNum': qNum,
+        'cfg': cfg,
+        'payoutDate': payoutDate,
+        'startDate': quincenaStartDate,
+        'endDate': quincenaEndDate,
+        'defaultAmount': _valesFomentoCulturalAmount,
+        'actualAmount': actualAmount,
+        'isVerified': hasOverride,
+        'isDeposited': isDeposited,
+      });
+    }
+
+    double totalGastado = 0.0;
+    for (final expense in _valesExpenses) {
+      final double m = ((expense['monto'] as num?)?.toDouble()) ?? 0.0;
+      totalGastado += m;
+    }
+
+    final double saldoDisponible = math.max(0.0, totalDepositado - totalGastado);
+    final double proyeccionAnual = totalDepositado + futureProjection;
+
+    return {
+      'totalDepositado': totalDepositado,
+      'totalGastado': totalGastado,
+      'saldoDisponible': saldoDisponible,
+      'proyeccionAnual': proyeccionAnual,
+      'allSecondQuincenas': allSecondQuincenas,
     };
   }
 
@@ -996,6 +1294,31 @@ class _TelevisaAppState extends State<TelevisaApp> {
     final TextEditingController jornadaInputController =
         TextEditingController(text: "9.5");
     List<int> onboardingRestDays = List<int>.from(_restDays);
+    int selectedContractIndex = 0;
+
+    final contractOptions = [
+      (
+        title: "Contrato Base (2.0% / 2.0%)",
+        subtitle: "Fomento 2.0% • Cuota 2.0% cada quincena",
+        badge: "PREDETERMINADO",
+        fomento: "2.0",
+        cuota: "2.0",
+      ),
+      (
+        title: "Sindicalizado 2026 (4.6% / 4.0%)",
+        subtitle: "Fomento 4.6% • Cuota 4.0% en 2da quincena",
+        badge: "SINDICALIZADO 2026",
+        fomento: "4.6",
+        cuota: "4.0",
+      ),
+      (
+        title: "Confianza / Sin Sindicato (0.0% / 0.0%)",
+        subtitle: "Fomento 0.0% • Cuota 0.0% • Sin cuota sindical",
+        badge: "SIN SINDICATO",
+        fomento: "0.0",
+        cuota: "0.0",
+      ),
+    ];
 
     showDialog(
       context: context,
@@ -1110,6 +1433,140 @@ class _TelevisaAppState extends State<TelevisaApp> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        "TIPO DE CONTRATO",
+                        style: TextStyle(
+                          color: Colors.orange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        "Este es el contrato estándar que aplica a la mayoría. Si tienes otro tipo de contrato, selecciónalo aquí. También podrás cambiarlo o ajustarlo después en Ajustes.",
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...contractOptions.asMap().entries.map((entry) {
+                        final int index = entry.key;
+                        final option = entry.value;
+                        final bool isSelected = selectedContractIndex == index;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.orange.withAlpha(25)
+                                : Colors.white.withAlpha(12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isSelected
+                                  ? Colors.orange
+                                  : Colors.white24,
+                              width: isSelected ? 2 : 1,
+                            ),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(10),
+                              onTap: () {
+                                setDialogState(() {
+                                  selectedContractIndex = index;
+                                });
+                              },
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 10),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      isSelected
+                                          ? Icons.radio_button_checked
+                                          : Icons.radio_button_off,
+                                      color: isSelected
+                                          ? Colors.orange
+                                          : Colors.white54,
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  option.title,
+                                                  style: TextStyle(
+                                                    color: isSelected
+                                                        ? Colors.white
+                                                        : Colors.white
+                                                            .withAlpha(220),
+                                                    fontSize: 13,
+                                                    fontWeight: isSelected
+                                                        ? FontWeight.bold
+                                                        : FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: isSelected
+                                                      ? Colors.orange
+                                                          .withAlpha(40)
+                                                      : Colors.white10,
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: isSelected
+                                                        ? Colors.orangeAccent
+                                                        : Colors.white24,
+                                                    width: 0.8,
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  option.badge,
+                                                  style: TextStyle(
+                                                    color: isSelected
+                                                        ? Colors.orangeAccent
+                                                        : Colors.white60,
+                                                    fontSize: 9,
+                                                    fontWeight:
+                                                        FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            option.subtitle,
+                                            style: const TextStyle(
+                                              color: Colors.white54,
+                                              fontSize: 11,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
                       const SizedBox(height: 20),
                       const Text(
                         "DÍAS DE DESCANSO",
@@ -1245,15 +1702,23 @@ class _TelevisaAppState extends State<TelevisaApp> {
                           return;
                         }
 
-                        // Update controllers and rest days
+                        // Update controllers, rest days, and contract type
+                        final selectedOption =
+                            contractOptions[selectedContractIndex];
                         setState(() {
                           _salaryController.text = salary.toString();
                           _baseHoursController.text = jornada.toString();
+                          _fomentoController.text = selectedOption.fomento;
+                          _cuotaController.text = selectedOption.cuota;
                           _restDays = onboardingRestDays.isNotEmpty
                               ? onboardingRestDays
                               : [6, 7];
                           WorkDay.restDays = _restDays;
                         });
+
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool(
+                            'contrato_base_default_v1_applied', true);
 
                         // Save to cloud
                         await _saveData();
@@ -1730,6 +2195,16 @@ class _TelevisaAppState extends State<TelevisaApp> {
       } else {
         await prefs.remove('fondo_ahorro_fixed_amount');
       }
+      await prefs.setBool(
+          'vales_fomento_cultural_enabled', _valesFomentoCulturalEnabled);
+      await prefs.setDouble(
+          'vales_fomento_cultural_amount', _valesFomentoCulturalAmount);
+      await prefs.setInt('vales_start_quincena', _valesStartQuincena);
+      await prefs.setString(
+          'vales_paystub_overrides', jsonEncode(_valesPayStubOverrides));
+      await prefs.setString(
+          'vales_expenses', jsonEncode(_valesExpenses));
+      await prefs.setBool('contrato_base_default_v1_applied', true);
 
       if (_entradaDateTime != null) {
         await prefs.setString(
@@ -1779,6 +2254,12 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 'fondo_ahorro_cutoff_quincena': _fondoAhorroCutoffQuincena,
                 'fondo_ahorro_paystub_overrides': _fondoAhorroPayStubOverrides,
                 'fondo_ahorro_fixed_amount': _fondoAhorroFixedAmount,
+                'vales_fomento_cultural_enabled': _valesFomentoCulturalEnabled,
+                'vales_fomento_cultural_amount': _valesFomentoCulturalAmount,
+                'vales_start_quincena': _valesStartQuincena,
+                'vales_paystub_overrides': _valesPayStubOverrides,
+                'vales_expenses': _valesExpenses,
+                'contrato_base_default_v1_applied': true,
               },
               SetOptions(merge: true));
           hasBatchWrites = true;
@@ -2091,6 +2572,33 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _retentionController.text = prefs.getString('retention') ?? "15.22";
       _fomentoController.text = prefs.getString('fomento') ?? "2.0";
       _cuotaController.text = prefs.getString('cuota') ?? "2.0";
+
+      // Contrato Base (2.0% / 2.0%) Default Migration
+      bool migrationApplied =
+          prefs.getBool('contrato_base_default_v1_applied') ?? false;
+      if (!migrationApplied) {
+        final String? savedFomento = prefs.getString('fomento');
+        final double? parsedFomento =
+            savedFomento != null ? double.tryParse(savedFomento) : null;
+        final bool isExplicit46Or0 =
+            parsedFomento == 4.6 || parsedFomento == 0.0;
+        if (!isExplicit46Or0) {
+          _fomentoController.text = "2.0";
+          _cuotaController.text = "2.0";
+          prefs.setString('fomento', "2.0");
+          prefs.setString('cuota', "2.0");
+        }
+        prefs.setBool('contrato_base_default_v1_applied', true);
+        if (user != null) {
+          FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+            'contrato_base_default_v1_applied': true,
+            if (!isExplicit46Or0) ...{
+              'fomento': _fomentoController.text,
+              'cuota': _cuotaController.text,
+            }
+          }, SetOptions(merge: true)).catchError((_) {});
+        }
+      }
       _firstNameController.text = prefs.getString('first_name') ?? "";
       _lastNameController.text = prefs.getString('last_name') ?? "";
       _recoveryEmailController.text =
@@ -2112,6 +2620,33 @@ class _TelevisaAppState extends State<TelevisaApp> {
         } catch (_) {}
       }
       _fondoAhorroFixedAmount = prefs.getDouble('fondo_ahorro_fixed_amount');
+      _valesFomentoCulturalEnabled =
+          prefs.getBool('vales_fomento_cultural_enabled') ?? false;
+      _valesFomentoCulturalAmount =
+          prefs.getDouble('vales_fomento_cultural_amount') ?? 0.0;
+      _valesStartQuincena = prefs.getInt('vales_start_quincena') ?? 1;
+      final String? savedValesOverrides =
+          prefs.getString('vales_paystub_overrides');
+      if (savedValesOverrides != null) {
+        try {
+          final Map<String, dynamic> decoded = jsonDecode(savedValesOverrides);
+          _valesPayStubOverrides =
+              decoded.map((k, v) => MapEntry(k, (v as num).toDouble()));
+        } catch (_) {}
+      }
+      final String? savedValesExpenses = prefs.getString('vales_expenses');
+      if (savedValesExpenses != null) {
+        try {
+          final List<dynamic> decoded = jsonDecode(savedValesExpenses);
+          _valesExpenses = decoded
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+        } catch (_) {}
+      }
+      _valesFomentoCulturalAmountController.text =
+          _valesFomentoCulturalAmount > 0
+              ? _valesFomentoCulturalAmount.toStringAsFixed(2)
+              : "";
       calibrateFondoAhorroFixedAmount();
 
       // Load saved employee number or extract from current login email
@@ -2243,6 +2778,30 @@ class _TelevisaAppState extends State<TelevisaApp> {
             _retentionController.text = data['retention'] ?? "15.22";
             _fomentoController.text = data['fomento'] ?? "2.0";
             _cuotaController.text = data['cuota'] ?? "2.0";
+
+            if (data.containsKey('contrato_base_default_v1_applied')) {
+              prefs.setBool('contrato_base_default_v1_applied',
+                  data['contrato_base_default_v1_applied'] == true);
+            } else {
+              final double? parsedFomento =
+                  double.tryParse(_fomentoController.text.trim());
+              final bool isExplicit46Or0 =
+                  parsedFomento == 4.6 || parsedFomento == 0.0;
+              if (!isExplicit46Or0) {
+                _fomentoController.text = "2.0";
+                _cuotaController.text = "2.0";
+                prefs.setString('fomento', "2.0");
+                prefs.setString('cuota', "2.0");
+              }
+              prefs.setBool('contrato_base_default_v1_applied', true);
+              FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+                'contrato_base_default_v1_applied': true,
+                if (!isExplicit46Or0) ...{
+                  'fomento': _fomentoController.text,
+                  'cuota': _cuotaController.text,
+                }
+              }, SetOptions(merge: true)).catchError((_) {});
+            }
             _firstNameController.text = data['first_name'] ?? "";
             _lastNameController.text = data['last_name'] ?? "";
             // Check both field names for backward compatibility
@@ -2290,6 +2849,42 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 _fondoAhorroFixedAmount = null;
                 prefs.remove('fondo_ahorro_fixed_amount');
               }
+            }
+            if (data.containsKey('vales_fomento_cultural_enabled')) {
+              _valesFomentoCulturalEnabled =
+                  data['vales_fomento_cultural_enabled'] == true;
+              prefs.setBool('vales_fomento_cultural_enabled',
+                  _valesFomentoCulturalEnabled);
+            }
+            if (data.containsKey('vales_fomento_cultural_amount')) {
+              _valesFomentoCulturalAmount =
+                  (data['vales_fomento_cultural_amount'] as num).toDouble();
+              _valesFomentoCulturalAmountController.text =
+                  _valesFomentoCulturalAmount > 0
+                      ? _valesFomentoCulturalAmount.toStringAsFixed(2)
+                      : "";
+              prefs.setDouble('vales_fomento_cultural_amount',
+                  _valesFomentoCulturalAmount);
+            }
+            if (data.containsKey('vales_start_quincena')) {
+              _valesStartQuincena = (data['vales_start_quincena'] as num).toInt();
+              prefs.setInt('vales_start_quincena', _valesStartQuincena);
+            }
+            if (data.containsKey('vales_paystub_overrides') &&
+                data['vales_paystub_overrides'] is Map) {
+              final Map rawMap = data['vales_paystub_overrides'] as Map;
+              _valesPayStubOverrides = rawMap.map(
+                  (k, v) => MapEntry(k.toString(), (v as num).toDouble()));
+              prefs.setString('vales_paystub_overrides',
+                  jsonEncode(_valesPayStubOverrides));
+            }
+            if (data.containsKey('vales_expenses') &&
+                data['vales_expenses'] is List) {
+              final List rawList = data['vales_expenses'] as List;
+              _valesExpenses = rawList
+                  .map((e) => Map<String, dynamic>.from(e as Map))
+                  .toList();
+              prefs.setString('vales_expenses', jsonEncode(_valesExpenses));
             }
             calibrateFondoAhorroFixedAmount();
           });
@@ -2761,6 +3356,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
     _recoveryEmailController.dispose();
     _fondoAhorroPctController.dispose();
     _fondoAhorroMatchRatioController.dispose();
+    _valesFomentoCulturalAmountController.dispose();
     super.dispose();
   }
 
@@ -2780,56 +3376,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
   }
 
   Map<WorkDay, OvertimeBreakdown> calculateWeeklyOvertimeBreakdown(
-      List<WorkDay> weekDays) {
-    final sortedDays = [...weekDays]
-      ..sort((a, b) => a.entrada.compareTo(b.entrada));
-
-    double accumulatedCreditedOT = 0.0;
-    final Map<WorkDay, OvertimeBreakdown> result = {};
-
-    for (final day in sortedDays) {
-      final breakdown = OvertimeBreakdown();
-      if (!day.isInProgress &&
-          !day.esFalta &&
-          !day.esMantenimiento &&
-          !day.esFestivo &&
-          day.creditedExtraHours > 0) {
-        double hourlyRate = day.hourlyRate; // sueldoBase / baseHours
-
-        if (day.isRestDay) {
-          // Rest-day overtime is 100% 3x and does not consume regular 9h quota
-          double h3x = day.creditedExtraHours;
-          breakdown.hours2x = 0.0;
-          breakdown.pay2x = 0.0;
-          breakdown.hours3x = h3x;
-          breakdown.pay3x = h3x * hourlyRate * 3;
-        } else {
-          double remainingOT = day.creditedExtraHours;
-
-          while (remainingOT > 0.001) {
-            double remaining2xQuota =
-                (9.0 - accumulatedCreditedOT).clamp(0.0, double.infinity);
-            if (remaining2xQuota > 0) {
-              double h2x = remainingOT.clamp(0.0, remaining2xQuota);
-              breakdown.hours2x += h2x;
-              breakdown.pay2x += h2x * hourlyRate * 2;
-              accumulatedCreditedOT += h2x;
-              remainingOT -= h2x;
-            } else {
-              double h3x = remainingOT;
-              breakdown.hours3x += h3x;
-              breakdown.pay3x += h3x * hourlyRate * 3;
-              accumulatedCreditedOT += h3x;
-              remainingOT = 0;
-            }
-          }
-        }
-      }
-      result[day] = breakdown;
-    }
-
-    return result;
-  }
+          List<WorkDay> weekDays) =>
+      PayrollEngine.calculateWeeklyOvertimeBreakdown(weekDays);
 
   void _updateTime() {
     final DateTime now = DateTime.now();
@@ -3207,6 +3755,8 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
   Future<void> _executeSalida(DateTime time) async {
     setState(() => _isProcessing = true);
+    final bool isFromPreviousDay = _isShiftFromPreviousDay();
+
     DateTime salidaTime = time;
     if (_entradaDateTime != null && salidaTime.isBefore(_entradaDateTime!)) {
       salidaTime = salidaTime.add(const Duration(days: 1));
@@ -3239,15 +3789,30 @@ class _TelevisaAppState extends State<TelevisaApp> {
       _weeklyHistory.sort((a, b) => b.entrada.compareTo(a.entrada));
     }
 
-    setState(() {
-      _currentShiftId = shift?.id;
-      _isClockedIn = false;
-      _completedToday = true;
-      _isTodayBreakdownExpanded = false;
-      _salidaDateTime = salidaTime;
-      _salidaDisplay = DateFormat('dd/MM - hh:mm a').format(salidaTime);
-      _timeRemainingMessage = "";
-    });
+    if (isFromPreviousDay) {
+      setState(() {
+        _currentShiftId = null;
+        _isClockedIn = false;
+        _completedToday = false;
+        _isTodayBreakdownExpanded = false;
+        _entradaDateTime = null;
+        _entradaRealDateTime = null;
+        _salidaDateTime = null;
+        _entradaDisplay = "--/-- --:--";
+        _salidaDisplay = "--/-- --:--";
+        _timeRemainingMessage = "";
+      });
+    } else {
+      setState(() {
+        _currentShiftId = shift?.id;
+        _isClockedIn = false;
+        _completedToday = true;
+        _isTodayBreakdownExpanded = false;
+        _salidaDateTime = salidaTime;
+        _salidaDisplay = DateFormat('dd/MM - hh:mm a').format(salidaTime);
+        _timeRemainingMessage = "";
+      });
+    }
 
     _calculateEarnings(salidaTime, dayOverride: shift);
 
@@ -3314,21 +3879,31 @@ class _TelevisaAppState extends State<TelevisaApp> {
   Future<void> _editSalidaTime() async {
     if (_salidaDateTime == null && _entradaDateTime == null) return;
     DateTime baseSalida = _salidaDateTime ?? DateTime.now();
+    final bool isPrevDay = _isShiftFromPreviousDay();
     final TimeOfDay? picked = await _showScrollTimePicker(
       context,
       initialTime: TimeOfDay.fromDateTime(baseSalida),
-      title: "EDITAR HORA SALIDA",
+      title: isPrevDay ? "¿A QUÉ HORA FUE TU SALIDA?" : "EDITAR HORA SALIDA",
     );
     if (!mounted || picked == null) return;
 
-    DateTime newSalida = DateTime(
-      baseSalida.year,
-      baseSalida.month,
-      baseSalida.day,
-      picked.hour,
-      picked.minute,
+    final DateTime? resolvedSalida = PayrollEngine.resolveClockOutDateTime(
+      entrada: _entradaDateTime ?? baseSalida,
+      pickedTime: picked,
+      now: DateTime.now(),
     );
 
+    if (resolvedSalida == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("No puedes registrar una hora de salida futura."),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    DateTime newSalida = resolvedSalida;
     if (_entradaDateTime != null && newSalida.isBefore(_entradaDateTime!)) {
       newSalida = newSalida.add(const Duration(days: 1));
     }
@@ -3354,7 +3929,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
   }
 
   bool _isShiftFromPreviousDay() {
-    if (!_isClockedIn || _entradaDateTime == null) return false;
+    if (_entradaDateTime == null) return false;
     final now = DateTime.now();
     return _entradaDateTime!.year != now.year ||
         _entradaDateTime!.month != now.month ||
@@ -3859,7 +4434,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.18.1 18/11/26",
+                "v.23.19.0 19/11/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,

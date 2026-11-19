@@ -1,5 +1,8 @@
 # Blueprint: Mi Nómina Pro (Televisa Overtime Tracker)
 
+> **Version**: `v.23.19.0 19/11/26` (Build `1.0.0+2`)  
+> **Last Updated**: 19/11/26  
+
 ## 1. Overview
 “Mi Nómina Pro” is a Flutter application designed to track and calculate daily work hours, base pay, and overtime specifically for Televisa employees. It integrates firmly with Firebase for backend storage and authentication.
 
@@ -58,6 +61,7 @@ Since you exported the workspace from Firebase Studio to Antigravity (via `@fbs-
 *   **v.23.17.2 (Discrete Maintenance Release - 06/11/26):** Optimización de persistencia y sincronización a la nube mediante escrituras delta granulares (`specificDay` y `specificDays` en `_saveData`), eliminando la reescritura masiva de todo el historial en cada modificación de turno o notas. Corrección del contador dinámico de pendientes (`_pendingSyncCount`) para reflejar con precisión únicamente los documentos pendientes reales con `hasPendingWrites`, evitando desincronizaciones y falsos pendientes en el indicador visual.
 *   **v.23.18.0 (Discrete Maintenance Release - 17/11/26):** Flujo de permiso de salida anticipada (¿Terminaste temprano hoy? 🎬) con conservación íntegra del sueldo base cuando es autorizado por producción (o desglose transparente si no fue autorizado). Resumen compacto y desplegable en Hoy con botón interactivo de alternancia [Ver desglose ▾ / Ocultar desglose ▴] para consultar horas y pago diario sin saturar la pantalla ni tapar opciones inferiores. Corrección matemática de cálculo de semanas en pestaña Año para agrupar e iluminar correctamente los domingos en la semana en curso con auto-desplazamiento exacto. Eliminación de notificaciones emergentes (SnackBar) al guardar modificaciones de turno para una experiencia visual más limpia.
 *   **v.23.18.1 (Discrete Maintenance Release - 18/11/26):** Integración corporativa del Fondo de Ahorro con cumplimiento estricto de la LISR Art. 27 Fracc. XI (tope legal del 13% y tope periódico de 1.3 UMAs quincenales / mensuales). Pantalla dedicada de configuración del Fondo de Ahorro (`FondoAhorroScreen`) con edición protegida por candado de seguridad, desglose quincenal humanizado y guía informativa interactiva. Herramienta de conciliación con recibo de nómina (overrides manuales con regla de auto-calibración ante 4 discrepancias consecutivas). Reflejo de deducción única consolidada en recibos y desgloses de Nómina.
+*   **v.23.19.0 (Public Release - 19/11/26):** Monedero Chedraui (Vales de Despensa) con pantalla dedicada e interactiva (`ValesChedrauiScreen`), conciliación con recibo y desglose quincenal/mensual. Plantillas rápidas de contratación en Ajustes (Sindicalizado 2026, Contrato Base, Confianza / Sin Sindicato). Salida Inteligente (`PayrollEngine.resolveClockOutDateTime`) con resolución automática de fechas para turnos pasados/nocturnos y protección contra marcajes futuros. Motor de nómina calibrado (`PayrollEngine`) con 11 tramos oficiales de retención progresiva SAT ISR 2026, cálculo semanal de horas extra al doble (tope 9h) y triple, exención fiscal del 50% en horas extra dobles (LISR Art. 93 Fracc. I) topada a 5 UMAs, y suite de pruebas unitarias automatizada.
 
 
 ---

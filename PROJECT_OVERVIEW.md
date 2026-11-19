@@ -2,7 +2,7 @@
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: November 2026  
-> **Version**: `v.23.18.1 18/11/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.19.0 19/11/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.18.1` (November 2026 Discrete Maintenance Release).
+- **Internal Version**: `v.23.19.0` (November 2026 Public Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,6 +234,12 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
+- **v.23.19.0 19/11/26 (Public Release)**:
+  - **Monedero Chedraui (Vales de Despensa)**: Pantalla dedicada e interactiva (`ValesChedrauiScreen`) para la gestión integral del beneficio de previsión social (Fomento Cultural / Despensa). Visualización de saldo acumulado, desglose quincenal y mensual, registro de saldo de recibo con anulación manual (override), conciliación histórica de compras y compras aclaradas, y proyección de depósitos por quincena.
+  - **Plantillas de Contrato Rápidas**: En Ajustes de Nómina, incorporación de presets de 1 toque (`_buildContractPresetsSection`): Sindicalizado 2026 (Fomento 4.6% y Cuota 4.0% en 2da quincena), Contrato Base (2.0% / 2.0%) y Confianza / Sin Sindicato (0.0% / 0.0%) con diálogo interactivo de confirmación y preservación de edición granular.
+  - **Salida Inteligente (Smart Clock-Out)**: Algoritmo centralizado en `PayrollEngine.resolveClockOutDateTime` para desambiguar turnos que cruzan la medianoche o que iniciaron en días anteriores. Auto-detección de fecha exacta de salida, protección contra marcajes de salida en el futuro y reseteo ergonómico del estado visual en turnos nocturnos completados al día siguiente.
+  - **Tablas SAT ISR 2026 y Motor de Nómina (`PayrollEngine`)**: Actualización de los 11 tramos oficiales de retención progresiva de ISR quincenal conforme a las tarifas SAT 2026 (LISR Art. 96 y 152 / RMF Anexo 8). Cálculo de horas extra con cuota semanal de 9 horas al 200% y excedentes al 300%, exención fiscal del 50% en horas extra dobles (LFT / LISR Art. 93 Fracc. I) topada a 5 UMAs, y redondeo bancario estricto de dos decimales por concepto (`roundCurrency`).
+  - **Suite de Pruebas Unitarias**: Integración de suite de pruebas unitarias (`test/payroll_engine_calibration_test.dart`) con 11 pruebas de calibración fiscal, aritmética de horas extra, UMA 2026 ($117.31) y reglas de desambiguación de salida.
 - **v.23.18.1 18/11/26 (Discrete Maintenance Release)**: Integración corporativa del Fondo de Ahorro con cumplimiento estricto de la LISR Art. 27 Fracc. XI (tope legal del 13% y tope periódico de 1.3 UMAs quincenales / mensuales). Pantalla dedicada de configuración del Fondo de Ahorro (`FondoAhorroScreen`) con edición protegida por candado de seguridad, desglose quincenal humanizado y guía informativa interactiva. Herramienta de conciliación con recibo de nómina (overrides manuales con regla de auto-calibración ante 4 discrepancias consecutivas). Reflejo de deducción única consolidada en recibos y desgloses de Nómina.
 - **v.23.18.0 17/11/26 (Discrete Maintenance Release)**: Flujo de permiso de salida anticipada (¿Terminaste temprano hoy? 🎬) con conservación íntegra del sueldo base cuando es autorizado por producción (o desglose transparente si no fue autorizado). Resumen compacto y desplegable en Hoy con botón interactivo de alternancia [Ver desglose ▾ / Ocultar desglose ▴] para consultar horas y pago diario sin saturar la pantalla ni tapar opciones inferiores. Corrección matemática de cálculo de semanas en pestaña Año para agrupar e iluminar correctamente los domingos en la semana en curso con auto-desplazamiento exacto. Eliminación de notificaciones emergentes (SnackBar) al guardar modificaciones de turno para una experiencia visual más limpia.
 - **v.23.17.2 06/11/26 (Discrete Maintenance Release)**: Optimización del motor de persistencia y sincronización a la nube mediante escrituras delta granulares (`specificDay` y `specificDays` en `_saveData`), eliminando la reescritura masiva de todo el historial en cada modificación de turno o notas. Corrección del contador dinámico de pendientes (`_pendingSyncCount`) para reflejar fielmente los documentos pendientes reales con `hasPendingWrites` sin desincronizaciones ni falsos pendientes en el indicador visual de respaldo.

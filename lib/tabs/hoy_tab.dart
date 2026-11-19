@@ -516,23 +516,41 @@ extension _HoyTabExt on _TelevisaAppState {
                                     onPressed: _isProcessing
                                         ? null
                                         : () async {
-                                            DateTime now = DateTime.now();
+                                            final DateTime now = DateTime.now();
+                                            final bool isPrevDay =
+                                                _isShiftFromPreviousDay();
                                             final TimeOfDay? picked =
                                                 await _showScrollTimePicker(
                                               context,
                                               initialTime: TimeOfDay.now(),
-                                              title:
-                                                  "¿A QUÉ HORA SALISTE HOY?",
+                                              title: isPrevDay
+                                                  ? "¿A QUÉ HORA FUE TU SALIDA?"
+                                                  : "¿A QUÉ HORA SALISTE HOY?",
                                             );
                                             if (picked != null && mounted) {
-                                              DateTime manualTime = DateTime(
-                                                now.year,
-                                                now.month,
-                                                now.day,
-                                                picked.hour,
-                                                picked.minute,
+                                              final DateTime? resolvedSalida =
+                                                  PayrollEngine
+                                                      .resolveClockOutDateTime(
+                                                entrada:
+                                                    _entradaDateTime ?? now,
+                                                pickedTime: picked,
+                                                now: DateTime.now(),
                                               );
-                                              await _executeSalida(manualTime);
+
+                                              if (resolvedSalida == null) {
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  const SnackBar(
+                                                    content: Text(
+                                                        "No puedes registrar una hora de salida futura."),
+                                                    backgroundColor: Colors.red,
+                                                  ),
+                                                );
+                                                return;
+                                              }
+
+                                              await _executeSalida(
+                                                  resolvedSalida);
                                             }
                                           },
                                     icon: Icon(Icons.edit,
@@ -636,7 +654,7 @@ extension _HoyTabExt on _TelevisaAppState {
             _buildHoyManagerShareTile(DateTime.now(),
                 shiftId: currentShift?.id),
           // Midnight & Recovery prompt if shift's entrada was from previous day
-          if (_isShiftFromPreviousDay()) ...[
+          if (_isShiftFromPreviousDay() && _isClockedIn) ...[
             const SizedBox(height: 16),
             Container(
               width: double.infinity,

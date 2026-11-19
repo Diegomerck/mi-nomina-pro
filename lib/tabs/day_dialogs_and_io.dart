@@ -18,6 +18,11 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
         'retention': _retentionController.text,
         'fomento': _fomentoController.text,
         'cuota': _cuotaController.text,
+        'vales_fomento_cultural_enabled': _valesFomentoCulturalEnabled,
+        'vales_fomento_cultural_amount': _valesFomentoCulturalAmount,
+        'vales_start_quincena': _valesStartQuincena,
+        'vales_paystub_overrides': _valesPayStubOverrides,
+        'vales_expenses': _valesExpenses,
         'first_name': _firstNameController.text,
         'last_name': _lastNameController.text,
         'user_emp': _userEmpNoController.text,
@@ -116,6 +121,36 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                   _retentionController.text = data['retention'] ?? "15.22";
                   _fomentoController.text = data['fomento'] ?? "2.0";
                   _cuotaController.text = data['cuota'] ?? "2.0";
+                  if (data.containsKey('vales_fomento_cultural_enabled')) {
+                    _valesFomentoCulturalEnabled =
+                        data['vales_fomento_cultural_enabled'] == true;
+                  }
+                  if (data.containsKey('vales_fomento_cultural_amount')) {
+                    _valesFomentoCulturalAmount =
+                        (data['vales_fomento_cultural_amount'] as num).toDouble();
+                    _valesFomentoCulturalAmountController.text =
+                        _valesFomentoCulturalAmount > 0
+                            ? _valesFomentoCulturalAmount.toStringAsFixed(2)
+                            : "";
+                  }
+                  if (data.containsKey('vales_start_quincena')) {
+                    _valesStartQuincena =
+                        (data['vales_start_quincena'] as num).toInt();
+                  }
+                  if (data.containsKey('vales_paystub_overrides') &&
+                      data['vales_paystub_overrides'] is Map) {
+                    final Map rawMap =
+                        data['vales_paystub_overrides'] as Map;
+                    _valesPayStubOverrides = rawMap.map(
+                        (k, v) => MapEntry(k.toString(), (v as num).toDouble()));
+                  }
+                  if (data.containsKey('vales_expenses') &&
+                      data['vales_expenses'] is List) {
+                    final List rawList = data['vales_expenses'] as List;
+                    _valesExpenses = rawList
+                        .map((e) => Map<String, dynamic>.from(e as Map))
+                        .toList();
+                  }
                   _firstNameController.text = data['first_name'] ?? "";
                   _lastNameController.text = data['last_name'] ?? "";
                   _userEmpNoController.text = data['user_emp'] ?? "";

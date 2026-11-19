@@ -260,7 +260,6 @@ extension _NominaTabExt on _TelevisaAppState {
         // A standard Mexican quincena represents 15 calendar days of base salary.
         DateTime referenceDate = payoutDate ?? now;
         double applicableSalary = _getSalaryForDate(referenceDate);
-        double applicableRetention = _getRetentionForDate(referenceDate);
         double applicableFomentoRate =
             _getFomentoForDate(referenceDate) / 100.0;
         double applicableCuotaRate =
@@ -298,6 +297,8 @@ extension _NominaTabExt on _TelevisaAppState {
         double totalExtras = 0.0;
         double totalHours2x = 0.0;
         double totalHours3x = 0.0;
+        double totalPay2x = 0.0;
+        double totalPay3x = 0.0;
 
         // Group days by ISO week (Monday–Sunday)
         final Map<int, List<WorkDay>> weeks = {};
@@ -315,8 +316,12 @@ extension _NominaTabExt on _TelevisaAppState {
             totalExtras += b.totalPay;
             totalHours2x += b.hours2x;
             totalHours3x += b.hours3x;
+            totalPay2x += b.pay2x;
+            totalPay3x += b.pay3x;
           }
         }
+
+        final bool isFirstQuincena = (qNum % 2 != 0);
 
         double weekendBonus = matched
             .where((d) => d.isRestDay && !d.esFalta)
@@ -328,7 +333,11 @@ extension _NominaTabExt on _TelevisaAppState {
             weekendBonus;
         if (totalBruto < 0) totalBruto = 0.0;
 
-        double cuotaSindical = baseEarned * applicableCuotaRate;
+        double cuotaSindical = PayrollEngine.calculateCuotaSindical(
+          baseEarned: baseEarned,
+          applicableCuotaRate: applicableCuotaRate,
+          qNum: qNum,
+        );
         double fondoAhorroEmpleado = 0.0;
         if (_fondoAhorroEnabled &&
             qNum >= _fondoAhorroStartQuincena &&
@@ -337,11 +346,25 @@ extension _NominaTabExt on _TelevisaAppState {
           fondoAhorroEmpleado = faRes['deduction']!;
         }
 
-        double isrEstimate =
-            totalBruto > 0 ? totalBruto * (applicableRetention / 100) : 0.0;
+        final List<dynamic> paidWeeks = (cfg['weeks'] as List? ?? []);
+        final int weeksPaid = paidWeeks.isNotEmpty ? paidWeeks.length : 2;
+        final double doublePayExemption = math.min(
+            0.50 * totalPay2x, 5.0 * _TelevisaAppState.kDailyUma2026 * weeksPaid);
+        final double taxableDoubles =
+            math.max(0.0, totalPay2x - doublePayExemption);
+        final double baseGravable =
+            baseEarned + fomentoEficiencia + totalPay3x + taxableDoubles;
+        final double isrRetenido =
+            _TelevisaAppState.calculateSatIsr2026Quincenal(baseGravable);
         double netDeposit =
-            totalBruto - (isrEstimate + cuotaSindical) - fondoAhorroEmpleado;
+            totalBruto - (isrRetenido + cuotaSindical) - fondoAhorroEmpleado;
         if (netDeposit < 0) netDeposit = 0.0;
+
+        final double valesAmountForQna =
+            _valesPayStubOverrides.containsKey(pid)
+                ? _valesPayStubOverrides[pid]!
+                : _valesFomentoCulturalAmount;
+
         return Card(
           color: cardColor,
           margin: const EdgeInsets.only(bottom: 12),
@@ -429,8 +452,8 @@ extension _NominaTabExt on _TelevisaAppState {
                       "${totalHours2x.toStringAsFixed(1)} hrs"),
                   _confirmRow("Horas Extras (3x):",
                       "${totalHours3x.toStringAsFixed(1)} hrs"),
-                  _confirmRow("I.S.R. Estimado:",
-                      "-\$${isrEstimate.toStringAsFixed(2)}"),
+                  _confirmRow("I.S.R. Retenido (Tabla SAT 2026):",
+                      "-\$${isrRetenido.toStringAsFixed(2)}"),
                   if (cuotaSindical > 0)
                     _confirmRow("Cuota Sindical:",
                         "-\$${cuotaSindical.toStringAsFixed(2)}"),
@@ -460,6 +483,128 @@ extension _NominaTabExt on _TelevisaAppState {
                                 fontWeight: FontWeight.w900,
                                 fontSize: 28)),
                       ]),
+                  if (!isFirstQuincena &&
+                      _valesFomentoCulturalEnabled &&
+                      qNum >= _valesStartQuincena &&
+                      valesAmountForQna > 0) ...[
+                    const SizedBox(height: 14),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ValesChedrauiScreen(
+                              appState: this,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: _isDarkMode
+                              ? Colors.blue.withAlpha(25)
+                              : const Color(0xFFF0F7FF),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _isDarkMode
+                                ? Colors.blue.withAlpha(70)
+                                : const Color(0xFFBAE6FD),
+                            width: 1,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.confirmation_number_outlined,
+                                  size: 18,
+                                  color: _isDarkMode
+                                      ? Colors.lightBlueAccent
+                                      : const Color(0xFF0284C7),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Wrap(
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
+                                    spacing: 6,
+                                    runSpacing: 4,
+                                    children: [
+                                      Text(
+                                        "Vales de Fomento Cultural",
+                                        style: TextStyle(
+                                          color: _isDarkMode
+                                              ? Colors.white
+                                              : const Color(0xFF0F172A),
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: _isDarkMode
+                                              ? Colors.blue.withAlpha(45)
+                                              : const Color(0xFFDBEAFE),
+                                          borderRadius:
+                                              BorderRadius.circular(4),
+                                          border: Border.all(
+                                            color: _isDarkMode
+                                                ? Colors.blue.withAlpha(100)
+                                                : const Color(0xFF93C5FD),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          "MONEDERO CHEDRAUI",
+                                          style: TextStyle(
+                                            color: _isDarkMode
+                                                ? Colors.lightBlueAccent
+                                                : const Color(0xFF1D4ED8),
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.3,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "\$${valesAmountForQna.toStringAsFixed(2)}",
+                                  style: TextStyle(
+                                    color: _isDarkMode
+                                        ? Colors.lightBlueAccent
+                                        : const Color(0xFF0369A1),
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              "Depósito en Monedero Chedraui (toca para ver saldo y conciliar)",
+                              style: TextStyle(
+                                color: _isDarkMode
+                                    ? Colors.white60
+                                    : const Color(0xFF64748B),
+                                fontSize: 11.5,
+                                height: 1.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ]),
               )
             ],
