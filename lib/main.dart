@@ -48,6 +48,7 @@ final Map<String, String> _changelogTitles = {
 final Map<String, List<String>> _changelogByVersion = {
   "23.19.0": [
     "🛒 Monedero Chedraui (Vales de Despensa): Nueva pantalla dedicada para gestionar tu apoyo de despensa quincenal y mensual, consultar tu saldo acumulado, ver tus apoyos por quincena y registrar compras o aclaraciones fácilmente.",
+    "🎯 Mayor precisión en tus cálculos de nómina: Optimizamos el motor de cálculo quincenal para que tus percepciones, horas extras y retenciones reflejen con mucha mayor exactitud el desglose de tu recibo oficial.",
     "📋 Plantillas de Contrato Rápidas: En Ajustes de Nómina ahora puedes aplicar con un solo toque los perfiles estándar de retenciones y prestaciones (Sindicalizado 2026, Contrato Base o Confianza / Sin Sindicato) sin tener que configurar campo por campo.",
     "⏱️ Registro Inteligente de Salida: Al marcar o editar tu salida en turnos nocturnos o del día anterior, el sistema detecta automáticamente la fecha exacta y te protege contra registros futuros accidentales.",
     "📊 Tablas de Retención SAT 2026: Actualización oficial de los tabuladores de ISR quincenal conforme a las disposiciones fiscales vigentes para una estimación neta de tu nómina aún más exacta.",
