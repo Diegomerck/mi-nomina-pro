@@ -2,7 +2,7 @@
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: November 2026  
-> **Version**: `v.23.19.2 20/11/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.20.1 20/11/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.19.2` (November 2026 Discrete Maintenance Release).
+- **Internal Version**: `v.23.20.1` (November 2026 Public Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,6 +234,11 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
+- **v.23.20.1 20/11/26 (Public Release)**:
+  - **Diseño Adaptable (Responsive Layouts)**: Reestructuración y protección visual en todas las pantallas y diálogos clave (`LoginScreen`, `ValesChedrauiScreen`, `FondoAhorroScreen`, `HistoryScreens`, `AnoTab`, `QuincenaTab`, `UnitManagerTab`, `SettingsTab`, y diálogos de turno en `day_dialogs_and_io.dart`). Envoltura con `LayoutBuilder` y cálculo responsivo de anchos y tamaños para evitar desbordamientos de píxeles (`overflowed`) en teléfonos compactos, pantallas panorámicas y tabletas.
+  - **Salvaguardas de Inicio y Onboarding (`Onboarding Safeguards`)**: Protección contra diálogos de bienvenida y configuración inicial redundantes para usuarios existentes. Detección reforzada verificando `onboarding_completed` en caché local (`SharedPreferences`), sueldo precargado, comprobación directa contra Firestore (`users/{uid}` y subcolección `history`), y supresión si la carga en la nube superó el tiempo límite (`_cloudLoadTimedOut`).
+  - **Identidad y Branding Oficial en Android & iOS**: Actualización del paquete visual de iconos de la aplicación en todas las densidades de pantalla (`mipmap` para Android y `Assets.xcassets` para iOS) y configuración del nombre oficial `Mi Nómina Pro` en `AndroidManifest.xml`.
+  - **Suite de Pruebas Automatizadas de Salvaguardas**: Incorporación de suite de pruebas unitarias (`test/onboarding_safeguards_test.dart`) para garantizar la persistencia del flag de onboarding y el parseo type-safe de tipos numéricos (`num`, `int`, `double`, `String`) provenientes de Firestore.
 - **v.23.19.2 20/11/26 (Discrete Maintenance Release)**:
   - **Insignia '¡NUEVO!' en Ajustes y Compartición**: Incorporación visual de chip con degradado naranja/ámbar ('¡NUEVO!') en las tarjetas de novedades clave de Ajustes de Nómina (`Plantillas de Contrato`, `Fondo de Ahorro`, `Vales de Fomento Cultural` y la tarjeta de navegación de `COMPARTIR CON`).
   - **Alineación tipográfica de Vales de Fomento Cultural**: Salto de línea estructurado en el título de Vales de Despensa (`Vales de Fomento Cultural\n(Monedero Chedraui)`) para una distribución armónica de dos renglones junto con la insignia de novedad.

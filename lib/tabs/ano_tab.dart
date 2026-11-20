@@ -554,92 +554,102 @@ extension _AnoTabExt on _TelevisaAppState {
                 }
               }
 
-              return GestureDetector(
-                onTap: () {
-                  _rebuild(() => _selectedCalendarDay = dayDate);
-                  _showManualDayDialog(dayDate);
-                },
-                child: Container(
-                  width: isToday ? 46 : 42,
-                  height: isToday ? 46 : 42,
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: tileBg,
-                    borderRadius: BorderRadius.circular(isToday ? 10 : 8),
-                    border: Border.all(
-                      color: tileBorder,
-                      width: tileBorderWidth,
-                    ),
-                    boxShadow: isToday
-                        ? [
-                            BoxShadow(
-                              color: const Color(0xFFEA580C)
-                                  .withAlpha(_isDarkMode ? 120 : 160),
-                              blurRadius: 6,
-                              spreadRadius: 2.5,
+              return Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 1),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 42),
+                      child: GestureDetector(
+                        onTap: () {
+                          _rebuild(() => _selectedCalendarDay = dayDate);
+                          _showManualDayDialog(dayDate);
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          height: isToday ? 44 : 40,
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: tileBg,
+                            borderRadius: BorderRadius.circular(isToday ? 10 : 8),
+                            border: Border.all(
+                              color: tileBorder,
+                              width: tileBorderWidth,
                             ),
-                          ]
-                        : null,
-                  ),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (isToday && hasData) ...[
-                            Container(
-                              width: 14,
-                              height: 3,
-                              margin: const EdgeInsets.only(bottom: 2),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEA580C),
-                                borderRadius: BorderRadius.circular(1.5),
-                              ),
-                            ),
-                          ],
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(dayLetter,
-                                  style: TextStyle(
-                                      color: letterColor,
-                                      fontSize: isToday ? 11 : 10,
-                                      height: 1.0,
-                                      fontWeight: FontWeight.bold)),
-                              if (hasNotes) ...[
-                                const SizedBox(width: 2),
-                                Container(
-                                  width: 5,
-                                  height: 5,
-                                  decoration: BoxDecoration(
-                                    color: _isDarkMode
-                                        ? Colors.orangeAccent
-                                        : const Color(0xFFC2410C),
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                              ],
-                              if (isVacaciones || isFestivo) ...[
-                                const SizedBox(width: 2),
-                                Icon(
-                                  Icons.star,
-                                  color: starColor,
-                                  size: 10,
-                                ),
-                              ],
-                            ],
+                            boxShadow: isToday
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(0xFFEA580C)
+                                          .withAlpha(_isDarkMode ? 120 : 160),
+                                      blurRadius: 6,
+                                      spreadRadius: 2.5,
+                                    ),
+                                  ]
+                                : null,
                           ),
-                          const SizedBox(height: 2),
-                          Text(dayDate.day.toString(),
-                              style: TextStyle(
-                                  color: numberColor,
-                                  fontSize: isToday ? 15 : 14,
-                                  height: 1.0,
-                                  fontWeight: isToday
-                                      ? FontWeight.w900
-                                      : FontWeight.bold)),
-                        ]),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (isToday && hasData) ...[
+                                    Container(
+                                      width: 14,
+                                      height: 3,
+                                      margin: const EdgeInsets.only(bottom: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEA580C),
+                                        borderRadius: BorderRadius.circular(1.5),
+                                      ),
+                                    ),
+                                  ],
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(dayLetter,
+                                          style: TextStyle(
+                                              color: letterColor,
+                                              fontSize: isToday ? 11 : 10,
+                                              height: 1.0,
+                                              fontWeight: FontWeight.bold)),
+                                      if (hasNotes) ...[
+                                        const SizedBox(width: 2),
+                                        Container(
+                                          width: 5,
+                                          height: 5,
+                                          decoration: BoxDecoration(
+                                            color: _isDarkMode
+                                                ? Colors.orangeAccent
+                                                : const Color(0xFFC2410C),
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                      ],
+                                      if (isVacaciones || isFestivo) ...[
+                                        const SizedBox(width: 2),
+                                        Icon(
+                                          Icons.star,
+                                          color: starColor,
+                                          size: 10,
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(dayDate.day.toString(),
+                                      style: TextStyle(
+                                          color: numberColor,
+                                          fontSize: isToday ? 15 : 14,
+                                          height: 1.0,
+                                          fontWeight: isToday
+                                              ? FontWeight.w900
+                                              : FontWeight.bold)),
+                                ]),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               );

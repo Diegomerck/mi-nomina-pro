@@ -1,6 +1,6 @@
 # Blueprint: Mi Nómina Pro (Televisa Overtime Tracker)
 
-> **Version**: `v.23.19.2 20/11/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.20.1 20/11/26` (Build `1.0.0+2`)  
 > **Last Updated**: 20/11/26  
 
 ## 1. Overview
@@ -64,6 +64,7 @@ Since you exported the workspace from Firebase Studio to Antigravity (via `@fbs-
 *   **v.23.19.0 (Public Release - 19/11/26):** Monedero Chedraui (Vales de Despensa) con pantalla dedicada e interactiva (`ValesChedrauiScreen`), conciliación con recibo y desglose quincenal/mensual. Plantillas rápidas de contratación en Ajustes (Sindicalizado 2026, Contrato Base, Confianza / Sin Sindicato). Salida Inteligente (`PayrollEngine.resolveClockOutDateTime`) con resolución automática de fechas para turnos pasados/nocturnos y protección contra marcajes futuros. Motor de nómina calibrado (`PayrollEngine`) con 11 tramos oficiales de retención progresiva SAT ISR 2026, cálculo semanal de horas extra al doble (tope 9h) y triple, exención fiscal del 50% en horas extra dobles (LISR Art. 93 Fracc. I) topada a 5 UMAs, y suite de pruebas unitarias automatizada.
 *   **v.23.19.1 (Discrete Maintenance Release - 19/11/26):** Flujo de CI/CD en GitHub Actions (`.github/workflows/build_releases.yml`) para compilaciones APK/IPA junto con configuración del proyecto `ios/`, nueva pantalla dedicada de Plantillas de Contrato (`ContractPresetsScreen`), configuración predeterminada de Vales de Despensa desactivada por defecto (`vales default off`) y ampliación de pruebas de calibración (`test/payroll_engine_calibration_test.dart`).
 *   **v.23.19.2 (Discrete Maintenance Release - 20/11/26):** Insignia '¡NUEVO!' (`_buildNewBadge()`) con degradado naranja/ámbar para las tarjetas de novedades en Ajustes de Nómina (Plantillas de Contrato, Fondo de Ahorro, Vales de Fomento Cultural) y la tarjeta de acceso a Compartir Con (`_buildUnitShareNavigationCard`), junto con la distribución en dos líneas del título de Vales de Fomento Cultural.
+*   **v.23.20.1 (Public Release - 20/11/26):** Diseño Adaptable (Responsive Layouts) con envoltura en `LayoutBuilder` y cálculo responsivo de anchuras en `LoginScreen`, `ValesChedrauiScreen`, `FondoAhorroScreen`, `HistoryScreens`, pestañas (`AnoTab`, `QuincenaTab`, `UnitManagerTab`, `SettingsTab`) y modales (`day_dialogs_and_io.dart`). Salvaguardas de Inicio y Onboarding (`Onboarding Safeguards`) verificando `onboarding_completed` en caché local y Firestore (`users/{uid}` y subcolección `history`) con supresión ante timeout de carga (`_cloudLoadTimedOut`). Identidad y Branding oficial en Android & iOS con suite completa de iconos mipmap/xcassets y nombre oficial `Mi Nómina Pro` en `AndroidManifest.xml`. Suite de pruebas unitarias (`test/onboarding_safeguards_test.dart`) verificando persistencia y parseo seguro de tipos numéricos.
 
 
 ---

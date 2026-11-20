@@ -153,10 +153,14 @@ class _FondoAhorroScreenState extends State<_FondoAhorroScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Top Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 6,
             children: [
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(6),
@@ -384,8 +388,10 @@ class _FondoAhorroScreenState extends State<_FondoAhorroScreen> {
           const SizedBox(height: 10),
 
           // Quincenal regular detail row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            spacing: 8,
+            runSpacing: 4,
             children: [
               Text(
                 "Ahorro quincenal regular:",
@@ -417,11 +423,13 @@ class _FondoAhorroScreenState extends State<_FondoAhorroScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: _isDarkMode ? Colors.white70 : const Color(0xFF475569),
-              fontSize: 12,
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: _isDarkMode ? Colors.white70 : const Color(0xFF475569),
+                fontSize: 12,
+              ),
             ),
           ),
           Text(
@@ -955,10 +963,14 @@ class _FondoAhorroScreenState extends State<_FondoAhorroScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Row top: Q number, Payout date, Status badge
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
                       children: [
                         Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
                               padding: const EdgeInsets.symmetric(

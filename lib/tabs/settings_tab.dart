@@ -14,8 +14,12 @@ extension _SettingsTabExt on _TelevisaAppState {
     final String activeRatesSummary =
         "Fomento ${activeFomento.toStringAsFixed(1)}% • Cuota ${activeCuota.toStringAsFixed(1)}%";
 
+    final double horizontalPadding =
+        MediaQuery.of(context).size.width < 380 ? 12.0 : 20.0;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.symmetric(
+          horizontal: horizontalPadding, vertical: 20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -254,6 +258,24 @@ extension _SettingsTabExt on _TelevisaAppState {
                       color: _isDarkMode
                           ? Colors.blueAccent
                           : const Color(0xFF1D4ED8),
+                      fontWeight: FontWeight.bold))),
+          const SizedBox(height: 12),
+          OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                  backgroundColor:
+                      _isDarkMode ? Colors.transparent : Colors.white,
+                  side: BorderSide(
+                      color: _isDarkMode
+                          ? Colors.orangeAccent
+                          : const Color(0xFFD97706),
+                      width: 1.5),
+                  minimumSize: const Size(double.infinity, 50)),
+              onPressed: () => _showOnboardingDialog(isPreview: true),
+              child: Text("PROBAR BIENVENIDA / ONBOARDING",
+                  style: TextStyle(
+                      color: _isDarkMode
+                          ? Colors.orangeAccent
+                          : const Color(0xFFB45309),
                       fontWeight: FontWeight.bold))),
           const SizedBox(height: 25),
           Divider(
@@ -1296,7 +1318,10 @@ extension _SettingsTabExt on _TelevisaAppState {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
                           Text(
                             "COMPARTIR CON",
@@ -1306,10 +1331,8 @@ extension _SettingsTabExt on _TelevisaAppState {
                               fontSize: 16,
                             ),
                           ),
-                          const SizedBox(width: 8),
                           _buildNewBadge(),
-                          if (isActive) ...[
-                            const SizedBox(width: 8),
+                          if (isActive)
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 2),
@@ -1329,7 +1352,6 @@ extension _SettingsTabExt on _TelevisaAppState {
                                 ),
                               ),
                             ),
-                          ],
                         ],
                       ),
                       const SizedBox(height: 4),

@@ -979,9 +979,10 @@ extension _QuincenaTabExt on _TelevisaAppState {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
+                                  Wrap(
+                                    alignment: WrapAlignment.spaceBetween,
+                                    spacing: 6,
+                                    runSpacing: 2,
                                     children: [
                                       Text(
                                           "Entrada Asignada: ${DateFormat('hh:mm a').format(day.entrada)}",

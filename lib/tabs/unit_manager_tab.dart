@@ -534,6 +534,189 @@ extension _UnitManagerTabExt on _TelevisaAppState {
         _isDarkMode ? Colors.white54 : const Color(0xFF1E293B);
     final Color actualValueColor = valueColor ?? accentColor;
     final bool isLongValue = valueDisplay.length > 12;
+    final String effectiveSubtitle = subtitle ??
+        (periodCount == 0
+            ? "Sin historial (valor base fijo)"
+            : "$periodCount ${periodCount == 1 ? 'periodo configurado' : 'periodos configurados'}");
+
+    Widget cardContent;
+    if (title.contains('\n')) {
+      final List<String> parts = title.split('\n');
+      final String titlePart1 = parts[0];
+      final String titlePart2 =
+          parts.length > 1 ? parts.sublist(1).join('\n') : '';
+
+      cardContent = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Top Tier: Icon (44x44) + 14px gap + Expanded Column
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: accentColor.withAlpha(_isDarkMode ? 35 : 25),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: accentColor, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          titlePart1,
+                          style: TextStyle(
+                            color: textColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        if (isNew) _buildNewBadge(),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      titlePart2,
+                      style: TextStyle(
+                        color: subtextColor,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          // Divider: 10px spacing, subtle 1px divider line (white10 dark / black12 light), 10px spacing
+          const SizedBox(height: 10),
+          Container(
+            height: 1,
+            color: _isDarkMode ? Colors.white10 : Colors.black12,
+          ),
+          const SizedBox(height: 10),
+          // Bottom Tier: Row with Expanded(subtitle, 12 fontSize), 8px gap, Text(valueDisplay, 16 bold actualValueColor), 4px gap, Icon(chevron_right, 18px)
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  effectiveSubtitle,
+                  style: TextStyle(
+                    color: subtextColor,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                valueDisplay,
+                style: TextStyle(
+                  color: actualValueColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right,
+                color: _isDarkMode ? Colors.white38 : Colors.grey.shade400,
+                size: 18,
+              ),
+            ],
+          ),
+        ],
+      );
+    } else {
+      cardContent = Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: accentColor.withAlpha(_isDarkMode ? 35 : 25),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: accentColor, size: 22),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: textColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    if (isNew) _buildNewBadge(),
+                  ],
+                ),
+                if (isLongValue) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    valueDisplay,
+                    style: TextStyle(
+                      color: actualValueColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 3),
+                Text(
+                  effectiveSubtitle,
+                  style: TextStyle(
+                    color: subtextColor,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (!isLongValue) ...[
+            const SizedBox(width: 10),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 120),
+              child: Text(
+                valueDisplay,
+                style: TextStyle(
+                  color: actualValueColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+          const SizedBox(width: 8),
+          Icon(
+            Icons.chevron_right,
+            color: _isDarkMode ? Colors.white38 : Colors.grey.shade400,
+            size: 20,
+          ),
+        ],
+      );
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -556,92 +739,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: accentColor.withAlpha(_isDarkMode ? 35 : 25),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, color: accentColor, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              title,
-                              style: TextStyle(
-                                color: textColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 15,
-                              ),
-                            ),
-                          ),
-                          if (isNew) ...[
-                            const SizedBox(width: 6),
-                            _buildNewBadge(),
-                          ],
-                        ],
-                      ),
-                      if (isLongValue) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          valueDisplay,
-                          style: TextStyle(
-                            color: actualValueColor,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 3),
-                      Text(
-                        subtitle ??
-                            (periodCount == 0
-                                ? "Sin historial (valor base fijo)"
-                                : "$periodCount ${periodCount == 1 ? 'periodo configurado' : 'periodos configurados'}"),
-                        style: TextStyle(
-                          color: subtextColor,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (!isLongValue) ...[
-                  const SizedBox(width: 10),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 120),
-                    child: Text(
-                      valueDisplay,
-                      style: TextStyle(
-                        color: actualValueColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 17,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-                const SizedBox(width: 8),
-                Icon(
-                  Icons.chevron_right,
-                  color: _isDarkMode ? Colors.white38 : Colors.grey.shade400,
-                  size: 20,
-                ),
-              ],
-            ),
+            child: cardContent,
           ),
         ),
       ),
@@ -1319,7 +1417,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                     color: _isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.19.2 20/11/26",
+            Text("Versión v.23.20.1 20/11/26",
                 style: TextStyle(
                     color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
                     fontSize: 14)),

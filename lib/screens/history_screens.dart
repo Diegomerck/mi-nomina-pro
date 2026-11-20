@@ -1318,26 +1318,30 @@ class _RestDaysHistoryScreenState extends State<RestDaysHistoryScreen> {
           width: isSelected ? 2 : 1,
         );
 
-        return Tooltip(
-          message: _fullNames[index],
-          child: InkWell(
-            onTap: () => onToggle(dayNum),
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              width: 38,
-              height: 40,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: bg,
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 1.5),
+            child: Tooltip(
+              message: _fullNames[index],
+              child: InkWell(
+                onTap: () => onToggle(dayNum),
                 borderRadius: BorderRadius.circular(10),
-                border: border,
-              ),
-              child: Text(
-                _dialNames[index],
-                style: TextStyle(
-                  color: textCol,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
+                child: Container(
+                  height: 40,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: bg,
+                    borderRadius: BorderRadius.circular(10),
+                    border: border,
+                  ),
+                  child: Text(
+                    _dialNames[index],
+                    style: TextStyle(
+                      color: textCol,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -1911,16 +1915,19 @@ class _RestDaysHistoryScreenState extends State<RestDaysHistoryScreen> {
                             color: accentColor, size: 22),
                       ),
                       const SizedBox(width: 10),
-                      Text(
-                        "DÍAS DE DESCANSO VIGENTES HOY",
-                        style: TextStyle(
-                          color: accentColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
+                      Expanded(
+                        child: Text(
+                          "DÍAS DE DESCANSO VIGENTES HOY",
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: accentColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.2,
+                          ),
                         ),
                       ),
-                      const Spacer(),
                       IconButton(
                         icon: Icon(Icons.tune, color: accentColor, size: 20),
                         tooltip: "Editar días base predeterminados",

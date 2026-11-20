@@ -410,48 +410,55 @@ class _LoginScreenState extends State<LoginScreen> {
           // Successful login!
           final currentUser = userCredential.user!;
           String? empNumber = input.contains('@') ? linkedEmpNumber : input;
+          String? realEmail;
 
-          if (empNumber == null || empNumber.isEmpty) {
-            try {
-              final uDoc = await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(currentUser.uid)
-                  .get();
-              if (uDoc.exists) {
-                final uData = uDoc.data();
-                empNumber = (uData?['employee_number'] ??
-                        uData?['user_emp'])
-                    ?.toString().trim();
+          // Look up userDoc in Firestore to resolve employee number, email, and cache onboarding status
+          try {
+            final uDoc = await FirebaseFirestore.instance
+                .collection('users')
+                .doc(currentUser.uid)
+                .get()
+                .timeout(const Duration(seconds: 10));
+            if (uDoc.exists) {
+              final uData = uDoc.data();
+              if (uData != null) {
+                if (empNumber == null || empNumber.isEmpty) {
+                  empNumber = (uData['employee_number'] ?? uData['user_emp'])
+                      ?.toString()
+                      .trim();
+                }
+                final rec = (uData['recovery_email'] ?? uData['email'])
+                    ?.toString()
+                    .trim()
+                    .toLowerCase();
+                if (rec != null &&
+                    rec.isNotEmpty &&
+                    !rec.endsWith('@televisa.com')) {
+                  realEmail ??= rec;
+                }
+                final prefs = await SharedPreferences.getInstance();
+                if (uData['onboarding_completed'] == true) {
+                  await prefs.setBool('onboarding_completed', true);
+                }
+                final sStr = uData['salary']?.toString().trim();
+                if (sStr != null &&
+                    sStr.isNotEmpty &&
+                    (double.tryParse(sStr) ?? 0.0) > 0) {
+                  await prefs.setString('salary', sStr);
+                  await prefs.setBool('onboarding_completed', true);
+                }
               }
-            } catch (e) {
-              debugPrint("Error fetching employee number on login: $e");
             }
+          } catch (e) {
+            debugPrint("Error fetching user profile on login: $e");
           }
 
           // Determine user's real contact email
-          String? realEmail;
           if (input.contains('@') && !input.endsWith('@televisa.com')) {
             realEmail = input.toLowerCase();
-          } else if (resolvedEmail != null && !resolvedEmail.endsWith('@televisa.com')) {
+          } else if (resolvedEmail != null &&
+              !resolvedEmail.endsWith('@televisa.com')) {
             realEmail = resolvedEmail.toLowerCase();
-          }
-
-          if (realEmail == null || realEmail.isEmpty) {
-            try {
-              final uDoc = await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(currentUser.uid)
-                  .get();
-              if (uDoc.exists) {
-                final uData = uDoc.data();
-                final rec = (uData?['recovery_email'] ?? uData?['email'])?.toString().trim().toLowerCase();
-                if (rec != null && rec.isNotEmpty && !rec.endsWith('@televisa.com')) {
-                  realEmail = rec;
-                }
-              }
-            } catch (e) {
-              debugPrint("Error fetching real email on login: $e");
-            }
           }
 
           final effectiveEmail = (realEmail != null && realEmail.isNotEmpty)
@@ -1529,16 +1536,30 @@ extension _GoogleSetupAndMergeExt on _TelevisaAppState {
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 10));
       if (doc.exists) {
         final d = doc.data();
-        final cloudEmp =
-            (d?['user_emp'] ?? d?['employee_number'] ?? '').toString().trim();
-        if (cloudEmp.isNotEmpty) {
-          _rebuild(() {
-            _userEmpNoController.text = cloudEmp;
-          });
-          return;
+        if (d != null) {
+          final prefs = await SharedPreferences.getInstance();
+          if (d['onboarding_completed'] == true) {
+            await prefs.setBool('onboarding_completed', true);
+          }
+          final sStr = d['salary']?.toString().trim();
+          if (sStr != null &&
+              sStr.isNotEmpty &&
+              (double.tryParse(sStr) ?? 0.0) > 0) {
+            await prefs.setString('salary', sStr);
+            await prefs.setBool('onboarding_completed', true);
+          }
+          final cloudEmp =
+              (d['user_emp'] ?? d['employee_number'] ?? '').toString().trim();
+          if (cloudEmp.isNotEmpty) {
+            _rebuild(() {
+              _userEmpNoController.text = cloudEmp;
+            });
+            return;
+          }
         }
       }
     } catch (e) {
@@ -1869,6 +1890,11 @@ extension _GoogleSetupAndMergeExt on _TelevisaAppState {
         ? donor.lastName
         : fallbackLastName;
 
+    final bool donorCompletedOnboarding =
+        srcData['onboarding_completed'] == true ||
+            donor.salary > 0 ||
+            donor.shiftCount > 0;
+
     final Map<String, dynamic> targetProfileUpdates = {
       'user_emp': donor.empNumber,
       'employee_number': donor.empNumber,
@@ -1880,6 +1906,7 @@ extension _GoogleSetupAndMergeExt on _TelevisaAppState {
       'auth_provider': 'google.com',
       'merged_from': sourceUid,
       'last_merged_at': FieldValue.serverTimestamp(),
+      if (donorCompletedOnboarding) 'onboarding_completed': true,
     };
 
     for (final key in [
@@ -1897,9 +1924,18 @@ extension _GoogleSetupAndMergeExt on _TelevisaAppState {
       'rest_days_history',
       'is_unit_manager',
       'role',
+      'onboarding_completed',
     ]) {
       if (srcData[key] != null) {
         targetProfileUpdates[key] = srcData[key];
+      }
+    }
+
+    if (donorCompletedOnboarding) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('onboarding_completed', true);
+      if (donor.salary > 0) {
+        await prefs.setString('salary', donor.salary.toString());
       }
     }
 

@@ -2069,12 +2069,14 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
 
   Widget _confirmRow(String label, String val) =>
       Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-        Text(label,
-            style: TextStyle(
-                color: _isDarkMode
-                    ? Colors.white70
-                    : Colors.black87,
-                fontSize: 14)),
+        Expanded(
+          child: Text(label,
+              style: TextStyle(
+                  color: _isDarkMode
+                      ? Colors.white70
+                      : Colors.black87,
+                  fontSize: 14)),
+        ),
         Text(val,
             style: TextStyle(
                 color: _isDarkMode

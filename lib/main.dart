@@ -35,6 +35,8 @@ part 'tabs/unit_manager_tab.dart';
 part 'tabs/day_dialogs_and_io.dart';
 
 final Map<String, String> _changelogTitles = {
+  "23.20.1":
+      "📱 Versión 23.20.1 (20/11/26) — Diseño Adaptable, Protección de Cuenta y Nueva Imagen en Android",
   "23.19.0":
       "🛒 Versión 23.19.0 (19/11/26) — Monedero Chedraui, Plantillas de Contrato, Salida Inteligente y Tablas SAT 2026",
   "23.17.0": "🤝 Versión 23.17.0 (04/11/26) — Modo Sin Conexión, Estado en la Nube y Pantalla Más Cómoda",
@@ -47,6 +49,11 @@ final Map<String, String> _changelogTitles = {
 };
 
 final Map<String, List<String>> _changelogByVersion = {
+  "23.20.1": [
+    "📱 Diseño Adaptable para Todo Tipo de Pantallas: Optimizamos formularios, diálogos y tarjetas en todas las pestañas para que se adapten con fluidez a celulares de cualquier tamaño, pantallas panorámicas y tabletas sin desbordamientos de texto.",
+    "🛡️ Protección Inteligente al Iniciar Sesión: El asistente de bienvenida y configuración de sueldo ahora verifica con precisión tu historial en la nube y tu memoria local, evitando pantallas de bienvenida duplicadas si ya tienes turnos o datos guardados.",
+    "🤖 Nueva Imagen y Nombre Oficial en Android: Actualizamos el icono oficial y el nombre de la aplicación para que la reconozcas de inmediato en tu pantalla de inicio de Android y disfrutes de una experiencia visual nativa renovada.",
+  ],
   "23.19.0": [
     "🛒 Monedero Chedraui (Vales de Despensa): Nueva pantalla dedicada para gestionar tu apoyo de despensa quincenal y mensual, consultar tu saldo acumulado, ver tus apoyos por quincena y registrar compras o aclaraciones fácilmente.",
     "🎯 Mayor precisión en tus cálculos de nómina: Optimizamos el motor de cálculo quincenal para que tus percepciones, horas extras y retenciones reflejen con mucha mayor exactitud el desglose de tu recibo oficial.",
@@ -811,6 +818,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
   DateTime _selectedCalendarDay = DateTime.now();
   bool _isProcessing = false;
   bool _isLoading = true; // Loading screen state
+  bool _cloudLoadTimedOut = false; // Tracks if cloud load timed out in _loadData
   String? _lastSeenVersion;
   SyncStatus _syncStatus = SyncStatus.synced;
   DateTime? _lastSyncTime;
@@ -1425,21 +1433,130 @@ class _TelevisaAppState extends State<TelevisaApp> {
     await _checkAndHandleGoogleEmployeeSetup();
     if (!mounted) return;
 
-    // 2. Check if salary or base hours are empty/default
-    bool needsOnboarding = _salaryController.text.isEmpty ||
-        double.tryParse(_salaryController.text) == 0.0;
+    // Never show onboarding dialog if cloud load timed out to avoid false positives
+    if (_cloudLoadTimedOut) {
+      debugPrint("Onboarding check skipped: cloud load timed out.");
+      return;
+    }
 
-    if (needsOnboarding && mounted) {
-      // Small delay to ensure UI is ready
+    final prefs = await SharedPreferences.getInstance();
+
+    // 2. Check explicit onboarding_completed flag in local prefs
+    if (prefs.getBool('onboarding_completed') == true) {
+      debugPrint("Onboarding check passed: onboarding_completed is true in prefs.");
+      return;
+    }
+
+    // 3. Check if valid salary is already present in controller or local prefs
+    final double? currentSalary =
+        double.tryParse(_salaryController.text.trim());
+    if (currentSalary != null && currentSalary > 0) {
+      await prefs.setBool('onboarding_completed', true);
+      return;
+    }
+
+    final String? cachedSalary = prefs.getString('salary');
+    if (cachedSalary != null &&
+        cachedSalary.isNotEmpty &&
+        (double.tryParse(cachedSalary) ?? 0.0) > 0) {
+      _salaryController.text = cachedSalary;
+      await prefs.setBool('onboarding_completed', true);
+      return;
+    }
+
+    // 4. If salary is empty or zero, verify directly against Firestore users/{uid} and history
+    // before assuming user is new. Never show onboarding dialog if cloud load timed out or if user has existing records in cloud.
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get()
+            .timeout(const Duration(seconds: 10));
+
+        if (userDoc.exists) {
+          final data = userDoc.data();
+          if (data != null) {
+            // Check if onboarding completed flag is in cloud
+            if (data['onboarding_completed'] == true) {
+              await prefs.setBool('onboarding_completed', true);
+              return;
+            }
+
+            // Check if user has salary in cloud
+            final String? cloudSalaryStr = data['salary']?.toString().trim();
+            final double? cloudSalary = cloudSalaryStr != null
+                ? double.tryParse(cloudSalaryStr)
+                : null;
+            if (cloudSalary != null && cloudSalary > 0) {
+              if (mounted) {
+                setState(() {
+                  _salaryController.text = cloudSalaryStr!;
+                });
+              }
+              await prefs.setString('salary', cloudSalaryStr!);
+              await prefs.setBool('onboarding_completed', true);
+              return;
+            }
+
+            // Check if user has existing profile records (e.g. employee number or history)
+            final String emp = (data['user_emp'] ??
+                    data['employee_number'] ??
+                    '')
+                .toString()
+                .trim();
+            final bool hasHistoryData = (data['salary_history'] is List &&
+                    (data['salary_history'] as List).isNotEmpty) ||
+                (data['jornada_history'] is List &&
+                    (data['jornada_history'] as List).isNotEmpty);
+            if (emp.isNotEmpty || hasHistoryData) {
+              await prefs.setBool('onboarding_completed', true);
+              return;
+            }
+          }
+        }
+
+        // Check history subcollection before assuming user is new
+        final historySnap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .collection('history')
+            .limit(1)
+            .get()
+            .timeout(const Duration(seconds: 10));
+
+        if (historySnap.docs.isNotEmpty) {
+          // User has existing records in cloud! Never show onboarding
+          await prefs.setBool('onboarding_completed', true);
+          return;
+        }
+      } on TimeoutException {
+        debugPrint(
+            "Direct verification timed out; suppressing onboarding dialog to prevent false positive.");
+        return;
+      } catch (e) {
+        debugPrint(
+            "Error verifying cloud user records: $e. Suppressing onboarding dialog.");
+        return;
+      }
+    }
+
+    // 5. Only if user has no cloud records and no error/timeout occurred, show onboarding dialog
+    if (mounted) {
       Future.delayed(const Duration(milliseconds: 500), () {
-        if (mounted) {
+        if (mounted &&
+            prefs.getBool('onboarding_completed') != true &&
+            !_cloudLoadTimedOut &&
+            (_salaryController.text.isEmpty ||
+                (double.tryParse(_salaryController.text) ?? 0.0) == 0.0)) {
           _showOnboardingDialog();
         }
       });
     }
   }
 
-  void _showOnboardingDialog() {
+  void _showOnboardingDialog({bool isPreview = false}) {
     final TextEditingController salaryInputController = TextEditingController();
     final TextEditingController jornadaInputController =
         TextEditingController(text: "9.5");
@@ -1472,11 +1589,11 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
     showDialog(
       context: context,
-      barrierDismissible: false, // User CANNOT dismiss by tapping outside
+      barrierDismissible: isPreview,
       builder: (BuildContext context) {
         return PopScope(
-          // Prevent back button from closing - user MUST complete setup
-          canPop: false,
+          // Prevent back button from closing - user MUST complete setup (except in preview mode)
+          canPop: isPreview,
           child: StatefulBuilder(
             builder: (context, setDialogState) {
               return AlertDialog(
@@ -1743,42 +1860,47 @@ class _TelevisaAppState extends State<TelevisaApp> {
                           const dialNames = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
                           final bool isSelected =
                               onboardingRestDays.contains(dayNum);
-                          return InkWell(
-                            onTap: () {
-                              setDialogState(() {
-                                if (isSelected) {
-                                  onboardingRestDays.remove(dayNum);
-                                } else {
-                                  onboardingRestDays.add(dayNum);
-                                  onboardingRestDays.sort();
-                                }
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(10),
-                            child: Container(
-                              width: 36,
-                              height: 38,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? Colors.orange
-                                    : Colors.white.withAlpha(20),
+                          return Expanded(
+                            child: Padding(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 1.5),
+                              child: InkWell(
+                                onTap: () {
+                                  setDialogState(() {
+                                    if (isSelected) {
+                                      onboardingRestDays.remove(dayNum);
+                                    } else {
+                                      onboardingRestDays.add(dayNum);
+                                      onboardingRestDays.sort();
+                                    }
+                                  });
+                                },
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? Colors.orangeAccent
-                                      : Colors.white24,
-                                  width: isSelected ? 2 : 1,
-                                ),
-                              ),
-                              child: Text(
-                                dialNames[index],
-                                style: TextStyle(
-                                  color: isSelected
-                                      ? Colors.black
-                                      : Colors.white70,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
+                                child: Container(
+                                  height: 38,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? Colors.orange
+                                        : Colors.white.withAlpha(20),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? Colors.orangeAccent
+                                          : Colors.white24,
+                                      width: isSelected ? 2 : 1,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    dialNames[index],
+                                    style: TextStyle(
+                                      color: isSelected
+                                          ? Colors.black
+                                          : Colors.white70,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -1815,6 +1937,30 @@ class _TelevisaAppState extends State<TelevisaApp> {
                   ),
                 ),
                 actions: [
+                  if (isPreview) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: Colors.white38),
+                          minimumSize: const Size(double.infinity, 48),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text(
+                          "Cerrar Vista Previa",
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -1852,6 +1998,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
                           return;
                         }
 
+                        if (isPreview) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  "Vista previa completada (sin cambios guardados)"),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                          return;
+                        }
+
                         // Update controllers, rest days, and contract type
                         final selectedOption =
                             contractOptions[selectedContractIndex];
@@ -1869,9 +2027,23 @@ class _TelevisaAppState extends State<TelevisaApp> {
                         final prefs = await SharedPreferences.getInstance();
                         await prefs.setBool(
                             'contrato_base_default_v1_applied', true);
+                        await prefs.setBool('onboarding_completed', true);
 
                         // Save to cloud
                         await _saveData();
+
+                        final user = FirebaseAuth.instance.currentUser;
+                        if (user != null) {
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user.uid)
+                              .set({
+                            'onboarding_completed': true,
+                          }, SetOptions(merge: true)).catchError((e) {
+                            debugPrint(
+                                "Notice saving onboarding_completed in Firestore: $e");
+                          });
+                        }
 
                         if (!context.mounted) return;
                         Navigator.pop(context);
@@ -2352,7 +2524,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
         if (userDoc.exists) {
           final data = userDoc.data() as Map<String, dynamic>;
-          String? oldSalary = data['salary'] as String?;
+          String? oldSalary = data['salary']?.toString();
           String? newSalary = _salaryController.text;
 
           if (oldSalary != null &&
@@ -2433,6 +2605,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
       await prefs.setString(
           'vales_expenses', jsonEncode(_valesExpenses));
       await prefs.setBool('contrato_base_default_v1_applied', true);
+      final bool isOnboardingDone =
+          prefs.getBool('onboarding_completed') == true ||
+              (_salaryController.text.trim().isNotEmpty &&
+                  (double.tryParse(_salaryController.text.trim()) ?? 0.0) > 0);
+      if (isOnboardingDone) {
+        await prefs.setBool('onboarding_completed', true);
+      }
 
       if (_entradaDateTime != null) {
         await prefs.setString(
@@ -2489,6 +2668,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 'vales_paystub_overrides': _valesPayStubOverrides,
                 'vales_expenses': _valesExpenses,
                 'contrato_base_default_v1_applied': true,
+                if (isOnboardingDone) 'onboarding_completed': true,
               },
               SetOptions(merge: true));
           hasBatchWrites = true;
@@ -2685,12 +2865,14 @@ class _TelevisaAppState extends State<TelevisaApp> {
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
+    _cloudLoadTimedOut = false;
 
     // Clear user-specific local cache if a different Firebase Auth UID signed in
     if (user != null) {
       final lastUid = prefs.getString('last_logged_in_uid');
       if (lastUid != null && lastUid != user.uid) {
         for (final key in [
+          'onboarding_completed',
           'salary',
           'base_hours',
           'retention',
@@ -2993,7 +3175,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
             .collection('users')
             .doc(user.uid)
             .get()
-            .timeout(const Duration(seconds: 4));
+            .timeout(const Duration(seconds: 10));
         if (userDoc.exists) {
           final data = userDoc.data() as Map<String, dynamic>;
           final String userEmp = (data['user_emp'] ??
@@ -3012,9 +3194,62 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
           _setupUnitManagerRealtimeListener(user, userEmp);
 
+          final String? cloudSalary = data['salary']?.toString().trim();
+          if (cloudSalary != null && cloudSalary.isNotEmpty) {
+            await prefs.setString('salary', cloudSalary);
+          }
+
+          final String? cloudBaseHours = data['base_hours']?.toString().trim();
+          if (cloudBaseHours != null && cloudBaseHours.isNotEmpty) {
+            await prefs.setString('base_hours', cloudBaseHours);
+          }
+
+          final String? cloudRetention = data['retention']?.toString().trim();
+          if (cloudRetention != null && cloudRetention.isNotEmpty) {
+            await prefs.setString('retention', cloudRetention);
+          }
+
+          final String? cloudFomento = data['fomento']?.toString().trim();
+          if (cloudFomento != null && cloudFomento.isNotEmpty) {
+            await prefs.setString('fomento', cloudFomento);
+          }
+
+          final String? cloudCuota = data['cuota']?.toString().trim();
+          if (cloudCuota != null && cloudCuota.isNotEmpty) {
+            await prefs.setString('cuota', cloudCuota);
+          }
+
+          final double? parsedSalary = cloudSalary != null
+              ? double.tryParse(cloudSalary)
+              : double.tryParse(_salaryController.text.trim());
+          final bool hasValidSalary = parsedSalary != null && parsedSalary > 0;
+          final bool cloudOnboardingCompleted =
+              data['onboarding_completed'] == true;
+          final bool hasExistingUserData = cloudOnboardingCompleted ||
+              hasValidSalary ||
+              userEmp.isNotEmpty ||
+              (data['salary_history'] is List &&
+                  (data['salary_history'] as List).isNotEmpty);
+
+          if (hasExistingUserData) {
+            await prefs.setBool('onboarding_completed', true);
+            if (!cloudOnboardingCompleted) {
+              FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(user.uid)
+                  .set({
+                'onboarding_completed': true,
+              }, SetOptions(merge: true)).catchError((e) {
+                debugPrint("Notice saving onboarding_completed to Firestore: $e");
+              });
+            }
+          }
+
           setState(() {
             _isUnitManager = isMgr;
-            _salaryController.text = data['salary'] ?? _salaryController.text;
+            if (cloudSalary != null && cloudSalary.isNotEmpty) {
+              _salaryController.text = cloudSalary;
+            }
 
             // Load history lists from cloud
             if (data['salary_history'] != null) {
@@ -3060,10 +3295,12 @@ class _TelevisaAppState extends State<TelevisaApp> {
               WorkDay.restDays = _restDays;
             }
 
-            _baseHoursController.text = data['base_hours'] ?? "9.5";
-            _retentionController.text = data['retention'] ?? "15.22";
-            _fomentoController.text = data['fomento'] ?? "2.0";
-            _cuotaController.text = data['cuota'] ?? "2.0";
+            _baseHoursController.text =
+                cloudBaseHours ?? _baseHoursController.text;
+            _retentionController.text =
+                cloudRetention ?? _retentionController.text;
+            _fomentoController.text = cloudFomento ?? _fomentoController.text;
+            _cuotaController.text = cloudCuota ?? _cuotaController.text;
 
             if (data.containsKey('contrato_base_default_v1_applied')) {
               prefs.setBool('contrato_base_default_v1_applied',
@@ -3088,13 +3325,16 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 }
               }, SetOptions(merge: true)).catchError((_) {});
             }
-            _firstNameController.text = data['first_name'] ?? "";
-            _lastNameController.text = data['last_name'] ?? "";
+            _firstNameController.text = data['first_name']?.toString() ?? "";
+            _lastNameController.text = data['last_name']?.toString() ?? "";
             // Check both field names for backward compatibility
-            _userEmpNoController.text =
-                data['user_emp'] ?? data['employee_number'] ?? "";
+            _userEmpNoController.text = userEmp;
             _recoveryEmailController.text =
-                (data['recovery_email'] as String?)?.toLowerCase() ?? "";
+                (data['recovery_email'] ?? data['email'])
+                        ?.toString()
+                        .trim()
+                        .toLowerCase() ??
+                    "";
             if (data.containsKey('fondo_ahorro_enabled')) {
               _fondoAhorroEnabled = data['fondo_ahorro_enabled'] == true;
               prefs.setBool('fondo_ahorro_enabled', _fondoAhorroEnabled);
@@ -3235,9 +3475,21 @@ class _TelevisaAppState extends State<TelevisaApp> {
             _syncStatus = SyncStatus.offlinePending;
           });
         }
-      } catch (e) {
+      } on TimeoutException catch (e) {
+        _cloudLoadTimedOut = true;
         debugPrint(
-            "Notice: Cloud load timed out or offline, using local data: $e");
+            "Notice: Cloud load timed out (10s), using local data: $e");
+        if (mounted) {
+          setState(() {
+            _syncStatus = SyncStatus.offlinePending;
+          });
+        }
+      } catch (e) {
+        if (e.toString().toLowerCase().contains('timeout')) {
+          _cloudLoadTimedOut = true;
+        }
+        debugPrint(
+            "Notice: Cloud load error or offline, using local data: $e");
         if (mounted) {
           setState(() {
             _syncStatus = SyncStatus.offlinePending;
@@ -4735,7 +4987,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.19.2 20/11/26",
+                "v.23.20.1 20/11/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,
@@ -4774,7 +5026,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               style: TextStyle(
                   color: _isDarkMode ? Colors.orange : const Color(0xFFD9531E),
                   fontWeight: FontWeight.bold,
-                  fontSize: 24)),
+                  fontSize: 21)),
           actions: [
             IconButton(
               icon: Icon(
