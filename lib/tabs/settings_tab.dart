@@ -56,6 +56,7 @@ extension _SettingsTabExt on _TelevisaAppState {
             subtitle: activeRatesSummary,
             periodCount: _contractHistory.length,
             icon: Icons.badge_rounded,
+            isNew: true,
             onTap: () => _navigateToContractPresetsScreen(),
           ),
 
@@ -211,12 +212,13 @@ extension _SettingsTabExt on _TelevisaAppState {
                 ? "Aportación 1:${_fondoAhorroMatchRatio == 1.0 ? '1' : _fondoAhorroMatchRatio.toStringAsFixed(1)} • Entrega Q${_fondoAhorroCutoffQuincena.toString().padLeft(2, '0')}"
                 : "Inactivo • Configurar ahorro y aportación",
             icon: Icons.savings_rounded,
+            isNew: true,
             onTap: () => _navigateToFondoAhorroSettings(),
           ),
 
           // 7. Vales de Fomento Cultural (Monedero Chedraui)
           _buildNumericSettingCard(
-            title: "Vales de Fomento Cultural (Monedero Chedraui)",
+            title: "Vales de Fomento Cultural\n(Monedero Chedraui)",
             valueDisplay: (_valesFomentoCulturalEnabled &&
                     _valesFomentoCulturalAmount > 0)
                 ? "\$ ${_valesFomentoCulturalAmount.toStringAsFixed(2)}"
@@ -227,6 +229,7 @@ extension _SettingsTabExt on _TelevisaAppState {
                 ? "Activo • 2da quincena de cada mes"
                 : "Inactivo • Monedero Chedraui y control de saldo",
             icon: Icons.card_giftcard_rounded,
+            isNew: true,
             valueColor: (_valesFomentoCulturalEnabled &&
                     _valesFomentoCulturalAmount > 0)
                 ? null
@@ -1304,7 +1307,9 @@ extension _SettingsTabExt on _TelevisaAppState {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          if (isActive)
+                          _buildNewBadge(),
+                          if (isActive) ...[
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 2),
@@ -1324,6 +1329,7 @@ extension _SettingsTabExt on _TelevisaAppState {
                                 ),
                               ),
                             ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 4),

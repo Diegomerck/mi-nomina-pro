@@ -484,6 +484,36 @@ extension _UnitManagerTabExt on _TelevisaAppState {
     );
   }
 
+  Widget _buildNewBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFF97316), Color(0xFFD97706)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(6),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF97316).withAlpha(60),
+            blurRadius: 4,
+            offset: const Offset(0, 1),
+          ),
+        ],
+      ),
+      child: const Text(
+        '¡NUEVO!',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
   Widget _buildNumericSettingCard({
     required String title,
     required String valueDisplay,
@@ -492,6 +522,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
     required IconData icon,
     String? subtitle,
     Color? valueColor,
+    bool isNew = false,
   }) {
     final Color accentColor =
         _isDarkMode ? Colors.orange : const Color(0xFFC2410C);
@@ -502,6 +533,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
     final Color subtextColor =
         _isDarkMode ? Colors.white54 : const Color(0xFF1E293B);
     final Color actualValueColor = valueColor ?? accentColor;
+    final bool isLongValue = valueDisplay.length > 12;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -525,6 +557,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Container(
                   width: 44,
@@ -540,14 +573,37 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              title,
+                              style: TextStyle(
+                                color: textColor,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
+                            ),
+                          ),
+                          if (isNew) ...[
+                            const SizedBox(width: 6),
+                            _buildNewBadge(),
+                          ],
+                        ],
                       ),
+                      if (isLongValue) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          valueDisplay,
+                          style: TextStyle(
+                            color: actualValueColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 3),
                       Text(
                         subtitle ??
@@ -562,15 +618,22 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                     ],
                   ),
                 ),
-                const SizedBox(width: 10),
-                Text(
-                  valueDisplay,
-                  style: TextStyle(
-                    color: actualValueColor,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 17,
+                if (!isLongValue) ...[
+                  const SizedBox(width: 10),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 120),
+                    child: Text(
+                      valueDisplay,
+                      style: TextStyle(
+                        color: actualValueColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 17,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(width: 8),
                 Icon(
                   Icons.chevron_right,
@@ -1256,7 +1319,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                     color: _isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.19.1 19/11/26",
+            Text("Versión v.23.19.2 20/11/26",
                 style: TextStyle(
                     color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
                     fontSize: 14)),

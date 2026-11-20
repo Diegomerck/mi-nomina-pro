@@ -2,7 +2,7 @@
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: November 2026  
-> **Version**: `v.23.19.1 19/11/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.19.2 20/11/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.19.1` (November 2026 Discrete Maintenance Release).
+- **Internal Version**: `v.23.19.2` (November 2026 Discrete Maintenance Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,6 +234,9 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
+- **v.23.19.2 20/11/26 (Discrete Maintenance Release)**:
+  - **Insignia '¡NUEVO!' en Ajustes y Compartición**: Incorporación visual de chip con degradado naranja/ámbar ('¡NUEVO!') en las tarjetas de novedades clave de Ajustes de Nómina (`Plantillas de Contrato`, `Fondo de Ahorro`, `Vales de Fomento Cultural` y la tarjeta de navegación de `COMPARTIR CON`).
+  - **Alineación tipográfica de Vales de Fomento Cultural**: Salto de línea estructurado en el título de Vales de Despensa (`Vales de Fomento Cultural\n(Monedero Chedraui)`) para una distribución armónica de dos renglones junto con la insignia de novedad.
 - **v.23.19.1 19/11/26 (Discrete Maintenance Release)**:
   - **GitHub Actions CI/CD (`.github/workflows/build_releases.yml`) & iOS Runner Setup**: Configuración de flujo automatizado para generación de builds Android (APK) e iOS (IPA) junto con la estructura base del proyecto `ios/`.
   - **Pantalla Dedicada de Plantillas de Contrato (`ContractPresetsScreen`)**: Extracción de las plantillas de contrato desde Ajustes hacia una pantalla dedicada e interactiva (`lib/screens/contract_presets_screen.dart`), mostrando en Ajustes un resumen compacto del esquema activo.
