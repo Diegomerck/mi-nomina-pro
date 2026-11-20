@@ -260,39 +260,27 @@ extension _NominaTabExt on _TelevisaAppState {
         // A standard Mexican quincena represents 15 calendar days of base salary.
         DateTime referenceDate = payoutDate ?? now;
         double applicableSalary = _getSalaryForDate(referenceDate);
-        double applicableFomentoRate =
-            _getFomentoForDate(referenceDate) / 100.0;
-        double applicableCuotaRate =
-            _getCuotaForDate(referenceDate) / 100.0;
+        final contractConfig = _getContractForDate(referenceDate);
+        final double applicableFomentoRate =
+            (contractConfig['fomento'] as num).toDouble() / 100.0;
+        final double applicableCuotaRate =
+            (contractConfig['cuota'] as num).toDouble() / 100.0;
+        final String cuotaFrequency =
+            (contractConfig['frequency'] ?? 'both').toString();
         double baseQuincena = applicableSalary * 15;
 
         int faltasCount = matched.where((d) => d.esFalta).length;
-        int diasLaborados =
-            matched.where((d) => !d.esFalta && !d.isInProgress).length;
 
-        // Total scheduled workdays in this quincena's weeks (e.g., 2 weeks = 10 workdays)
-        int scheduledWorkdays = (cfg['weeks'] as List).length * 5;
-        if (scheduledWorkdays == 0) scheduledWorkdays = 10;
+        // Proportional factor per absence decoupled from calendar weeks length
+        // Standard 5-day workweek with 2 rest days yields restRatio = 2/5 = 0.4, factorPerFalta = 1.4
+        final double restRatio = _restDays.isNotEmpty
+            ? (_restDays.length / (7.0 - _restDays.length))
+            : 0.4;
+        final double factorPerFalta = 1.0 + restRatio;
+        final double descuentoFaltas =
+            math.min(baseQuincena, faltasCount * factorPerFalta * applicableSalary);
 
-        double descuentoFaltas = 0.0;
-        if (faltasCount > 0) {
-          if (faltasCount >= scheduledWorkdays && diasLaborados == 0) {
-            // Employee missed all scheduled workdays in the period: 100% deduction ($0 payout)
-            descuentoFaltas = baseQuincena;
-          } else {
-            // Each missed workday discounts its proportional share of the 15-day base quincena
-            // (e.g., In a 10-day period, 1 falta discounts 15/10 = 1.5 days of base pay,
-            // covering 1 workday + 0.5 proportional rest day per Mexican LFT Art. 29/30).
-            double factorPerFalta = 15.0 / scheduledWorkdays;
-            descuentoFaltas = faltasCount * factorPerFalta * applicableSalary;
-            if (descuentoFaltas > baseQuincena) {
-              descuentoFaltas = baseQuincena;
-            }
-          }
-        }
-
-        double baseEarned = baseQuincena - descuentoFaltas;
-        if (baseEarned < 0) baseEarned = 0.0;
+        double baseEarned = math.max(0.0, baseQuincena - descuentoFaltas);
 
         double totalExtras = 0.0;
         double totalHours2x = 0.0;
@@ -337,6 +325,9 @@ extension _NominaTabExt on _TelevisaAppState {
           baseEarned: baseEarned,
           applicableCuotaRate: applicableCuotaRate,
           qNum: qNum,
+          faltasCount: faltasCount,
+          applicableSalary: applicableSalary,
+          frequency: cuotaFrequency,
         );
         double fondoAhorroEmpleado = 0.0;
         if (_fondoAhorroEnabled &&

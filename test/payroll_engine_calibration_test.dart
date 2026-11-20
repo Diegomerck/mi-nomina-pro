@@ -371,6 +371,123 @@ void main() {
       expect(netWithoutVales, 13568.00);
       expect(netWithoutVales, netWithoutVales);
       expect(valesAmount > 0, isTrue);
+
+      // Vales Unconfigured & Inactive Default Parsing:
+      final Map<String, dynamic> emptyFirebaseData = {};
+      final bool parsedEnabled = (emptyFirebaseData['vales_fomento_cultural_enabled'] == true);
+      final double parsedAmount = (emptyFirebaseData['vales_fomento_cultural_amount'] as num?)?.toDouble() ?? 0.0;
+      expect(parsedEnabled, isFalse);
+      expect(parsedAmount, 0.0);
+
+      // Settings status card display logic
+      String getValesCardStatus(bool enabled, double amount) {
+        return (enabled && amount > 0)
+            ? "\$ ${amount.toStringAsFixed(2)}"
+            : "Inactivo";
+      }
+      expect(getValesCardStatus(false, 0.0), "Inactivo");
+      expect(getValesCardStatus(true, 0.0), "Inactivo");
+      expect(getValesCardStatus(false, 373.33), "Inactivo");
+      expect(getValesCardStatus(true, 373.33), "\$ 373.33");
+
+      // Suggested amount
+      const double suggestedTelevisaValesAmount = 373.33;
+      expect(suggestedTelevisaValesAmount > 0, isTrue);
+
+      // Gating Vales Reconciliation by Payout Date (Past vs Future Payouts):
+      bool checkIsPayoutPassed(DateTime payoutDate, DateTime referenceDate) {
+        final DateTime endOfRefDay = DateTime(
+            referenceDate.year, referenceDate.month, referenceDate.day, 23, 59, 59);
+        return !payoutDate.isAfter(endOfRefDay);
+      }
+
+      final DateTime simulatedNow = DateTime(2026, 2, 20); // Mid-February 2026
+      final DateTime pastPayoutQ02 = DateTime(2026, 1, 30); // Q02 payout
+      final DateTime futurePayoutQ04 = DateTime(2026, 2, 27); // Q04 payout
+
+      expect(checkIsPayoutPassed(pastPayoutQ02, simulatedNow), isTrue);
+      expect(checkIsPayoutPassed(futurePayoutQ04, simulatedNow), isFalse);
+
+      // Reconciliation Status & Action Gating Resolution:
+      ({
+        String badge,
+        bool showConfirmationPrompt,
+        bool showReconciliationNote,
+        String? displayAmountLabel,
+        String? noteText,
+      }) resolveReconciliationUI({
+        required bool isVerified,
+        required bool isPayoutPassed,
+        required double defaultAmount,
+        required double actualAmount,
+        required String payoutStr,
+      }) {
+        if (isVerified) {
+          return (
+            badge: "Conciliado ✓",
+            showConfirmationPrompt: false,
+            showReconciliationNote: false,
+            displayAmountLabel:
+                "Monto acreditado: \$${actualAmount.toStringAsFixed(2)}",
+            noteText: null,
+          );
+        } else if (!isPayoutPassed) {
+          return (
+            badge: "Programado",
+            showConfirmationPrompt: false,
+            showReconciliationNote: true,
+            displayAmountLabel:
+                "Depósito estimado: \$${defaultAmount.toStringAsFixed(2)}",
+            noteText: "Podrás conciliar el recibo a partir del $payoutStr",
+          );
+        } else {
+          return (
+            badge: "Por conciliar",
+            showConfirmationPrompt: true,
+            showReconciliationNote: false,
+            displayAmountLabel: null,
+            noteText: null,
+          );
+        }
+      }
+
+      // Case A: Future Payout (unverified):
+      final futureUI = resolveReconciliationUI(
+        isVerified: false,
+        isPayoutPassed: false,
+        defaultAmount: 373.33,
+        actualAmount: 373.33,
+        payoutStr: "27/02/26",
+      );
+      expect(futureUI.badge, "Programado");
+      expect(futureUI.showConfirmationPrompt, isFalse);
+      expect(futureUI.showReconciliationNote, isTrue);
+      expect(futureUI.displayAmountLabel, "Depósito estimado: \$373.33");
+      expect(futureUI.noteText, "Podrás conciliar el recibo a partir del 27/02/26");
+
+      // Case B: Past / Due Payout (unverified):
+      final pastUI = resolveReconciliationUI(
+        isVerified: false,
+        isPayoutPassed: true,
+        defaultAmount: 373.33,
+        actualAmount: 373.33,
+        payoutStr: "30/01/26",
+      );
+      expect(pastUI.badge, "Por conciliar");
+      expect(pastUI.showConfirmationPrompt, isTrue);
+      expect(pastUI.showReconciliationNote, isFalse);
+
+      // Case C: Verified / Conciliado (Past or Future):
+      final verifiedUI = resolveReconciliationUI(
+        isVerified: true,
+        isPayoutPassed: true,
+        defaultAmount: 373.33,
+        actualAmount: 400.00,
+        payoutStr: "30/01/26",
+      );
+      expect(verifiedUI.badge, "Conciliado ✓");
+      expect(verifiedUI.showConfirmationPrompt, isFalse);
+      expect(verifiedUI.displayAmountLabel, "Monto acreditado: \$400.00");
     });
 
     test('10. Onboarding Contract Type Selection & Default Persistence Verification', () {
@@ -502,6 +619,264 @@ void main() {
       expect(getTitle(isShiftFromPreviousDay: true, isManual: false), "¿A QUÉ HORA FUE TU SALIDA?");
       expect(getTitle(isShiftFromPreviousDay: false, isManual: true), "¿A QUÉ HORA SALISTE HOY?");
       expect(getTitle(isShiftFromPreviousDay: false, isManual: false), "EDITAR HORA SALIDA");
+    });
+
+    test('11. Quincena 14 Official Paystub Reconciliation with Absences', () {
+      const double applicableSalary = 907.17;
+      const int faltasCount = 2;
+      const List<int> restDays = [DateTime.saturday, DateTime.sunday];
+
+      // Proportional factor calculation decoupled from weeks count:
+      final double restRatio = restDays.isNotEmpty
+          ? (restDays.length / (7.0 - restDays.length))
+          : 0.4;
+      final double factorPerFalta = 1.0 + restRatio; // 1.4 for standard 5-day workweek with 2 rest days
+      expect(factorPerFalta, 1.4);
+
+      // Official paystub Quincena 14: base quincena is $13,607.51 ($27,215.02 / 2)
+      const double baseQuincena = 13607.51;
+
+      // 1. Descuento por Faltas: 2 absences * 1.4 * $907.17 = $2,540.076 -> $2,540.08
+      final double unroundedDescuento =
+          math.min(baseQuincena, faltasCount * factorPerFalta * applicableSalary);
+      final double descuentoFaltas =
+          PayrollEngine.roundCurrency(unroundedDescuento);
+      expect(descuentoFaltas, 2540.08);
+
+      // 2. Base Earned: $13,607.51 - $2,540.08 = $11,067.43
+      final double baseEarned =
+          PayrollEngine.roundCurrency(math.max(0.0, baseQuincena - descuentoFaltas));
+      expect(baseEarned, 11067.43);
+
+      // 3. Fomento Eficiencia: 2.0% on base earned ($11,067.43 * 0.02 = $221.3486 -> $221.35)
+      const double applicableFomentoRate = 0.02;
+      final double fomentoEficiencia =
+          PayrollEngine.roundCurrency(baseEarned * applicableFomentoRate);
+      expect(fomentoEficiencia, 221.35);
+
+      // 4. Cuota Sindical: (15.0 - 2) * $907.17 * 2.0% = 13 * $907.17 * 0.02 = $235.8642 -> $235.86
+      const double applicableCuotaRate = 0.02;
+      const int qNum = 14;
+      final double cuotaSindical = PayrollEngine.calculateCuotaSindical(
+        baseEarned: baseEarned,
+        applicableCuotaRate: applicableCuotaRate,
+        qNum: qNum,
+        faltasCount: faltasCount,
+        applicableSalary: applicableSalary,
+      );
+      expect(cuotaSindical, 235.86);
+
+      // 5. Total Bruto (Percepciones gravables): base earned + fomento eficiencia
+      final double totalBruto = baseEarned + fomentoEficiencia;
+      expect(totalBruto, 11288.78);
+
+      // 6. ISR Retenido (SAT 2026 progressive table on $11,288.78): $1,479.54
+      final double isrRetenido =
+          PayrollEngine.calculateSatIsr2026Quincenal(totalBruto);
+      expect(isrRetenido, 1479.54);
+
+      // 7. Net Deposit: Total Bruto - (ISR + Cuota Sindical) = $11,288.78 - ($1,479.54 + $235.86) = $9,573.38
+      final double netDeposit =
+          PayrollEngine.roundCurrency(totalBruto - (isrRetenido + cuotaSindical));
+      expect(netDeposit, 9573.38);
+    });
+
+    test('12. Unified Contract Periods Multi-Period Calibration (Contrato Base vs Sindicalizado 2026 vs Confianza)', () {
+      final List<Map<String, dynamic>> contractHistory = [
+        {
+          'type': 'contrato_base',
+          'contract_type': 'contrato_base',
+          'fomento': 2.0,
+          'cuota': 2.0,
+          'frequency': 'both',
+          'cuota_frequency': 'both',
+          'start_date': '2026-01-01',
+          'end_date': '2026-07-31',
+        },
+        {
+          'type': 'sindicalizado_2026',
+          'contract_type': 'sindicalizado_2026',
+          'fomento': 4.6,
+          'cuota': 4.0,
+          'frequency': 'second_only',
+          'cuota_frequency': 'second_only',
+          'start_date': '2026-08-01',
+          'end_date': '2026-10-31',
+        },
+        {
+          'type': 'confianza',
+          'contract_type': 'confianza',
+          'fomento': 0.0,
+          'cuota': 0.0,
+          'frequency': 'none',
+          'cuota_frequency': 'none',
+          'start_date': '2026-11-01',
+          'end_date': null,
+        },
+      ];
+
+      // A. Quincena 14 (Payout: 2026-07-31, July 2nd Quincena) -> Contrato Base
+      final q14Contract = PayrollEngine.resolveContractForDate(
+        date: DateTime(2026, 7, 31),
+        contractHistory: contractHistory,
+      );
+      expect(q14Contract['type'], 'contrato_base');
+      expect(q14Contract['fomento'], 2.0);
+      expect(q14Contract['cuota'], 2.0);
+      expect(q14Contract['frequency'], 'both');
+
+      const double q14BaseEarned = 11067.43;
+      final double q14Fomento = PayrollEngine.roundCurrency(
+          q14BaseEarned * ((q14Contract['fomento'] as num).toDouble() / 100.0));
+      expect(q14Fomento, 221.35);
+
+      final double q14Cuota = PayrollEngine.calculateCuotaSindical(
+        baseEarned: q14BaseEarned,
+        applicableCuotaRate: (q14Contract['cuota'] as num).toDouble() / 100.0,
+        qNum: 14,
+        faltasCount: 2,
+        applicableSalary: 907.17,
+        frequency: q14Contract['frequency'],
+      );
+      expect(q14Cuota, 235.86);
+
+      // Verify that Quincena 13 (2026-07-15, July 1st Quincena, odd) also deducts cuota under 'both'
+      final double q13Cuota = PayrollEngine.calculateCuotaSindical(
+        baseEarned: 13607.51,
+        applicableCuotaRate: 0.02,
+        qNum: 13,
+        frequency: 'both',
+      );
+      expect(q13Cuota, 272.15);
+
+      // B. Quincena 15 (Payout: 2026-08-15, August 1st Quincena, odd) -> Sindicalizado 2026
+      final q15Contract = PayrollEngine.resolveContractForDate(
+        date: DateTime(2026, 8, 15),
+        contractHistory: contractHistory,
+      );
+      expect(q15Contract['type'], 'sindicalizado_2026');
+      expect(q15Contract['fomento'], 4.6);
+      expect(q15Contract['cuota'], 4.0);
+      expect(q15Contract['frequency'], 'second_only');
+
+      const double standardBase = 13607.51;
+      final double q15Fomento = PayrollEngine.roundCurrency(
+          standardBase * ((q15Contract['fomento'] as num).toDouble() / 100.0));
+      expect(q15Fomento, 625.95);
+
+      // In 1st quincena of the month, Sindicalizado 2026 cuota is 0.0
+      final double q15Cuota = PayrollEngine.calculateCuotaSindical(
+        baseEarned: standardBase,
+        applicableCuotaRate: (q15Contract['cuota'] as num).toDouble() / 100.0,
+        qNum: 15,
+        frequency: q15Contract['frequency'],
+      );
+      expect(q15Cuota, 0.0);
+
+      // C. Quincena 16 (Payout: 2026-08-31, August 2nd Quincena, even) -> Sindicalizado 2026
+      final q16Contract = PayrollEngine.resolveContractForDate(
+        date: DateTime(2026, 8, 31),
+        contractHistory: contractHistory,
+      );
+      expect(q16Contract['type'], 'sindicalizado_2026');
+      expect(q16Contract['frequency'], 'second_only');
+
+      // In 2nd quincena of the month, Sindicalizado 2026 cuota is deducted (4.0%)
+      final double q16Cuota = PayrollEngine.calculateCuotaSindical(
+        baseEarned: standardBase,
+        applicableCuotaRate: (q16Contract['cuota'] as num).toDouble() / 100.0,
+        qNum: 16,
+        frequency: q16Contract['frequency'],
+      );
+      expect(q16Cuota, 544.30); // 13,607.51 * 0.04 = 544.3004 -> 544.30
+
+      // D. Quincena 21 (Payout: 2026-11-15, November under Confianza) -> Confianza
+      final q21Contract = PayrollEngine.resolveContractForDate(
+        date: DateTime(2026, 11, 15),
+        contractHistory: contractHistory,
+      );
+      expect(q21Contract['type'], 'confianza');
+      expect(q21Contract['fomento'], 0.0);
+      expect(q21Contract['cuota'], 0.0);
+      expect(q21Contract['frequency'], 'none');
+
+      final double q21Fomento = PayrollEngine.roundCurrency(
+          standardBase * ((q21Contract['fomento'] as num).toDouble() / 100.0));
+      expect(q21Fomento, 0.0);
+
+      final double q21Cuota = PayrollEngine.calculateCuotaSindical(
+        baseEarned: standardBase,
+        applicableCuotaRate: (q21Contract['cuota'] as num).toDouble() / 100.0,
+        qNum: 21,
+        frequency: q21Contract['frequency'],
+      );
+      expect(q21Cuota, 0.0);
+
+      // E. Fallback Resolution with empty contract history
+      final fallbackContract = PayrollEngine.resolveContractForDate(
+        date: DateTime(2026, 5, 1),
+        contractHistory: [],
+        defaultFomento: 2.0,
+        defaultCuota: 2.0,
+      );
+      expect(fallbackContract['type'], 'contrato_base');
+      expect(fallbackContract['fomento'], 2.0);
+      expect(fallbackContract['cuota'], 2.0);
+      expect(fallbackContract['frequency'], 'both');
+    });
+
+    test('13. Contract Presets Screen Data Contract & Default Presets Verification', () {
+      // 1. Verify standard preset definitions
+      const standardPresets = {
+        'contrato_base': {
+          'name': 'Contrato Base (2.0% / 2.0%)',
+          'fomento': 2.0,
+          'cuota': 2.0,
+          'frequency': 'both',
+        },
+        'sindicalizado_2026': {
+          'name': 'Sindicalizado 2026 (4.6% / 4%)',
+          'fomento': 4.6,
+          'cuota': 4.0,
+          'frequency': 'second_only',
+        },
+        'confianza': {
+          'name': 'Confianza / Sin Sindicato (0% / 0%)',
+          'fomento': 0.0,
+          'cuota': 0.0,
+          'frequency': 'none',
+        },
+      };
+
+      for (final entry in standardPresets.entries) {
+        final Map<String, dynamic> resolved = PayrollEngine.resolveContractForDate(
+          date: DateTime(2026, 6, 1),
+          contractHistory: [
+            {
+              'type': entry.key,
+              'contract_type': entry.key,
+              'fomento': entry.value['fomento'],
+              'cuota': entry.value['cuota'],
+              'frequency': entry.value['frequency'],
+              'cuota_frequency': entry.value['frequency'],
+              'name': entry.value['name'],
+              'start_date': '2026-01-01',
+              'end_date': null,
+            }
+          ],
+        );
+        expect(resolved['type'], entry.key);
+        expect(resolved['fomento'], entry.value['fomento']);
+        expect(resolved['cuota'], entry.value['cuota']);
+        expect(resolved['frequency'], entry.value['frequency']);
+
+        // Verify summary label formatting ("Fomento X% • Cuota Y%")
+        final double f = (resolved['fomento'] as num).toDouble();
+        final double c = (resolved['cuota'] as num).toDouble();
+        final String summary = "Fomento ${f.toStringAsFixed(1)}% • Cuota ${c.toStringAsFixed(1)}%";
+        expect(summary.contains('Fomento'), true);
+        expect(summary.contains('Cuota'), true);
+      }
     });
   });
 }

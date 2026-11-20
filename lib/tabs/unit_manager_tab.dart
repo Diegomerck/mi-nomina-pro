@@ -491,6 +491,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
     required VoidCallback onTap,
     required IconData icon,
     String? subtitle,
+    Color? valueColor,
   }) {
     final Color accentColor =
         _isDarkMode ? Colors.orange : const Color(0xFFC2410C);
@@ -500,6 +501,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
     final Color textColor = _isDarkMode ? Colors.white : Colors.black;
     final Color subtextColor =
         _isDarkMode ? Colors.white54 : const Color(0xFF1E293B);
+    final Color actualValueColor = valueColor ?? accentColor;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -564,7 +566,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                 Text(
                   valueDisplay,
                   style: TextStyle(
-                    color: accentColor,
+                    color: actualValueColor,
                     fontWeight: FontWeight.bold,
                     fontSize: 17,
                   ),
@@ -1254,7 +1256,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                     color: _isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.19.0 19/11/26",
+            Text("Versión v.23.19.1 19/11/26",
                 style: TextStyle(
                     color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
                     fontSize: 14)),

@@ -24,6 +24,7 @@ part 'screens/history_screens.dart';
 part 'screens/admin_screens.dart';
 part 'screens/fondo_ahorro_screen.dart';
 part 'screens/vales_chedraui_screen.dart';
+part 'screens/contract_presets_screen.dart';
 part 'tabs/hoy_tab.dart';
 part 'tabs/quincena_tab.dart';
 part 'tabs/ano_tab.dart';
@@ -622,18 +623,174 @@ class PayrollEngine {
     required double baseEarned,
     required double applicableCuotaRate,
     required int qNum,
+    int faltasCount = 0,
+    double? applicableSalary,
+    String? frequency,
   }) {
-    if (applicableCuotaRate <= 0.0 || baseEarned <= 0.0) return 0.0;
+    if (applicableCuotaRate <= 0.0 ||
+        (baseEarned <= 0.0 && (applicableSalary == null || faltasCount >= 15))) {
+      return 0.0;
+    }
     final bool isFirstQuincena = (qNum % 2 != 0);
+    final double cuotaBase = (applicableSalary != null && faltasCount > 0)
+        ? math.max(0.0, (15.0 - faltasCount) * applicableSalary)
+        : baseEarned;
+
+    if (frequency != null) {
+      if (frequency == 'none') return 0.0;
+      if (frequency == 'second_only' && isFirstQuincena) return 0.0;
+      if (frequency == 'first_only' && !isFirstQuincena) return 0.0;
+      return roundCurrency(cuotaBase * applicableCuotaRate);
+    }
+
     // Contrato Base (2.0%): applies on every quincena
     if ((applicableCuotaRate - 0.02).abs() < 0.001) {
-      return roundCurrency(baseEarned * applicableCuotaRate);
+      return roundCurrency(cuotaBase * applicableCuotaRate);
     }
     // Sindicalizado 2026 (4.0%) or other rates: applies only on 2nd quincena of each month
     if (isFirstQuincena) {
       return 0.0;
     }
-    return roundCurrency(baseEarned * applicableCuotaRate);
+    return roundCurrency(cuotaBase * applicableCuotaRate);
+  }
+
+  static Map<String, dynamic> resolveContractForDate({
+    required DateTime date,
+    required List<Map<String, dynamic>> contractHistory,
+    double defaultFomento = 2.0,
+    double defaultCuota = 2.0,
+  }) {
+    if (contractHistory.isNotEmpty) {
+      final targetDate = DateTime(date.year, date.month, date.day);
+      final List<Map<String, dynamic>> matching = [];
+
+      for (final raw in contractHistory) {
+        final entry = Map<String, dynamic>.from(raw);
+        DateTime? startDate;
+        if (entry['start_date'] != null &&
+            entry['start_date'].toString().isNotEmpty) {
+          startDate = DateTime.tryParse(entry['start_date'].toString());
+        } else if (entry['effective_date'] != null &&
+            entry['effective_date'].toString().isNotEmpty) {
+          startDate = DateTime.tryParse(entry['effective_date'].toString());
+        }
+        if (startDate == null) continue;
+        final normStart =
+            DateTime(startDate.year, startDate.month, startDate.day);
+
+        DateTime? endDate;
+        if (entry['end_date'] != null &&
+            entry['end_date'].toString().isNotEmpty) {
+          final parsedEnd = DateTime.tryParse(entry['end_date'].toString());
+          if (parsedEnd != null) {
+            endDate = DateTime(parsedEnd.year, parsedEnd.month, parsedEnd.day);
+          }
+        }
+
+        if (!targetDate.isBefore(normStart)) {
+          if (endDate == null || !targetDate.isAfter(endDate)) {
+            matching.add({
+              'entry': entry,
+              'start': normStart,
+              'end': endDate,
+            });
+          }
+        }
+      }
+
+      if (matching.isNotEmpty) {
+        matching.sort((a, b) =>
+            (b['start'] as DateTime).compareTo(a['start'] as DateTime));
+        final chosen =
+            Map<String, dynamic>.from(matching.first['entry'] as Map);
+        final String type = (chosen['contract_type'] ??
+                chosen['type'] ??
+                'contrato_base')
+            .toString();
+
+        double defFomento = 2.0;
+        double defCuota = 2.0;
+        String defFreq = 'both';
+
+        if (type == 'sindicalizado_2026') {
+          defFomento = 4.6;
+          defCuota = 4.0;
+          defFreq = 'second_only';
+        } else if (type == 'confianza') {
+          defFomento = 0.0;
+          defCuota = 0.0;
+          defFreq = 'none';
+        }
+
+        double fomento = defFomento;
+        if (chosen['fomento'] != null) {
+          fomento = (chosen['fomento'] as num).toDouble();
+        } else if (chosen['fomento_rate'] != null) {
+          final double r = (chosen['fomento_rate'] as num).toDouble();
+          fomento = (r <= 1.0 && r > 0.0) ? r * 100.0 : r;
+        }
+
+        double cuota = defCuota;
+        if (chosen['cuota'] != null) {
+          cuota = (chosen['cuota'] as num).toDouble();
+        } else if (chosen['cuota_rate'] != null) {
+          final double r = (chosen['cuota_rate'] as num).toDouble();
+          cuota = (r <= 1.0 && r > 0.0) ? r * 100.0 : r;
+        }
+
+        final String frequency = (chosen['cuota_frequency'] ??
+                chosen['frequency'] ??
+                defFreq)
+            .toString();
+
+        return {
+          'type': type,
+          'contract_type': type,
+          'fomento': fomento,
+          'cuota': cuota,
+          'frequency': frequency,
+          'cuota_frequency': frequency,
+          'name': chosen['name'] ??
+              (type == 'sindicalizado_2026'
+                  ? 'Sindicalizado 2026'
+                  : type == 'confianza'
+                      ? 'Confianza / Sin Sindicato'
+                      : 'Contrato Base'),
+          'start_date': chosen['start_date'] ?? chosen['effective_date'],
+          'end_date': chosen['end_date'],
+        };
+      }
+    }
+
+    // Fallback when contractHistory is empty or no entry matches targetDate
+    String type = 'contrato_base';
+    String frequency = 'both';
+    String name = 'Contrato Base';
+
+    if ((defaultFomento - 4.6).abs() < 0.05 &&
+        (defaultCuota - 4.0).abs() < 0.05) {
+      type = 'sindicalizado_2026';
+      frequency = 'second_only';
+      name = 'Sindicalizado 2026';
+    } else if (defaultFomento <= 0.001 && defaultCuota <= 0.001) {
+      type = 'confianza';
+      frequency = 'none';
+      name = 'Confianza / Sin Sindicato';
+    } else if ((defaultCuota - 4.0).abs() < 0.05) {
+      frequency = 'second_only';
+    }
+
+    return {
+      'type': type,
+      'contract_type': type,
+      'fomento': defaultFomento,
+      'cuota': defaultCuota,
+      'frequency': frequency,
+      'cuota_frequency': frequency,
+      'name': name,
+      'start_date': null,
+      'end_date': null,
+    };
   }
 }
 
@@ -677,6 +834,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
   List<Map<String, dynamic>> _fomentoHistory = [];
   List<Map<String, dynamic>> _cuotaHistory = [];
   List<Map<String, dynamic>> _restDaysHistory = [];
+  List<Map<String, dynamic>> _contractHistory = [];
 
   // Theme preference (Dark OLED vs Soft Light)
   bool _isDarkMode = true;
@@ -890,23 +1048,13 @@ class _TelevisaAppState extends State<TelevisaApp> {
           double baseQ = sal * 15.0;
 
           int faltasCount = matched.where((d) => d.esFalta).length;
-          int diasLaborados =
-              matched.where((d) => !d.esFalta && !d.isInProgress).length;
-          int scheduledWorkdays = (cfg['weeks'] as List).length * 5;
-          if (scheduledWorkdays == 0) scheduledWorkdays = 10;
-
-          double descFaltas = 0.0;
-          if (faltasCount > 0) {
-            if (faltasCount >= scheduledWorkdays && diasLaborados == 0) {
-              descFaltas = baseQ;
-            } else {
-              double factor = 15.0 / scheduledWorkdays;
-              descFaltas = faltasCount * factor * sal;
-              if (descFaltas > baseQ) descFaltas = baseQ;
-            }
-          }
-          double baseEarned = baseQ - descFaltas;
-          if (baseEarned < 0) baseEarned = 0.0;
+          final double restRatio = _restDays.isNotEmpty
+              ? (_restDays.length / (7.0 - _restDays.length))
+              : 0.4;
+          final double factorPerFalta = 1.0 + restRatio;
+          final double descFaltas =
+              math.min(baseQ, faltasCount * factorPerFalta * sal);
+          double baseEarned = math.max(0.0, baseQ - descFaltas);
 
           final faRes = calculateFondoAhorro(baseEarned: baseEarned);
           calculatedBaselineDeduction = faRes['deduction']!;
@@ -1047,6 +1195,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         'actualAmount': actualAmount,
         'isVerified': hasOverride,
         'isDeposited': isDeposited,
+        'isPayoutPassed': isPayoutPassed,
       });
     }
 
@@ -2010,6 +2159,15 @@ class _TelevisaAppState extends State<TelevisaApp> {
         date, _cuotaHistory, double.tryParse(_cuotaController.text) ?? 2.0);
   }
 
+  Map<String, dynamic> _getContractForDate(DateTime date) {
+    return PayrollEngine.resolveContractForDate(
+      date: date,
+      contractHistory: _contractHistory,
+      defaultFomento: _getFomentoForDate(date),
+      defaultCuota: _getCuotaForDate(date),
+    );
+  }
+
   List<int> _getRestDaysForDate(DateTime date) {
     return getRestDaysForDate(date, _restDaysHistory, _restDays);
   }
@@ -2053,6 +2211,74 @@ class _TelevisaAppState extends State<TelevisaApp> {
 
         result.add({
           'rest_days': days,
+          'start_date': sDate,
+          'end_date': (eDate.isEmpty || eDate == 'null') ? null : eDate,
+        });
+      }
+    }
+    return result;
+  }
+
+  List<Map<String, dynamic>> _normalizeContractHistoryList(dynamic rawList) {
+    if (rawList == null || rawList is! List) return [];
+    List<Map<String, dynamic>> result = [];
+    for (var item in rawList) {
+      if (item is Map) {
+        final map = Map<String, dynamic>.from(item);
+        final String type =
+            (map['contract_type'] ?? map['type'] ?? 'contrato_base').toString();
+        final sDate =
+            (map['start_date'] ?? map['effective_date'] ?? '').toString();
+        final eDate = (map['end_date'] ?? '').toString();
+
+        double defFom = 2.0;
+        double defCuo = 2.0;
+        String defFreq = 'both';
+
+        if (type == 'sindicalizado_2026') {
+          defFom = 4.6;
+          defCuo = 4.0;
+          defFreq = 'second_only';
+        } else if (type == 'confianza') {
+          defFom = 0.0;
+          defCuo = 0.0;
+          defFreq = 'none';
+        }
+
+        double fomento = defFom;
+        if (map['fomento'] != null) {
+          fomento = (map['fomento'] as num).toDouble();
+        } else if (map['fomento_rate'] != null) {
+          double r = (map['fomento_rate'] as num).toDouble();
+          fomento = (r <= 1.0 && r > 0.0) ? r * 100.0 : r;
+        }
+
+        double cuota = defCuo;
+        if (map['cuota'] != null) {
+          cuota = (map['cuota'] as num).toDouble();
+        } else if (map['cuota_rate'] != null) {
+          double r = (map['cuota_rate'] as num).toDouble();
+          cuota = (r <= 1.0 && r > 0.0) ? r * 100.0 : r;
+        }
+
+        String frequency =
+            (map['cuota_frequency'] ?? map['frequency'] ?? defFreq).toString();
+        String name = (map['name'] ??
+                (type == 'sindicalizado_2026'
+                    ? 'Sindicalizado 2026'
+                    : type == 'confianza'
+                        ? 'Confianza / Sin Sindicato'
+                        : 'Contrato Base'))
+            .toString();
+
+        result.add({
+          'type': type,
+          'contract_type': type,
+          'fomento': fomento,
+          'cuota': cuota,
+          'frequency': frequency,
+          'cuota_frequency': frequency,
+          'name': name,
           'start_date': sDate,
           'end_date': (eDate.isEmpty || eDate == 'null') ? null : eDate,
         });
@@ -2173,6 +2399,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
       await prefs.setString('fomento_history', jsonEncode(_fomentoHistory));
       await prefs.setString('cuota_history', jsonEncode(_cuotaHistory));
       await prefs.setString('rest_days_history', jsonEncode(_restDaysHistory));
+      await prefs.setString('contract_history', jsonEncode(_contractHistory));
       await prefs.setStringList(
           'rest_days', _restDays.map((e) => e.toString()).toList());
       await prefs.setString('base_hours', _baseHoursController.text);
@@ -2238,6 +2465,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 'fomento_history': _fomentoHistory,
                 'cuota_history': _cuotaHistory,
                 'rest_days_history': _restDaysHistory,
+                'contract_history': _contractHistory,
                 'base_hours': _baseHoursController.text,
                 'rest_days': _restDays,
                 'retention': _retentionController.text,
@@ -2429,6 +2657,31 @@ class _TelevisaAppState extends State<TelevisaApp> {
     await prefs.setBool('app_is_dark_mode', _isDarkMode);
   }
 
+  Future<void> _handleSignOut() async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final key in [
+      'vales_fomento_cultural_enabled',
+      'vales_fomento_cultural_amount',
+      'vales_start_quincena',
+      'vales_paystub_overrides',
+      'vales_expenses',
+      'last_logged_in_uid',
+    ]) {
+      await prefs.remove(key);
+    }
+    if (mounted) {
+      setState(() {
+        _valesFomentoCulturalEnabled = false;
+        _valesFomentoCulturalAmount = 0.0;
+        _valesStartQuincena = 1;
+        _valesPayStubOverrides = {};
+        _valesExpenses = [];
+        _valesFomentoCulturalAmountController.text = "";
+      });
+    }
+    await FirebaseAuth.instance.signOut();
+  }
+
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     final user = FirebaseAuth.instance.currentUser;
@@ -2454,6 +2707,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
           'fomento_history',
           'cuota_history',
           'rest_days_history',
+          'contract_history',
           'rest_days',
           'is_unit_manager',
           'pending_entrada',
@@ -2467,11 +2721,24 @@ class _TelevisaAppState extends State<TelevisaApp> {
           'fondo_ahorro_match_ratio',
           'fondo_ahorro_start_quincena',
           'fondo_ahorro_cutoff_quincena',
+          'fondo_ahorro_paystub_overrides',
+          'fondo_ahorro_fixed_amount',
+          'vales_fomento_cultural_enabled',
+          'vales_fomento_cultural_amount',
+          'vales_start_quincena',
+          'vales_paystub_overrides',
+          'vales_expenses',
         ]) {
           await prefs.remove(key);
         }
         _lastSyncTime = null;
         _pendingSyncCount = 0;
+        _valesFomentoCulturalEnabled = false;
+        _valesFomentoCulturalAmount = 0.0;
+        _valesStartQuincena = 1;
+        _valesPayStubOverrides = {};
+        _valesExpenses = [];
+        _valesFomentoCulturalAmountController.text = "";
       }
       await prefs.setString('last_logged_in_uid', user.uid);
     }
@@ -2555,6 +2822,18 @@ class _TelevisaAppState extends State<TelevisaApp> {
         }
       } else {
         _restDaysHistory = [];
+      }
+
+      String? contractHistoryJson = prefs.getString('contract_history');
+      if (contractHistoryJson != null && contractHistoryJson.isNotEmpty) {
+        try {
+          _contractHistory =
+              _normalizeContractHistoryList(jsonDecode(contractHistoryJson));
+        } catch (e) {
+          _contractHistory = [];
+        }
+      } else {
+        _contractHistory = [];
       }
 
       List<String>? savedRestDays = prefs.getStringList('rest_days');
@@ -2764,6 +3043,12 @@ class _TelevisaAppState extends State<TelevisaApp> {
               prefs.setString(
                   'rest_days_history', jsonEncode(_restDaysHistory));
             }
+            if (data['contract_history'] != null) {
+              _contractHistory =
+                  _normalizeContractHistoryList(data['contract_history']);
+              prefs.setString(
+                  'contract_history', jsonEncode(_contractHistory));
+            }
             _syncWorkDayStatics();
 
             if (data['rest_days'] != null) {
@@ -2851,42 +3136,44 @@ class _TelevisaAppState extends State<TelevisaApp> {
                 prefs.remove('fondo_ahorro_fixed_amount');
               }
             }
-            if (data.containsKey('vales_fomento_cultural_enabled')) {
-              _valesFomentoCulturalEnabled =
-                  data['vales_fomento_cultural_enabled'] == true;
-              prefs.setBool('vales_fomento_cultural_enabled',
-                  _valesFomentoCulturalEnabled);
-            }
-            if (data.containsKey('vales_fomento_cultural_amount')) {
-              _valesFomentoCulturalAmount =
-                  (data['vales_fomento_cultural_amount'] as num).toDouble();
-              _valesFomentoCulturalAmountController.text =
-                  _valesFomentoCulturalAmount > 0
-                      ? _valesFomentoCulturalAmount.toStringAsFixed(2)
-                      : "";
-              prefs.setDouble('vales_fomento_cultural_amount',
-                  _valesFomentoCulturalAmount);
-            }
-            if (data.containsKey('vales_start_quincena')) {
-              _valesStartQuincena = (data['vales_start_quincena'] as num).toInt();
-              prefs.setInt('vales_start_quincena', _valesStartQuincena);
-            }
-            if (data.containsKey('vales_paystub_overrides') &&
-                data['vales_paystub_overrides'] is Map) {
+            _valesFomentoCulturalEnabled =
+                data['vales_fomento_cultural_enabled'] == true;
+            prefs.setBool('vales_fomento_cultural_enabled',
+                _valesFomentoCulturalEnabled);
+
+            _valesFomentoCulturalAmount =
+                (data['vales_fomento_cultural_amount'] as num?)?.toDouble() ??
+                    0.0;
+            _valesFomentoCulturalAmountController.text =
+                _valesFomentoCulturalAmount > 0
+                    ? _valesFomentoCulturalAmount.toStringAsFixed(2)
+                    : "";
+            prefs.setDouble('vales_fomento_cultural_amount',
+                _valesFomentoCulturalAmount);
+
+            _valesStartQuincena =
+                (data['vales_start_quincena'] as num?)?.toInt() ?? 1;
+            prefs.setInt('vales_start_quincena', _valesStartQuincena);
+
+            if (data['vales_paystub_overrides'] is Map) {
               final Map rawMap = data['vales_paystub_overrides'] as Map;
               _valesPayStubOverrides = rawMap.map(
                   (k, v) => MapEntry(k.toString(), (v as num).toDouble()));
-              prefs.setString('vales_paystub_overrides',
-                  jsonEncode(_valesPayStubOverrides));
+            } else {
+              _valesPayStubOverrides = {};
             }
-            if (data.containsKey('vales_expenses') &&
-                data['vales_expenses'] is List) {
+            prefs.setString('vales_paystub_overrides',
+                jsonEncode(_valesPayStubOverrides));
+
+            if (data['vales_expenses'] is List) {
               final List rawList = data['vales_expenses'] as List;
               _valesExpenses = rawList
                   .map((e) => Map<String, dynamic>.from(e as Map))
                   .toList();
-              prefs.setString('vales_expenses', jsonEncode(_valesExpenses));
+            } else {
+              _valesExpenses = [];
             }
+            prefs.setString('vales_expenses', jsonEncode(_valesExpenses));
             calibrateFondoAhorroFixedAmount();
           });
         } else {
@@ -2901,6 +3188,19 @@ class _TelevisaAppState extends State<TelevisaApp> {
             }
           }
           _setupUnitManagerRealtimeListener(user, fallbackEmp);
+          setState(() {
+            _valesFomentoCulturalEnabled = false;
+            _valesFomentoCulturalAmount = 0.0;
+            _valesStartQuincena = 1;
+            _valesPayStubOverrides = {};
+            _valesExpenses = [];
+            _valesFomentoCulturalAmountController.text = "";
+          });
+          await prefs.setBool('vales_fomento_cultural_enabled', false);
+          await prefs.setDouble('vales_fomento_cultural_amount', 0.0);
+          await prefs.setInt('vales_start_quincena', 1);
+          await prefs.setString('vales_paystub_overrides', jsonEncode({}));
+          await prefs.setString('vales_expenses', jsonEncode([]));
         }
 
         // 2. Load History from Cloud
@@ -4435,7 +4735,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.19.0 19/11/26",
+                "v.23.19.1 19/11/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,

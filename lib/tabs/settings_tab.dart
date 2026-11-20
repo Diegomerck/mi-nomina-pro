@@ -4,6 +4,16 @@ part of '../main.dart';
 
 extension _SettingsTabExt on _TelevisaAppState {
   Widget _buildSettingsTab() {
+    final activeContract = _getContractForDate(DateTime.now());
+    final String activeContractName =
+        (activeContract['name'] ?? 'Contrato Base').toString();
+    final double activeFomento =
+        (activeContract['fomento'] as num?)?.toDouble() ?? 2.0;
+    final double activeCuota =
+        (activeContract['cuota'] as num?)?.toDouble() ?? 2.0;
+    final String activeRatesSummary =
+        "Fomento ${activeFomento.toStringAsFixed(1)}% • Cuota ${activeCuota.toStringAsFixed(1)}%";
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -24,24 +34,6 @@ extension _SettingsTabExt on _TelevisaAppState {
           Divider(
               color: _isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1),
               height: 40),
-          Text("PLANTILLAS DE CONTRATO",
-              style: TextStyle(
-                  color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20)),
-          const SizedBox(height: 8),
-          Text(
-            "Selecciona un esquema predefinido para configurar automáticamente porcentajes y prestaciones. Puedes personalizar cualquier valor individualmente en Ajustes de Nómina.",
-            style: TextStyle(
-              color: _isDarkMode ? Colors.white60 : const Color(0xFF1E293B),
-              fontSize: 13,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildContractPresetsSection(),
-          Divider(
-              color: _isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1),
-              height: 40),
           Text("AJUSTES DE NÓMINA",
               style: TextStyle(
                   color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
@@ -56,6 +48,16 @@ extension _SettingsTabExt on _TelevisaAppState {
             ),
           ),
           const SizedBox(height: 18),
+
+          // 0. Plantillas de Contrato
+          _buildNumericSettingCard(
+            title: "Plantillas de Contrato",
+            valueDisplay: activeContractName,
+            subtitle: activeRatesSummary,
+            periodCount: _contractHistory.length,
+            icon: Icons.badge_rounded,
+            onTap: () => _navigateToContractPresetsScreen(),
+          ),
 
           // 1. Sueldo Diario Base
           _buildNumericSettingCard(
@@ -225,6 +227,10 @@ extension _SettingsTabExt on _TelevisaAppState {
                 ? "Activo • 2da quincena de cada mes"
                 : "Inactivo • Monedero Chedraui y control de saldo",
             icon: Icons.card_giftcard_rounded,
+            valueColor: (_valesFomentoCulturalEnabled &&
+                    _valesFomentoCulturalAmount > 0)
+                ? null
+                : (_isDarkMode ? Colors.white54 : const Color(0xFF64748B)),
             onTap: () => _navigateToValesChedrauiSettings(),
           ),
 
@@ -461,9 +467,9 @@ extension _SettingsTabExt on _TelevisaAppState {
                 backgroundColor:
                     _isDarkMode ? Colors.redAccent : const Color(0xFFDC2626),
               ),
-              onPressed: () {
+              onPressed: () async {
                 Navigator.of(dialogContext).pop();
-                FirebaseAuth.instance.signOut();
+                await _handleSignOut();
               },
               child: const Text(
                 "Cerrar sesión",
@@ -1623,327 +1629,16 @@ extension _SettingsTabExt on _TelevisaAppState {
     _rebuild(() {});
   }
 
-  Widget _buildContractPresetsSection() {
-    final double curFomento = double.tryParse(_fomentoController.text) ?? 2.0;
-    final double curCuota = double.tryParse(_cuotaController.text) ?? 2.0;
-
-    final bool isContratoBase = (curFomento == 2.0 && curCuota == 2.0);
-    final bool isSindicalizado = (curFomento == 4.6 && curCuota == 4.0);
-    final bool isConfianza = (curFomento == 0.0 && curCuota == 0.0);
-
-    return Column(
-      children: [
-        _buildPresetCard(
-          title: "Contrato Base (2.0% / 2.0%)",
-          subtitle: "Fomento 2.0% • Cuota 2.0% cada quincena",
-          badgeText: "PREDETERMINADO",
-          icon: Icons.badge_rounded,
-          isSelected: isContratoBase,
-          onTap: () => _showApplyContractPresetDialog(
-            title: "Contrato Base (2.0% / 2.0%)",
-            fomento: 2.0,
-            cuota: 2.0,
-            vales: _valesFomentoCulturalAmount,
-            valesEnabled: _valesFomentoCulturalEnabled,
-          ),
-        ),
-        _buildPresetCard(
-          title: "Sindicalizado 2026 (4.6% / 4%)",
-          subtitle: "Fomento 4.6% • Cuota 4.0% en 2da quincena",
-          badgeText: "SINDICALIZADO 2026",
-          icon: Icons.shield_rounded,
-          isSelected: isSindicalizado,
-          onTap: () => _showApplyContractPresetDialog(
-            title: "Sindicalizado 2026 (4.6% / 4%)",
-            fomento: 4.6,
-            cuota: 4.0,
-            vales: _valesFomentoCulturalAmount,
-            valesEnabled: _valesFomentoCulturalEnabled,
-          ),
-        ),
-        _buildPresetCard(
-          title: "Confianza / Sin Sindicato (0% / 0%)",
-          subtitle: "Fomento 0% • Cuota 0% • Sin cuota sindical",
-          badgeText: "SIN SINDICATO",
-          icon: Icons.person_outline_rounded,
-          isSelected: isConfianza,
-          onTap: () => _showApplyContractPresetDialog(
-            title: "Confianza / Sin Sindicato (0% / 0%)",
-            fomento: 0.0,
-            cuota: 0.0,
-            vales: _valesFomentoCulturalAmount,
-            valesEnabled: _valesFomentoCulturalEnabled,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPresetCard({
-    required String title,
-    required String subtitle,
-    required String badgeText,
-    required IconData icon,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    final Color accentColor =
-        _isDarkMode ? Colors.orange : const Color(0xFFC2410C);
-    final Color cardBg = _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
-    final Color borderColor = isSelected
-        ? (_isDarkMode ? Colors.orange : const Color(0xFFC2410C))
-        : (_isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1));
-    final Color textColor = _isDarkMode ? Colors.white : Colors.black;
-    final Color subtextColor =
-        _isDarkMode ? Colors.white60 : const Color(0xFF475569);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: borderColor,
-          width: isSelected ? 2.0 : 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(_isDarkMode ? 30 : 10),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? accentColor.withAlpha(_isDarkMode ? 50 : 35)
-                        : accentColor.withAlpha(_isDarkMode ? 25 : 15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    isSelected ? Icons.check_circle_rounded : icon,
-                    color: isSelected
-                        ? (_isDarkMode
-                            ? Colors.orangeAccent
-                            : const Color(0xFFC2410C))
-                        : accentColor,
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              title,
-                              style: TextStyle(
-                                color: textColor,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? (_isDarkMode
-                                      ? Colors.green.withAlpha(40)
-                                      : const Color(0xFFDCFCE7))
-                                  : (_isDarkMode
-                                      ? Colors.white10
-                                      : const Color(0xFFF1F5F9)),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: isSelected
-                                    ? (_isDarkMode
-                                        ? Colors.greenAccent
-                                        : const Color(0xFF16A34A))
-                                    : Colors.transparent,
-                              ),
-                            ),
-                            child: Text(
-                              isSelected ? "ACTIVO" : badgeText,
-                              style: TextStyle(
-                                color: isSelected
-                                    ? (_isDarkMode
-                                        ? Colors.greenAccent
-                                        : const Color(0xFF15803D))
-                                    : subtextColor,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        subtitle,
-                        style: TextStyle(
-                          color: subtextColor,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
+  Future<void> _navigateToContractPresetsScreen() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => _ContractPresetsScreen(
+          appState: this,
         ),
       ),
     );
-  }
-
-  Future<void> _showApplyContractPresetDialog({
-    required String title,
-    required double fomento,
-    required double cuota,
-    required double vales,
-    required bool valesEnabled,
-  }) async {
-    final bool? confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          backgroundColor:
-              _isDarkMode ? const Color(0xFF1E293B) : Colors.white,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Icon(Icons.tune_rounded,
-                  color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C)),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: _isDarkMode ? Colors.white : Colors.black,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  "¿Deseas aplicar esta plantilla de contrato? Se configurarán los siguientes parámetros:",
-                  style: TextStyle(
-                    color: _isDarkMode ? Colors.white70 : const Color(0xFF475569),
-                    fontSize: 13,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                _buildPresetDetailRow(
-                    "Fomento Eficiencia:", "${fomento.toStringAsFixed(1)} %"),
-                _buildPresetDetailRow(
-                    "Cuota Sindical:", "${cuota.toStringAsFixed(1)} %"),
-                _buildPresetDetailRow(
-                    "Vales Fomento Cultural (2da Qna):",
-                    valesEnabled && vales > 0
-                        ? "\$ ${vales.toStringAsFixed(2)} (Sin cambio)"
-                        : "Sin cambio"),
-                const SizedBox(height: 14),
-                Text(
-                  "Todos los campos seguirán siendo editables de forma individual en Ajustes de Nómina.",
-                  style: TextStyle(
-                    color: _isDarkMode ? Colors.white54 : const Color(0xFF64748B),
-                    fontSize: 12,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor: _isDarkMode
-                    ? Colors.white70
-                    : const Color(0xFF64748B),
-              ),
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text("CANCELAR"),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
-                foregroundColor: Colors.white,
-              ),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text("APLICAR"),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirm == true) {
-      _rebuild(() {
-        _fomentoController.text = fomento.toString();
-        _cuotaController.text = cuota.toString();
-        _fomentoHistory = [];
-        _cuotaHistory = [];
-        _valesFomentoCulturalAmount = vales;
-        _valesFomentoCulturalAmountController.text =
-            vales > 0 ? vales.toStringAsFixed(2) : "";
-        _valesFomentoCulturalEnabled = valesEnabled;
-      });
-      await _saveData(checkSalaryChange: false);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Plantilla '$title' aplicada correctamente."),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    }
-  }
-
-  Widget _buildPresetDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label,
-              style: TextStyle(
-                  color: _isDarkMode ? Colors.white70 : const Color(0xFF334155),
-                  fontSize: 13)),
-          Text(value,
-              style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: _isDarkMode ? Colors.white : Colors.black,
-                  fontSize: 13)),
-        ],
-      ),
-    );
+    _rebuild(() {});
   }
 }
 

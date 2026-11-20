@@ -2097,6 +2097,9 @@ extension _DayDialogsAndIoExt on _TelevisaAppState {
                       fontWeight: FontWeight.bold)),
               actions: [
                 TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white70,
+                    ),
                     onPressed: () => Navigator.pop(context),
                     child: const Text("NO")),
                 TextButton(

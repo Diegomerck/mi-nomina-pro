@@ -50,111 +50,317 @@ class _ValesChedrauiScreenState extends State<_ValesChedrauiScreen> {
     await showDialog(
       context: context,
       builder: (dialogCtx) {
-        return AlertDialog(
-          backgroundColor:
-              _isDarkMode ? const Color(0xFF1E293B) : Colors.white,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Icon(
-                Icons.receipt_rounded,
-                color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
-                size: 24,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  "Monto del Recibo",
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: _isDarkMode ? Colors.white : Colors.black,
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor:
+                  _isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+              shape:
+                  RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Icon(
+                    Icons.receipt_rounded,
+                    color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                    size: 24,
                   ),
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Ingresa el importe que aparece en tu recibo de la 2da quincena de cada mes por concepto de Vales de Fomento Cultural (ej. \$373.33):",
-                style: TextStyle(
-                  color: _isDarkMode ? Colors.white70 : const Color(0xFF475569),
-                  fontSize: 13,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: amountController,
-                autofocus: true,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                style: TextStyle(
-                  color: _isDarkMode ? Colors.white : Colors.black,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-                decoration: InputDecoration(
-                  prefixText: "\$ ",
-                  suffixText: "MXN",
-                  hintText: "373.33",
-                  labelText: "Monto mensual en recibo",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(
-                      color: _isDarkMode
-                          ? Colors.white24
-                          : const Color(0xFFCBD5E1),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "Monto del Recibo",
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: _isDarkMode ? Colors.white : Colors.black,
+                      ),
                     ),
                   ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Ingresa el importe que aparece en tu recibo de la 2da quincena de cada mes por concepto de Vales de Fomento Cultural (ej. \$373.33):",
+                    style: TextStyle(
+                      color: _isDarkMode ? Colors.white70 : const Color(0xFF475569),
+                      fontSize: 13,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      label: const Text("Usar sugerido (\$373.33)"),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor:
+                            _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                        side: BorderSide(
+                          color: _isDarkMode
+                              ? Colors.orange.withAlpha(120)
+                              : const Color(0xFFFDBA74),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: () {
+                        setDialogState(() {
+                          amountController.text = "373.33";
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: amountController,
+                    autofocus: _appState._valesFomentoCulturalAmount <= 0,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(
+                      color: _isDarkMode ? Colors.white : Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    decoration: InputDecoration(
+                      prefixText: "\$ ",
+                      suffixText: "MXN",
+                      hintText: "373.33",
+                      labelText: "Monto mensual en recibo",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: _isDarkMode
+                              ? Colors.white24
+                              : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor:
+                        _isDarkMode ? Colors.white70 : const Color(0xFF64748B),
+                  ),
+                  onPressed: () => Navigator.pop(dialogCtx),
+                  child: const Text("CANCELAR"),
                 ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              style: TextButton.styleFrom(
-                foregroundColor:
-                    _isDarkMode ? Colors.white70 : const Color(0xFF64748B),
-              ),
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text("CANCELAR"),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor:
-                    _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: () async {
+                    final double? parsed =
+                        double.tryParse(amountController.text.trim());
+                    if (parsed != null && parsed >= 0) {
+                      setState(() {
+                        _appState._valesFomentoCulturalAmount = parsed;
+                        _appState._valesFomentoCulturalAmountController.text =
+                            parsed > 0 ? parsed.toStringAsFixed(2) : "";
+                      });
+                      await _appState._saveData(checkSalaryChange: false);
+                      if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                    }
+                  },
+                  child: const Text("GUARDAR"),
                 ),
-              ),
-              onPressed: () async {
-                final double? parsed =
-                    double.tryParse(amountController.text.trim());
-                if (parsed != null && parsed >= 0) {
-                  setState(() {
-                    _appState._valesFomentoCulturalAmount = parsed;
-                    _appState._valesFomentoCulturalAmountController.text =
-                        parsed > 0 ? parsed.toStringAsFixed(2) : "";
-                  });
-                  await _appState._saveData(checkSalaryChange: false);
-                  if (dialogCtx.mounted) Navigator.pop(dialogCtx);
-                }
-              },
-              child: const Text("GUARDAR"),
-            ),
-          ],
+              ],
+            );
+          },
         );
       },
     );
+  }
+
+  Future<bool> _showConfirmInitialAmountDialog() async {
+    final TextEditingController amountController =
+        TextEditingController(text: "373.33");
+    String? errorMessage;
+
+    final bool? result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor:
+                  _isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
+              title: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: (_isDarkMode
+                              ? Colors.orange
+                              : const Color(0xFFC2410C))
+                          .withAlpha(35),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.card_giftcard_rounded,
+                      color: _isDarkMode
+                          ? Colors.orange
+                          : const Color(0xFFC2410C),
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      "Activar Vales Chedraui",
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                        color: _isDarkMode ? Colors.white : Colors.black,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "El monto sugerido para el personal de Televisa es de \$373.33 mensuales (depositados en la 2da quincena de cada mes).\n\nConfirma o ingresa el importe exacto que aparece en tu recibo de nómina:",
+                    style: TextStyle(
+                      color: _isDarkMode
+                          ? Colors.white70
+                          : const Color(0xFF475569),
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.auto_awesome, size: 16),
+                      label: const Text("Usar sugerido (\$373.33)"),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: _isDarkMode
+                            ? Colors.orange
+                            : const Color(0xFFC2410C),
+                        side: BorderSide(
+                          color: _isDarkMode
+                              ? Colors.orange.withAlpha(120)
+                              : const Color(0xFFFDBA74),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      onPressed: () {
+                        setDialogState(() {
+                          amountController.text = "373.33";
+                          errorMessage = null;
+                        });
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amountController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(
+                      color: _isDarkMode ? Colors.white : Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                    onChanged: (_) {
+                      if (errorMessage != null) {
+                        setDialogState(() {
+                          errorMessage = null;
+                        });
+                      }
+                    },
+                    decoration: InputDecoration(
+                      prefixText: "\$ ",
+                      suffixText: "MXN",
+                      hintText: "373.33",
+                      labelText: "Monto mensual en recibo",
+                      errorText: errorMessage,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide(
+                          color: _isDarkMode
+                              ? Colors.white24
+                              : const Color(0xFFCBD5E1),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor:
+                        _isDarkMode ? Colors.white70 : const Color(0xFF64748B),
+                  ),
+                  onPressed: () => Navigator.pop(dialogCtx, false),
+                  child: const Text("CANCELAR"),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: () async {
+                    final double? parsed =
+                        double.tryParse(amountController.text.trim());
+                    if (parsed == null || parsed <= 0) {
+                      setDialogState(() {
+                        errorMessage = "Ingresa un monto mayor a \$0.00";
+                      });
+                      return;
+                    }
+                    setState(() {
+                      _appState._valesFomentoCulturalAmount = parsed;
+                      _appState._valesFomentoCulturalAmountController.text =
+                          parsed.toStringAsFixed(2);
+                      _appState._valesFomentoCulturalEnabled = true;
+                    });
+                    await _appState._saveData(checkSalaryChange: false);
+                    if (dialogCtx.mounted) {
+                      Navigator.pop(dialogCtx, true);
+                    }
+                  },
+                  child: const Text("CONFIRMAR"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    return result ?? false;
   }
 
   Future<void> _showOverrideDialog({
@@ -555,32 +761,59 @@ class _ValesChedrauiScreenState extends State<_ValesChedrauiScreen> {
   }
 
   Future<void> _deleteExpense(Map<String, dynamic> expense) async {
+    final Color textColor = _isDarkMode ? Colors.white : Colors.black;
+    final Color subtextColor =
+        _isDarkMode ? Colors.white70 : const Color(0xFF475569);
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) {
-        return AlertDialog(
-          backgroundColor:
-              _isDarkMode ? const Color(0xFF1E293B) : Colors.white,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Text("¿Eliminar gasto?"),
-          content: Text(
-            "¿Estás seguro de que deseas eliminar este registro de gasto de \$${((expense['monto'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}? Esta acción restaurará el monto a tu saldo disponible.",
+        return Theme(
+          data: (_isDarkMode ? ThemeData.dark() : ThemeData.light()).copyWith(
+            colorScheme: (_isDarkMode
+                    ? const ColorScheme.dark()
+                    : const ColorScheme.light())
+                .copyWith(
+              surface: _isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+            ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text("CANCELAR"),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                foregroundColor: Colors.white,
+          child: AlertDialog(
+            backgroundColor:
+                _isDarkMode ? const Color(0xFF1E293B) : Colors.white,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text(
+              "¿Eliminar gasto?",
+              style: TextStyle(
+                color: textColor,
+                fontWeight: FontWeight.bold,
               ),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text("ELIMINAR"),
             ),
-          ],
+            content: Text(
+              "¿Estás seguro de que deseas eliminar este registro de gasto de \$${((expense['monto'] as num?)?.toDouble() ?? 0.0).toStringAsFixed(2)}? Esta acción restaurará el monto a tu saldo disponible.",
+              style: TextStyle(
+                color: subtextColor,
+              ),
+            ),
+            actions: [
+              TextButton(
+                style: TextButton.styleFrom(
+                  foregroundColor: _isDarkMode
+                      ? Colors.white70
+                      : const Color(0xFF64748B),
+                ),
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text("CANCELAR"),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text("ELIMINAR"),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -859,38 +1092,75 @@ class _ValesChedrauiScreenState extends State<_ValesChedrauiScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        "Monto del recibo (2da Quincena)",
-                        style: TextStyle(
-                          color: textColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          "Monto del recibo (2da Quincena)",
+                          style: TextStyle(
+                            color: textColor,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        "Se aplica automáticamente en Nómina a 2das quincenas",
-                        style: TextStyle(color: subtextColor, fontSize: 11),
-                      ),
-                    ],
+                        const SizedBox(height: 2),
+                        Text(
+                          _appState._valesFomentoCulturalAmount > 0
+                              ? "Se aplica automáticamente en Nómina a 2das quincenas"
+                              : "Toca para configurar el monto de tu recibo",
+                          style: TextStyle(color: subtextColor, fontSize: 11),
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 8),
                   Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        _appState._valesFomentoCulturalAmount > 0
-                            ? "\$${_appState._valesFomentoCulturalAmount.toStringAsFixed(2)}"
-                            : "Sin monto",
-                        style: TextStyle(
-                          color: accentColor,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
+                      Container(
+                        padding: _appState._valesFomentoCulturalAmount <= 0
+                            ? const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4)
+                            : EdgeInsets.zero,
+                        decoration: _appState._valesFomentoCulturalAmount <= 0
+                            ? BoxDecoration(
+                                color: (_isDarkMode
+                                        ? Colors.orange
+                                        : const Color(0xFFC2410C))
+                                    .withAlpha(30),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: (_isDarkMode
+                                          ? Colors.orange
+                                          : const Color(0xFFC2410C))
+                                      .withAlpha(80),
+                                ),
+                              )
+                            : null,
+                        child: Text(
+                          _appState._valesFomentoCulturalAmount > 0
+                              ? "\$${_appState._valesFomentoCulturalAmount.toStringAsFixed(2)}"
+                              : "Sin confirmar • Configurar",
+                          style: TextStyle(
+                            color: _appState._valesFomentoCulturalAmount > 0
+                                ? accentColor
+                                : (_isDarkMode
+                                    ? Colors.orangeAccent
+                                    : const Color(0xFFC2410C)),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 6),
-                      Icon(Icons.edit_outlined, size: 16, color: accentColor),
+                      Icon(
+                        _appState._valesFomentoCulturalAmount > 0
+                            ? Icons.edit_outlined
+                            : Icons.tune_rounded,
+                        size: 16,
+                        color: accentColor,
+                      ),
                     ],
                   ),
                 ],
@@ -1292,6 +1562,8 @@ class _ValesChedrauiScreenState extends State<_ValesChedrauiScreen> {
               final double defaultAmount = item['defaultAmount'] as double;
               final double actualAmount = item['actualAmount'] as double;
               final bool isVerified = item['isVerified'] as bool;
+              final bool isPayoutPassed =
+                  (item['isPayoutPassed'] as bool?) ?? false;
               final String payoutStr = (cfg['payout'] as String?) ?? '';
               final String qLabel = "Quincena ${qNum.toString().padLeft(2, '0')}";
 
@@ -1312,9 +1584,13 @@ class _ValesChedrauiScreenState extends State<_ValesChedrauiScreen> {
                         ? (_isDarkMode
                             ? Colors.greenAccent.withAlpha(70)
                             : const Color(0xFF86EFAC))
-                        : (_isDarkMode
-                            ? Colors.orangeAccent.withAlpha(70)
-                            : const Color(0xFFFDBA74)),
+                        : (!isPayoutPassed
+                            ? (_isDarkMode
+                                ? Colors.blueGrey.withAlpha(50)
+                                : const Color(0xFFCBD5E1))
+                            : (_isDarkMode
+                                ? Colors.orangeAccent.withAlpha(70)
+                                : const Color(0xFFFDBA74))),
                     width: 1.2,
                   ),
                 ),
@@ -1392,6 +1668,27 @@ class _ValesChedrauiScreenState extends State<_ValesChedrauiScreen> {
                               ],
                             ),
                           )
+                        else if (!isPayoutPassed)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _isDarkMode
+                                  ? Colors.blue.withAlpha(30)
+                                  : const Color(0xFFE0F2FE),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              "Programado",
+                              style: TextStyle(
+                                color: _isDarkMode
+                                    ? Colors.lightBlueAccent
+                                    : const Color(0xFF0284C7),
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          )
                         else
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -1457,6 +1754,29 @@ class _ValesChedrauiScreenState extends State<_ValesChedrauiScreen> {
                             ),
                           ),
                         ],
+                      ),
+                    ] else if (!isPayoutPassed) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Depósito estimado: \$${defaultAmount.toStringAsFixed(2)}",
+                            style: TextStyle(
+                              color: textColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        "Podrás conciliar el recibo a partir del $payoutStr",
+                        style: TextStyle(
+                          color: subtextColor,
+                          fontSize: 11,
+                          fontStyle: FontStyle.italic,
+                        ),
                       ),
                     ] else ...[
                       Container(
@@ -1919,10 +2239,25 @@ class _ValesChedrauiScreenState extends State<_ValesChedrauiScreen> {
                       activeColor:
                           _isDarkMode ? Colors.orange : const Color(0xFFD9531E),
                       onChanged: (val) async {
-                        setState(() {
-                          _appState._valesFomentoCulturalEnabled = val;
-                        });
-                        await _appState._saveData(checkSalaryChange: false);
+                        if (val) {
+                          if (_appState._valesFomentoCulturalAmount <= 0) {
+                            final bool confirmed =
+                                await _showConfirmInitialAmountDialog();
+                            if (!confirmed) {
+                              return;
+                            }
+                          } else {
+                            setState(() {
+                              _appState._valesFomentoCulturalEnabled = true;
+                            });
+                            await _appState._saveData(checkSalaryChange: false);
+                          }
+                        } else {
+                          setState(() {
+                            _appState._valesFomentoCulturalEnabled = false;
+                          });
+                          await _appState._saveData(checkSalaryChange: false);
+                        }
                       },
                     ),
                   ],

@@ -2,7 +2,7 @@
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: November 2026  
-> **Version**: `v.23.19.0 19/11/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.19.1 19/11/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.19.0` (November 2026 Public Release).
+- **Internal Version**: `v.23.19.1` (November 2026 Discrete Maintenance Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,6 +234,10 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
+- **v.23.19.1 19/11/26 (Discrete Maintenance Release)**:
+  - **GitHub Actions CI/CD (`.github/workflows/build_releases.yml`) & iOS Runner Setup**: Configuración de flujo automatizado para generación de builds Android (APK) e iOS (IPA) junto con la estructura base del proyecto `ios/`.
+  - **Pantalla Dedicada de Plantillas de Contrato (`ContractPresetsScreen`)**: Extracción de las plantillas de contrato desde Ajustes hacia una pantalla dedicada e interactiva (`lib/screens/contract_presets_screen.dart`), mostrando en Ajustes un resumen compacto del esquema activo.
+  - **Vales de Despensa desactivado por defecto y calibración**: Ajuste en el comportamiento predeterminado del módulo de Monedero Chedraui (Vales de Despensa desactivado por defecto hasta activación explícita del usuario) y actualizaciones en la suite de pruebas (`test/payroll_engine_calibration_test.dart`).
 - **v.23.19.0 19/11/26 (Public Release)**:
   - **Monedero Chedraui (Vales de Despensa)**: Pantalla dedicada e interactiva (`ValesChedrauiScreen`) para la gestión integral del beneficio de previsión social (Fomento Cultural / Despensa). Visualización de saldo acumulado, desglose quincenal y mensual, registro de saldo de recibo con anulación manual (override), conciliación histórica de compras y compras aclaradas, y proyección de depósitos por quincena.
   - **Plantillas de Contrato Rápidas**: En Ajustes de Nómina, incorporación de presets de 1 toque (`_buildContractPresetsSection`): Sindicalizado 2026 (Fomento 4.6% y Cuota 4.0% en 2da quincena), Contrato Base (2.0% / 2.0%) y Confianza / Sin Sindicato (0.0% / 0.0%) con diálogo interactivo de confirmación y preservación de edición granular.
