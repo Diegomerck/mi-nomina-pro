@@ -259,24 +259,6 @@ extension _SettingsTabExt on _TelevisaAppState {
                           ? Colors.blueAccent
                           : const Color(0xFF1D4ED8),
                       fontWeight: FontWeight.bold))),
-          const SizedBox(height: 12),
-          OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                  backgroundColor:
-                      _isDarkMode ? Colors.transparent : Colors.white,
-                  side: BorderSide(
-                      color: _isDarkMode
-                          ? Colors.orangeAccent
-                          : const Color(0xFFD97706),
-                      width: 1.5),
-                  minimumSize: const Size(double.infinity, 50)),
-              onPressed: () => _showOnboardingDialog(isPreview: true),
-              child: Text("PROBAR BIENVENIDA / ONBOARDING",
-                  style: TextStyle(
-                      color: _isDarkMode
-                          ? Colors.orangeAccent
-                          : const Color(0xFFB45309),
-                      fontWeight: FontWeight.bold))),
           if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ...[
             const SizedBox(height: 12),
             OutlinedButton.icon(

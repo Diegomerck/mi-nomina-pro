@@ -1,6 +1,6 @@
 # Blueprint: Mi Nómina Pro (Televisa Overtime Tracker)
 
-> **Version**: `v.23.20.1 20/11/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.20.3 20/11/26` (Build `1.0.0+2`)  
 > **Last Updated**: 20/11/26  
 
 ## 1. Overview
@@ -66,6 +66,7 @@ Since you exported the workspace from Firebase Studio to Antigravity (via `@fbs-
 *   **v.23.19.2 (Discrete Maintenance Release - 20/11/26):** Insignia '¡NUEVO!' (`_buildNewBadge()`) con degradado naranja/ámbar para las tarjetas de novedades en Ajustes de Nómina (Plantillas de Contrato, Fondo de Ahorro, Vales de Fomento Cultural) y la tarjeta de acceso a Compartir Con (`_buildUnitShareNavigationCard`), junto con la distribución en dos líneas del título de Vales de Fomento Cultural.
 *   **v.23.20.1 (Public Release - 20/11/26):** Diseño Adaptable (Responsive Layouts) con envoltura en `LayoutBuilder` y cálculo responsivo de anchuras en `LoginScreen`, `ValesChedrauiScreen`, `FondoAhorroScreen`, `HistoryScreens`, pestañas (`AnoTab`, `QuincenaTab`, `UnitManagerTab`, `SettingsTab`) y modales (`day_dialogs_and_io.dart`). Salvaguardas de Inicio y Onboarding (`Onboarding Safeguards`) verificando `onboarding_completed` en caché local y Firestore (`users/{uid}` y subcolección `history`) con supresión ante timeout de carga (`_cloudLoadTimedOut`). Identidad y Branding oficial en Android & iOS con suite completa de iconos mipmap/xcassets y nombre oficial `Mi Nómina Pro` en `AndroidManifest.xml`. Suite de pruebas unitarias (`test/onboarding_safeguards_test.dart`) verificando persistencia y parseo seguro de tipos numéricos.
 *   **v.23.20.2 (Discrete Maintenance Release - 20/11/26):** Actualizador OTA integrado en la app (`AppUpdateService`, `ota_update`) con detección inteligente de releases en GitHub, diálogo interactivo con notas de entrega y barra de progreso. Estandarización de nombres de binarios descargables en el flujo de GitHub Actions (`Mi Nomina Pro ${TAG}.apk` y `Mi Nomina Pro ${TAG}.ipa`).
+*   **v.23.20.3 (Discrete Maintenance Release - 20/11/26):** Retiro del botón de depuración temporal 'PROBAR BIENVENIDA / ONBOARDING' en la pestaña de Ajustes (`SettingsTab`) tras la confirmación de estabilidad de las salvaguardas de inicio.
 
 
 ---
