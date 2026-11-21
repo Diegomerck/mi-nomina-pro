@@ -2,7 +2,7 @@
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: November 2026  
-> **Version**: `v.23.20.1 20/11/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.20.2 20/11/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.20.1` (November 2026 Public Release).
+- **Internal Version**: `v.23.20.2` (November 2026 Discrete Maintenance Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,6 +234,9 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
+- **v.23.20.2 20/11/26 (Discrete Maintenance Release)**:
+  - **Actualizador OTA en la App (In-App OTA Updater)**: Verificación manual y en arranque silencioso de nuevas versiones en GitHub Releases para Android (`AppUpdateService`, `ota_update`), diálogo interactivo de confirmación y barra de progreso de descarga directa de APK con disparador automático del instalador nativo del sistema.
+  - **Estandarización de Nombres de Binarios en GitHub Releases**: En `.github/workflows/build_releases.yml`, renombramiento automático de artefactos a `Mi Nomina Pro ${TAG}.apk` y `Mi Nomina Pro ${TAG}.ipa`, alineando la descripción de entrega y los enlaces de descarga.
 - **v.23.20.1 20/11/26 (Public Release)**:
   - **Diseño Adaptable (Responsive Layouts)**: Reestructuración y protección visual en todas las pantallas y diálogos clave (`LoginScreen`, `ValesChedrauiScreen`, `FondoAhorroScreen`, `HistoryScreens`, `AnoTab`, `QuincenaTab`, `UnitManagerTab`, `SettingsTab`, y diálogos de turno en `day_dialogs_and_io.dart`). Envoltura con `LayoutBuilder` y cálculo responsivo de anchos y tamaños para evitar desbordamientos de píxeles (`overflowed`) en teléfonos compactos, pantallas panorámicas y tabletas.
   - **Salvaguardas de Inicio y Onboarding (`Onboarding Safeguards`)**: Protección contra diálogos de bienvenida y configuración inicial redundantes para usuarios existentes. Detección reforzada verificando `onboarding_completed` en caché local (`SharedPreferences`), sueldo precargado, comprobación directa contra Firestore (`users/{uid}` y subcolección `history`), y supresión si la carga en la nube superó el tiempo límite (`_cloudLoadTimedOut`).

@@ -1417,7 +1417,7 @@ extension _UnitManagerTabExt on _TelevisaAppState {
                     color: _isDarkMode ? Colors.white : Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 18)),
-            Text("Versión v.23.20.1 20/11/26",
+            Text("Versión v.23.20.2 20/11/26",
                 style: TextStyle(
                     color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFC2410C),
                     fontSize: 14)),

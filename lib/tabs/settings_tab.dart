@@ -277,6 +277,42 @@ extension _SettingsTabExt on _TelevisaAppState {
                           ? Colors.orangeAccent
                           : const Color(0xFFB45309),
                       fontWeight: FontWeight.bold))),
+          if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                backgroundColor:
+                    _isDarkMode ? Colors.transparent : Colors.white,
+                side: BorderSide(
+                  color: _isDarkMode
+                      ? Colors.orangeAccent
+                      : const Color(0xFFD97706),
+                  width: 1.5,
+                ),
+                minimumSize: const Size(double.infinity, 50),
+              ),
+              icon: Icon(
+                Icons.system_update_rounded,
+                color: _isDarkMode
+                    ? Colors.orangeAccent
+                    : const Color(0xFFB45309),
+              ),
+              onPressed: () => AppUpdateService.instance.checkForUpdates(
+                context,
+                currentVersion: _getLatestVersion(),
+                isManual: true,
+              ),
+              label: Text(
+                "BUSCAR ACTUALIZACIÓN",
+                style: TextStyle(
+                  color: _isDarkMode
+                      ? Colors.orangeAccent
+                      : const Color(0xFFB45309),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 25),
           Divider(
               color: _isDarkMode ? Colors.white24 : const Color(0xFFCBD5E1)),

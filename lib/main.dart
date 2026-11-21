@@ -14,7 +14,8 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart';
+import 'services/app_update_service.dart';
 import 'web_reload_stub.dart' if (dart.library.html) 'web_reload.dart';
 
 part 'screens/login_screen.dart';
@@ -1425,6 +1426,15 @@ class _TelevisaAppState extends State<TelevisaApp> {
     // Check if user needs Google employee number setup / Smart Account Merge
     // and then check if user needs onboarding (missing salary or base hours)
     await _checkAndShowOnboarding();
+
+    // Trigger quiet check on Android for app updates
+    if (mounted && !kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      AppUpdateService.instance.checkForUpdates(
+        context,
+        currentVersion: _getLatestVersion(),
+        isManual: false,
+      );
+    }
   }
 
   Future<void> _checkAndShowOnboarding() async {
@@ -4987,7 +4997,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.20.1 20/11/26",
+                "v.23.20.2 20/11/26",
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,

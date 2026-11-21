@@ -99,17 +99,19 @@ jobs:
           name: Runner-ipa
           path: release-assets
 
-      - name: Determine Release Tag
+      - name: Determine Release Tag and Prepare Assets
         id: release_info
         run: |
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             TAG="${{ github.ref_name }}"
           else
             APP_VER=$(grep -o 'v\.23\.[0-9]*\.[0-9]*' lib/main.dart | head -n 1 | sed 's/v\./v/')
-            TAG="${APP_VER:-v23.19.1}"
+            TAG="${APP_VER:-v23.20.2}"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "title=Mi Nómina Pro $TAG" >> $GITHUB_OUTPUT
+          mv "release-assets/app-release.apk" "release-assets/Mi Nomina Pro ${TAG}.apk"
+          mv "release-assets/Runner.ipa" "release-assets/Mi Nomina Pro ${TAG}.ipa"
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -120,10 +122,10 @@ jobs:
             ## Mi Nómina Pro (${{ steps.release_info.outputs.tag }})
             
             Compiled release binaries ready for installation:
-            - 🤖 **Android**: `app-release.apk`
-            - 🍏 **iOS (Unsigned)**: `Runner.ipa`
+            - 🤖 **Android**: `Mi Nomina Pro ${{ steps.release_info.outputs.tag }}.apk`
+            - 🍏 **iOS (Unsigned)**: `Mi Nomina Pro ${{ steps.release_info.outputs.tag }}.ipa`
           files: |
-            release-assets/app-release.apk
-            release-assets/Runner.ipa
+            release-assets/Mi Nomina Pro ${{ steps.release_info.outputs.tag }}.apk
+            release-assets/Mi Nomina Pro ${{ steps.release_info.outputs.tag }}.ipa
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
