@@ -259,6 +259,10 @@ extension _SettingsTabExt on _TelevisaAppState {
                           ? Colors.blueAccent
                           : const Color(0xFF1D4ED8),
                       fontWeight: FontWeight.bold))),
+          if (kIsWeb) ...[
+            const SizedBox(height: 16),
+            _buildDownloadApkCard(),
+          ],
           if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ...[
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -1685,6 +1689,352 @@ extension _SettingsTabExt on _TelevisaAppState {
       ),
     );
     _rebuild(() {});
+  }
+
+  Widget _buildDownloadApkCard() {
+    const Color accentColor = Color(0xFF16A34A);
+    final Color cardBg = _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+    final Color textColor =
+        _isDarkMode ? Colors.white : const Color(0xFF0F172A);
+    final Color subtextColor =
+        _isDarkMode ? Colors.white70 : const Color(0xFF475569);
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _isDarkMode
+              ? accentColor.withAlpha(90)
+              : const Color(0xFF86EFAC),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(_isDarkMode ? 30 : 8),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _showDownloadApkDialog,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: accentColor.withAlpha(_isDarkMode ? 45 : 30),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.android_rounded,
+                        color: Color(0xFF16A34A),
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Aplicación para Android",
+                            style: TextStyle(
+                              color: textColor,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            "Instala Mi Nómina Pro en tu teléfono para mayor rapidez y acceso sin conexión",
+                            style: TextStyle(
+                              color: subtextColor,
+                              fontSize: 13,
+                              height: 1.3,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF16A34A),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.download_rounded, size: 20),
+                    label: const Text(
+                      "DESCARGAR APK PARA ANDROID",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    onPressed: _showDownloadApkDialog,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showDownloadApkDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        const Color accentColor = Color(0xFF16A34A);
+        final Color textColor =
+            _isDarkMode ? Colors.white : const Color(0xFF0F172A);
+        final Color subtextColor =
+            _isDarkMode ? Colors.white70 : const Color(0xFF334155);
+
+        return AlertDialog(
+          scrollable: true,
+          backgroundColor: _isDarkMode ? Colors.grey[900] : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: _isDarkMode ? Colors.white12 : const Color(0xFFCBD5E1),
+              width: 1.5,
+            ),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: accentColor.withAlpha(_isDarkMode ? 45 : 30),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.android_rounded,
+                  color: Color(0xFF16A34A),
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  "Instalar en Android",
+                  style: TextStyle(
+                    color: _isDarkMode ? Colors.orange : const Color(0xFFC2410C),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                "Sigue estos 3 sencillos pasos para instalar la aplicación en tu celular Android:",
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 18),
+              _buildApkInstallStep(
+                stepNumber: "1",
+                title: "Descarga el archivo APK",
+                description:
+                    "Presiona 'DESCARGAR AHORA' para ir a GitHub Releases y descargar el archivo 'app-release.apk' más reciente.",
+              ),
+              const SizedBox(height: 14),
+              _buildApkInstallStep(
+                stepNumber: "2",
+                title: "Permite la instalación",
+                description:
+                    "Si tu navegador (Chrome u otro) te solicita permiso para 'Instalar apps de fuentes desconocidas', acéptalo en los ajustes de tu teléfono.",
+              ),
+              const SizedBox(height: 14),
+              _buildApkInstallStep(
+                stepNumber: "3",
+                title: "Abre e instala",
+                description:
+                    "Abre la descarga desde tus notificaciones o carpeta de Descargas y presiona 'Instalar'. ¡Listo!",
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: _isDarkMode
+                      ? const Color(0xFF1E293B)
+                      : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color:
+                        _isDarkMode ? Colors.white12 : const Color(0xFFE2E8F0),
+                  ),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.shield_outlined,
+                      size: 20,
+                      color: _isDarkMode
+                          ? Colors.orangeAccent
+                          : const Color(0xFFD97706),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        "Es un archivo 100% seguro y oficial. Android muestra esta advertencia estándar para apps instaladas fuera de Google Play Store.",
+                        style: TextStyle(
+                          color: subtextColor,
+                          fontSize: 12,
+                          height: 1.35,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(
+                "CERRAR",
+                style: TextStyle(
+                  color:
+                      _isDarkMode ? Colors.white60 : const Color(0xFF64748B),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF16A34A),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 10),
+                elevation: 0,
+              ),
+              icon: const Icon(Icons.download_rounded, size: 18),
+              label: const Text(
+                "DESCARGAR AHORA",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onPressed: () async {
+                Navigator.of(dialogContext).pop();
+                final uri = Uri.parse(
+                    'https://github.com/Diegomerck/mi-nomina-pro/releases/latest');
+                try {
+                  if (!await launchUrl(uri,
+                      mode: LaunchMode.externalApplication)) {
+                    debugPrint("Could not launch $uri");
+                  }
+                } catch (e) {
+                  debugPrint("Error launching $uri: $e");
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildApkInstallStep({
+    required String stepNumber,
+    required String title,
+    required String description,
+  }) {
+    const Color accentColor = Color(0xFF16A34A);
+    final Color textColor =
+        _isDarkMode ? Colors.white : const Color(0xFF0F172A);
+    final Color subtextColor =
+        _isDarkMode ? Colors.white70 : const Color(0xFF475569);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: accentColor.withAlpha(_isDarkMode ? 40 : 25),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: accentColor,
+              width: 1.5,
+            ),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            stepNumber,
+            style: TextStyle(
+              color: _isDarkMode
+                  ? const Color(0xFF4ADE80)
+                  : const Color(0xFF15803D),
+              fontWeight: FontWeight.bold,
+              fontSize: 12.5,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: textColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13.5,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(
+                  color: subtextColor,
+                  fontSize: 12.5,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 
