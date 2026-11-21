@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:ota_update/ota_update.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_update_http_stub.dart'
     if (dart.library.io) 'app_update_http_io.dart';
@@ -45,17 +46,36 @@ class AppUpdateService {
     BuildContext context, {
     required String currentVersion,
     bool isManual = false,
+    bool? isDarkMode,
   }) async {
     if (!isSupported) return;
     if (_isChecking || _isDownloading) return;
 
     _isChecking = true;
 
+    bool effectiveDarkMode = isDarkMode ?? true;
+    if (isDarkMode == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        effectiveDarkMode = prefs.getBool('app_is_dark_mode') ?? true;
+      } catch (_) {
+        effectiveDarkMode = true;
+      }
+    }
+
     if (isManual && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Buscando actualización..."),
-          duration: Duration(seconds: 2),
+        SnackBar(
+          content: Text(
+            "Buscando actualización...",
+            style: TextStyle(
+              color: effectiveDarkMode ? Colors.white : Colors.black87,
+            ),
+          ),
+          backgroundColor: effectiveDarkMode
+              ? const Color(0xFF1E1E1E)
+              : const Color(0xFFF1F5F9),
+          duration: const Duration(seconds: 2),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -72,6 +92,7 @@ class AppUpdateService {
             title: "Sin actualizaciones",
             message:
                 "No se encontraron nuevas versiones disponibles o no fue posible conectar con el servidor.",
+            isDarkMode: effectiveDarkMode,
           );
         }
         return;
@@ -91,6 +112,7 @@ class AppUpdateService {
             title: "Sin actualizaciones",
             message:
                 "No se encontró información de versión en la última entrega.",
+            isDarkMode: effectiveDarkMode,
           );
         }
         return;
@@ -104,6 +126,7 @@ class AppUpdateService {
             title: "App actualizada",
             message:
                 "Tienes la versión más reciente instalada ($currentVersion).",
+            isDarkMode: effectiveDarkMode,
           );
         }
         return;
@@ -133,6 +156,7 @@ class AppUpdateService {
             title: "Actualización detectada",
             message:
                 "Se detectó la versión v$remoteVersion, pero el paquete de instalación para Android aún no está disponible para descarga.",
+            isDarkMode: effectiveDarkMode,
           );
         }
         return;
@@ -146,6 +170,7 @@ class AppUpdateService {
         currentVersion: currentVersion,
         releaseNotes: releaseBody,
         apkUrl: apkUrl,
+        isDarkMode: effectiveDarkMode,
       );
     } catch (e) {
       debugPrint("Error checking for updates: $e");
@@ -154,6 +179,7 @@ class AppUpdateService {
           context,
           title: "Error al verificar",
           message: "No se pudo verificar si hay actualizaciones: $e",
+          isDarkMode: effectiveDarkMode,
         );
       }
     } finally {
@@ -165,8 +191,9 @@ class AppUpdateService {
     BuildContext context, {
     required String title,
     required String message,
+    bool isDarkMode = true,
   }) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool isDark = isDarkMode;
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
@@ -188,7 +215,7 @@ class AppUpdateService {
         content: Text(
           message,
           style: TextStyle(
-            color: isDark ? Colors.white70 : const Color(0xFF334155),
+            color: isDark ? Colors.white : const Color(0xFF334155),
           ),
         ),
         actions: [
@@ -213,8 +240,9 @@ class AppUpdateService {
     required String currentVersion,
     required String releaseNotes,
     required String apkUrl,
+    bool isDarkMode = true,
   }) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool isDark = isDarkMode;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -271,7 +299,7 @@ class AppUpdateService {
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.black26
+                        ? const Color(0xFF121212)
                         : const Color(0xFFF1F5F9),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
@@ -283,7 +311,7 @@ class AppUpdateService {
                     child: Text(
                       releaseNotes,
                       style: TextStyle(
-                        color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                        color: isDark ? Colors.white : const Color(0xFF64748B),
                         fontSize: 12,
                       ),
                     ),
@@ -299,7 +327,7 @@ class AppUpdateService {
             child: Text(
               "Más tarde",
               style: TextStyle(
-                color: isDark ? Colors.white54 : const Color(0xFF64748B),
+                color: isDark ? Colors.white60 : const Color(0xFF64748B),
               ),
             ),
           ),
@@ -317,6 +345,7 @@ class AppUpdateService {
                 context,
                 apkUrl: apkUrl,
                 remoteVersion: remoteVersion,
+                isDarkMode: isDark,
               );
             },
             child: const Text(
@@ -333,12 +362,13 @@ class AppUpdateService {
     BuildContext context, {
     required String apkUrl,
     required String remoteVersion,
+    bool isDarkMode = true,
   }) {
     if (!isSupported) return;
 
     _isDownloading = true;
 
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool isDark = isDarkMode;
 
     showDialog(
       context: context,
@@ -493,7 +523,9 @@ class AppUpdateService {
                       child: LinearProgressIndicator(
                         value: isInstalling ? null : progress,
                         minHeight: 10,
-                        backgroundColor: Colors.orange.withOpacity(0.2),
+                        backgroundColor: isDark
+                            ? Colors.white12
+                            : Colors.orange.withOpacity(0.2),
                         valueColor: const AlwaysStoppedAnimation<Color>(
                           Colors.orange,
                         ),
@@ -508,7 +540,7 @@ class AppUpdateService {
                             statusMessage,
                             style: TextStyle(
                               color: isDark
-                                  ? Colors.white60
+                                  ? Colors.white70
                                   : const Color(0xFF64748B),
                               fontSize: 13,
                             ),
@@ -565,6 +597,16 @@ class AppUpdateService {
                       style: TextStyle(
                         color: isDark ? Colors.white70 : const Color(0xFF475569),
                         fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                else
+                  TextButton(
+                    onPressed: cancelAndClose,
+                    child: Text(
+                      "Cancelar",
+                      style: TextStyle(
+                        color: isDark ? Colors.white60 : const Color(0xFF64748B),
                       ),
                     ),
                   ),

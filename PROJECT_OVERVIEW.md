@@ -2,7 +2,7 @@
 
 > **Document Status**: Living Technical Reference Document  
 > **Last Updated**: November 2026  
-> **Version**: `v.23.20.3 20/11/26` (Build `1.0.0+2`)  
+> **Version**: `v.23.20.4 20/11/26` (Build `1.0.0+2`)  
 > **Project ID**: `nomina-televisa-v2` | **Package**: `overtime_app`  
 
 ---
@@ -21,7 +21,7 @@
 - **Sharing & Reports**: Biweekly overtime summaries formatted in Spanish for sharing via messaging/email.
 
 ### Current Version Number
-- **Internal Version**: `v.23.20.3` (November 2026 Discrete Maintenance Release).
+- **Internal Version**: `v.23.20.4` (November 2026 Discrete Maintenance Release).
 - **Pubspec Version**: `1.0.0+2` (defined in `pubspec.yaml`).
 - **Where Displayed**: App Settings tab footer (`_buildSettingsTab`) and project reference documentation.
 
@@ -234,6 +234,9 @@ To handle salary raises accurately without corrupting historical logs:
 
 ## 8. Recent Changes Log
 
+- **v.23.20.4 20/11/26 (Discrete Maintenance Release)**:
+  - **Tema Oscuro en Diálogos y Notificaciones OTA**: Optimización visual y de contraste del flujo de actualización en la app (`AppUpdateService`), soporte explícito para modo oscuro en diálogos de progreso (`#121212`), SnackBar de búsqueda, tipografías legibles y adición de botón para cancelar descarga en curso.
+  - **Resolución Autorizada de Versión Activa**: Desacoplamiento de `_getLatestVersion` del registro de changelog hacia la constante `kAppVersion`, garantizando consistencia en versiones internas discretas sin requerir modales de novedades no deseadas para el usuario final.
 - **v.23.20.3 20/11/26 (Discrete Maintenance Release)**:
   - **Retiro de Botón de Prueba de Onboarding**: Eliminación del botón temporal de depuración 'PROBAR BIENVENIDA / ONBOARDING' en `SettingsTab` tras la validación en producción de las salvaguardas de bienvenida y diálogo de configuración inicial.
 - **v.23.20.2 20/11/26 (Discrete Maintenance Release)**:

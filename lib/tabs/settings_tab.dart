@@ -287,6 +287,7 @@ extension _SettingsTabExt on _TelevisaAppState {
                 context,
                 currentVersion: _getLatestVersion(),
                 isManual: true,
+                isDarkMode: _isDarkMode,
               ),
               label: Text(
                 "BUSCAR ACTUALIZACIÓN",

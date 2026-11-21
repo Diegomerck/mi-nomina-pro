@@ -35,5 +35,16 @@ void main() {
       expect(AppUpdateService.compareVersions('23.20', '23.20.0'), equals(0));
       expect(AppUpdateService.compareVersions('23.20', '23.20.1'), lessThan(0));
     });
+
+    test('Authoritative current version comparisons', () {
+      const current = '23.20.4';
+      expect(AppUpdateService.compareVersions('23.20.5', current), greaterThan(0));
+      expect(AppUpdateService.compareVersions('23.21.0', current), greaterThan(0));
+      expect(AppUpdateService.compareVersions('v23.20.4', current), equals(0));
+      expect(AppUpdateService.compareVersions('23.20.4', current), equals(0));
+      expect(AppUpdateService.compareVersions('23.20.3', current), lessThan(0));
+      expect(AppUpdateService.compareVersions('23.20.1', current), lessThan(0));
+      expect(AppUpdateService.compareVersions('23.19.0', current), lessThan(0));
+    });
   });
 }

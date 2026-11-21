@@ -35,6 +35,9 @@ part 'tabs/settings_tab.dart';
 part 'tabs/unit_manager_tab.dart';
 part 'tabs/day_dialogs_and_io.dart';
 
+const String kAppVersion = "23.20.4";
+const String kAppVersionDisplay = "v.23.20.4 20/11/26";
+
 final Map<String, String> _changelogTitles = {
   "23.20.1":
       "📱 Versión 23.20.1 (20/11/26) — Diseño Adaptable, Protección de Cuenta y Nueva Imagen en Android",
@@ -146,10 +149,7 @@ int _compareVersions(String v1, String v2) {
 }
 
 String _getLatestVersion() {
-  if (_changelogByVersion.isEmpty) return "0.0.0";
-  final sortedVersions = _changelogByVersion.keys.toList()
-    ..sort((a, b) => _compareVersions(b, a));
-  return sortedVersions.first;
+  return kAppVersion;
 }
 
 void main() async {
@@ -1433,6 +1433,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
         context,
         currentVersion: _getLatestVersion(),
         isManual: false,
+        isDarkMode: _isDarkMode,
       );
     }
   }
@@ -4997,7 +4998,7 @@ class _TelevisaAppState extends State<TelevisaApp> {
               ),
               const SizedBox(height: 20),
               Text(
-                "v.23.20.3 20/11/26",
+                kAppVersionDisplay,
                 style: TextStyle(
                   color: _isDarkMode ? Colors.orangeAccent : const Color(0xFFD9531E),
                   fontSize: 18,
